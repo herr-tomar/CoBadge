@@ -1,0 +1,837 @@
+Date: Tue, 24 Dec 2024 02:10:43 +0100 (CET)
+Message-ID: <788042309.14996.1735002643900@q100spul4206.q100.intern>
+Subject: Exported From Confluence
+MIME-Version: 1.0
+Content-Type: multipart/related; 
+	boundary="----=_Part_14995_2001868104.1735002643899"
+
+------=_Part_14995_2001868104.1735002643899
+Content-Type: text/html; charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+Content-Location: file:///C:/exported.html
+
+<html xmlns:o=3D'urn:schemas-microsoft-com:office:office'
+      xmlns:w=3D'urn:schemas-microsoft-com:office:word'
+      xmlns:v=3D'urn:schemas-microsoft-com:vml'
+      xmlns=3D'urn:w3-org-ns:HTML'>
+<head>
+    <meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3Dutf-8=
+">
+    <title>Fragen und Antworten</title>
+    <!--[if gte mso 9]>
+    <xml>
+        <o:OfficeDocumentSettings>
+            <o:TargetScreenSize>1024x640</o:TargetScreenSize>
+            <o:PixelsPerInch>72</o:PixelsPerInch>
+            <o:AllowPNG/>
+        </o:OfficeDocumentSettings>
+        <w:WordDocument>
+            <w:View>Print</w:View>
+            <w:Zoom>90</w:Zoom>
+            <w:DoNotOptimizeForBrowser/>
+        </w:WordDocument>
+    </xml>
+    <![endif]-->
+    <style>
+                <!--
+        @page Section1 {
+            size: 8.5in 11.0in;
+            margin: 1.0in;
+            mso-header-margin: .5in;
+            mso-footer-margin: .5in;
+            mso-paper-source: 0;
+        }
+
+        table {
+            border: solid 1px;
+            border-collapse: collapse;
+        }
+
+        table td, table th {
+            border: solid 1px;
+            padding: 5px;
+        }
+
+        td {
+            page-break-inside: avoid;
+        }
+
+        tr {
+            page-break-after: avoid;
+        }
+
+        div.Section1 {
+            page: Section1;
+        }
+
+        /* Confluence print stylesheet. Common to all themes for print medi=
+a */
+/* Full of !important until we improve batching for print CSS */
+
+@media print {
+    #main {
+        padding-bottom: 1em !important; /* The default padding of 6em is to=
+o much for printouts */
+    }
+
+    body {
+        font-family: Arial, Helvetica, FreeSans, sans-serif;
+        font-size: 10pt;
+        line-height: 1.2;
+    }
+
+    body, #full-height-container, #main, #page, #content, .has-personal-sid=
+ebar #content {
+        background: #fff !important;
+        color: #000 !important;
+        border: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: block !important;
+    }
+
+    a, a:link, a:visited, a:focus, a:hover, a:active {
+        color: #000;
+    }
+
+    #content h1,
+    #content h2,
+    #content h3,
+    #content h4,
+    #content h5,
+    #content h6 {
+        font-family: Arial, Helvetica, FreeSans, sans-serif;
+        page-break-after: avoid;
+    }
+
+    pre {
+        font-family: Monaco, "Courier New", monospace;
+    }
+
+    #header,
+    .aui-header-inner,
+    #navigation,
+    #sidebar,
+    .sidebar,
+    #personal-info-sidebar,
+    .ia-fixed-sidebar,
+    .page-actions,
+    .navmenu,
+    .ajs-menu-bar,
+    .noprint,
+    .inline-control-link,
+    .inline-control-link a,
+    a.show-labels-editor,
+    .global-comment-actions,
+    .comment-actions,
+    .quick-comment-container,
+    #addcomment {
+        display: none !important;
+    }
+
+    /* CONF-28544 cannot print multiple pages in IE */
+    #splitter-content {
+        position: relative !important;
+    }
+
+    .comment .date::before {
+        content: none !important; /* remove middot for print view */
+    }
+
+    h1.pagetitle img {
+        height: auto;
+        width: auto;
+    }
+
+    .print-only {
+        display: block;
+    }
+
+    #footer {
+        position: relative !important; /* CONF-17506 Place the footer at en=
+d of the content */
+        margin: 0;
+        padding: 0;
+        background: none;
+        clear: both;
+    }
+
+    #poweredby {
+        border-top: none;
+        background: none;
+    }
+
+    #poweredby li.print-only {
+        display: list-item;
+        font-style: italic;
+    }
+
+    #poweredby li.noprint {
+        display: none;
+    }
+
+    /* no width controls in print */
+    .wiki-content .table-wrap,
+    .wiki-content p,
+    .panel .codeContent,
+    .panel .codeContent pre,
+    .image-wrap {
+        overflow: visible !important;
+    }
+
+    /* TODO - should this work? */
+    #children-section,
+    #comments-section .comment,
+    #comments-section .comment .comment-body,
+    #comments-section .comment .comment-content,
+    #comments-section .comment p {
+        page-break-inside: avoid;
+    }
+
+    #page-children a {
+        text-decoration: none;
+    }
+
+    /**
+     hide twixies
+
+     the specificity here is a hack because print styles
+     are getting loaded before the base styles. */
+    #comments-section.pageSection .section-header,
+    #comments-section.pageSection .section-title,
+    #children-section.pageSection .section-header,
+    #children-section.pageSection .section-title,
+    .children-show-hide {
+        padding-left: 0;
+        margin-left: 0;
+    }
+
+    .children-show-hide.icon {
+        display: none;
+    }
+
+    /* personal sidebar */
+    .has-personal-sidebar #content {
+        margin-right: 0px;
+    }
+
+    .has-personal-sidebar #content .pageSection {
+        margin-right: 0px;
+    }
+
+    .no-print, .no-print * {
+        display: none !important;
+    }
+}
+-->
+    </style>
+</head>
+<body>
+    <h1>Fragen und Antworten</h1>
+    <div class=3D"Section1">
+        <p>&nbsp;</p>
+<p>Wie sieht die <strong>Layer-Architektur</strong> "BAP mit den m=C3=B6gli=
+chen Layern darunter (OSPE', ISP, DynS) aus?</p>
+<ul>
+<li>ISP oder OSPE' k=C3=B6nnte als Default-Middleware (Implementierungslaye=
+r) f=C3=BCr die Banking API eingesetzt werden. Das Implementierungsmodell k=
+=C3=B6nnte meiner Vorstellung nach so organisiert werden, dass es zu jedem =
+API Endpunkt einen gleich benannten ISP Service gibt, dessen Ein- und Ausga=
+beparameter ebenfalls identisch benannt sind. Eine implementierte API Opera=
+tion w=C3=A4re also stets ein Tupel aus Swagger-Definition und Java-Impleme=
+ntierung mit gleichen Namen.<br><br><span class=3D"confluence-embedded-file=
+-wrapper confluence-embedded-manual-size"><img class=3D"confluence-embedded=
+-image confluence-thumbnail" draggable=3D"false" width=3D"250" src=3D"ed52b=
+692cc32513d8d332e42e5486f6a" data-image-src=3D"/download/attachments/306553=
+806/image2018-5-15%2010%3A0%3A12.png?version=3D1&amp;modificationDate=3D152=
+6371213000&amp;api=3Dv2" data-unresolved-comment-count=3D"0" data-linked-re=
+source-id=3D"306556925" data-linked-resource-version=3D"1" data-linked-reso=
+urce-type=3D"attachment" data-linked-resource-default-alias=3D"image2018-5-=
+15 10:0:12.png" data-base-url=3D"https://wiki.intern" data-linked-resource-=
+content-type=3D"image/png" data-linked-resource-container-id=3D"306553806" =
+data-linked-resource-container-version=3D"8" alt=3D"" height=3D"164"></span=
+></li>
+</ul>
+<p>&nbsp;</p>
+<p>Wobei handelt es sich bei den <strong>OSPE' bzw. ISP-Services</strong>, =
+und was soll/kann damit realisiert werden?</p>
+<ul>
+<li>Es sind verschiedene Zugangswege ohne eine fachliche Einschr=C3=A4nkung=
+. Beide geh=C3=B6ren zum API-Orchestrierungs/-Implementierungslayer - au=C3=
+=9Ferhalb des OSPlus-Releasekonzeptes. In dieser Schicht werden die APIs im=
+plementiert und es erfolgt die Integration dazu n=C3=B6tigen verschiedenen =
+release-behafteten Backendservices.<br><br></li>
+</ul>
+<p style=3D"margin-left: 30.0px;">ISP</p>
+<ul>
+<li style=3D"list-style-type: none;background-image: none;">
+<ul>
+<li>ISP-Umgebungen: Laufzeitumgebungen f=C3=BCr ISP-Engines mit JCR Reposit=
+ory zur Prozess- und Artefaktverwaltung (Basis des Sprachportals)</li>
+<li>ISP Prozesse in ISP Browser-IDE entwickelbar</li>
+<li>ISP Umgebungen gibt es f=C3=BCr Gruppen/Sparkassen und global-like f=C3=
+=BCr Multimandanten Nord/S=C3=BCd</li>
+<li>Zu 18.1. gibt es die ISP-Engine auch in OSPE f=C3=BCr DynS-Container</l=
+i>
+</ul></li>
+</ul>
+<p>&nbsp;</p>
+<p style=3D"margin-left: 30.0px;">OSPE'</p>
+<ul>
+<li style=3D"list-style-type: none;background-image: none;">
+<ul>
+<li>OSPE' ist positioniert als ContractFirst (Swagger 2) Java-Rest Servicee=
+ntwicklung mit Annotationen und nicht invasiver Umsetzung von API Implement=
+ierungen</li>
+<li>OSPE' nutzt die aus OSPE bekannten Environment-Funktionen: Caches, Zert=
+ifikate, Fremdsystemverwaltung, ...</li>
+<li>OSPE' ist zustandlos</li>
+<li>OSPE' Services laufen aktuell in den OSPE Servern (if-ospe) mit und pro=
+fitieren von Colocation zwischen OSPE' und OSPE. Aufbau globaler OSPE' Umge=
+bung im elastischen Konzept ist angedacht, zus=C3=A4tzliches gruppenbasiert=
+es (logisch globales) Colocation-Deployment mit releaseunabh=C3=A4ngigem OS=
+PE' und releaseabh=C3=A4ngigem OSPE (also DynS als embedded Library) m=C3=
+=B6glich.</li>
+<li>Entwicklung ist im OSPE-Workspace eingegliedert, Ausgliederung OSPE' Se=
+rver Deployment als eigenes OSPE-Server Profil ist im OSPE-Projekt 2018 gep=
+lant.</li>
+<li>Bearbeitung von OSPlusDaten erfolgt nur =C3=BCber DynS, d.h. kein direk=
+ter Zugriff auf die fachlichen Datentabellen der OSPE-DB.</li>
+<li>OSPE' ist noch in Entwicklung und wird im Rahmen der Yomo-Umsetzung und=
+ Realtime-Kontowecker weiter getrieben.</li>
+</ul></li>
+</ul>
+<p>&nbsp;</p>
+<p>Welche <strong>Anforderungen sollen mit API Connect realisiert werden</s=
+trong> (und welche nicht)?</p>
+<ul>
+<li>Im API PoC (proof of concept) wurden verschiedene API Plattformen unter=
+sucht. Die gew=C3=A4hlte API Plattform soll alle APIs verschnittstellen , a=
+lso =C3=B6ffentliche PSD2 API, weitere =C3=B6ffentliche Sparkassenfunktione=
+n, individuelle FinTech APIs und interne API zu DynS und Vertragsgesch=C3=
+=A4ft.</li>
+<li>Die Anforderungen an die API Plattform umfassen s=C3=A4mtliche API-Mana=
+gement Funktionen, keine umfassende API Implementierung, sondern Front-Secu=
+rity, Transformation, Zugriffskontrolle, Routing. Zentraler Governance Punk=
+t&nbsp; zur Sicherstellung von API Standards (preprocessing Steps in Build =
+und Runtime). Alle diesbez=C3=BCglichen Anforderungen sollen auf der gew=C3=
+=A4hlten Plattform realisiert werden.</li>
+</ul>
+<p>&nbsp;</p>
+<p>Wie sieht eine typische <strong>API-Definition</strong> aus? (Beispiel X=
+S2A)</p>
+<ul>
+<li>Siehe <a href=3D"/display/BANKINGAPI/Swagger+YAML">Swagger YAML</a></li=
+>
+</ul>
+<p>&nbsp;</p>
+<p>Was soll hinsichtlich <strong>Anwendungslogik</strong> / Orchestrierung =
+im BAP umgesetzt werden?</p>
+<ul>
+<li>Die API ist ein Schnittstellenkontrakt, also f=C3=BCr die Entgegennahme=
+ eines Aufrufs, die Zugangspr=C3=BCfung, die Sicherheit und das Logging zus=
+t=C3=A4ndig.</li>
+<li>Die Anwendungslogik und die Orchestrierung geh=C3=B6ren zur Businesslog=
+ik und sollten in der Mittelschicht abgebildet werden. Siehe auch Layer-Arc=
+hitektur.</li>
+</ul>
+<p>&nbsp;</p>
+<p>Ist evtl. auch die Implementierung von <strong>Services</strong> in IBM =
+API-Connect vorgesehen?</p>
+<ul>
+<li>Ja, denn ob diese Funktionalit=C3=A4ten API Endpunkte, Aufrufe, Request=
+s, Operationen oder Services hei=C3=9Fen, sind sie allesamt Dienstleistungs=
+produkte, und die Bankin API Plattform der Ladentisch daf=C3=BCr. Definitio=
+nsgem=C3=A4=C3=9F ist eine API Operation ein Kontrakt f=C3=BCr einen Servic=
+e.</li>
+</ul>
+<p>&nbsp;</p>
+<p>Welche Themen im Umfeld XS2A werden von <strong>Aufbauprojekt</strong> A=
+PI-Management realisiert und welche nicht? z.B. Security (Token Pr=C3=BCfun=
+g und Verwaltung)? z.B. Legitimation (Consent Pr=C3=BCfung und Administrati=
+on)? z.B. Session Verwaltung?</p>
+<ul>
+<li>Legitimation, Consent, Berechtigungspr=C3=BCfung und Formatkonformit=C3=
+=A4t sind zentrale Dienste, die innerhalb des API Managements f=C3=BCr alle=
+ APIs bereitgestellt und per Injektions-Policies sichergestellt werden soll=
+en.</li>
+</ul>
+<p>&nbsp;</p>
+<p>Welche<strong> Anforderungen bez. Datenmodell und Backend-Services</stro=
+ng> gibt es bez. Security, Legitimation und Session-Verwaltung, und welches=
+ Projekt realisiert diese?</p>
+<ul>
+<li>Ein Datenmodell f=C3=BCr die Verwaltung der API Daten welches zum einen=
+ die Entit=C3=A4ten von API Connect umfasst (Catalogs, APPs, Organisationen=
+, Abonnements, API-Produkte, APIs, API-Operationen); zum anderen im Zuge de=
+r Implementierung der Plattform um weitere Daten erg=C3=A4nzt wird, zum Bei=
+spiel User-Routing und Instituts-Routing, sowie eine Matrix =C3=BCber die V=
+erf=C3=BCgbarkeit von Operationen auf Instituten.</li>
+</ul>
+<p>&nbsp;</p>
+<p>Welche Anforderungen gibt es bez. der <strong>Protokollierung</strong> u=
+nd welche Informationen werden von der IBM API-Connect L=C3=B6sung protokol=
+liert?</p>
+<ul>
+<li>Hierzu gibt es die Logging Mechanismen von API Connect, welche Umfangre=
+iche Informationen zur Analyse, Monitoring und Monetierung zur Verf=C3=BCgu=
+ng stellen.</li>
+</ul>
+<p>&nbsp;</p>
+<p>Wie und in welcher Umgebung kann wann die BAP mit den XS2A-Services <str=
+ong>getestet</strong> werden?</p>
+<ul>
+<li>In der PoC Umgebung kann man sofort PSD2 Specs testen kann und diese da=
+nn exportieren und in die neue Umgebung importieren, welche im Verlauf des =
+BAP Projekts entstehen wird.</li>
+</ul>
+<p>&nbsp;</p>
+<p>Sammlung von Informationen zum <strong>Banking API</strong> (Drittanbiet=
+er-Schnittstelle f=C3=BCr Banking Funktionen) <br>
+und zur <strong>API Werkbank</strong> (Entwicklungs- und Bereitstellungspla=
+ttform f=C3=BCr APIs) im Projekt <strong>P49010168.</strong></p>
+<p>&nbsp;</p>
+<h3 id=3D"FragenundAntworten-QuerverweiseaufweitereInformationen">Querverwe=
+ise auf weitere Informationen</h3>
+<p>Weitere Links zu Banking API relevanten Seiten, Dokumenten und Ressource=
+n im Web.</p>
+<p>&nbsp;</p>
+<h4 id=3D"FragenundAntworten-Sicherheitsrichtlinien">Sicherheitsrichtlinien=
+</h4>
+<p>&gt;&gt; Verbindliche Sicherheitsrichtlinien Informationssicherheitsrich=
+tlinien &lt;&lt;</p>
+<p><a href=3D"https://wiki.intern/display/public/sicherheitsrichtlinien/Wik=
+i-Struktur" rel=3D"nofollow">https://wiki.intern/display/public/sicherheits=
+richtlinien/Wiki-Struktur</a></p>
+<p>&nbsp;</p>
+<h4 id=3D"FragenundAntworten-YOMOWiki">YOMO Wiki</h4>
+<p>&gt;&gt; OSPE' Teil, der f=C3=BCr unser Banking-API- und auch das PSD2-P=
+rojekt eine Basis ist, im Yomo Wiki dokumentiert. &lt;&lt;</p>
+<p><strong><a href=3D"https://wiki.intern/display/YOMO/OSPE+Entwicklungs+Se=
+tup" rel=3D"nofollow">https://wiki.intern/display/YOMO/OSPE+Entwicklungs+Se=
+tup</a></strong></p>
+<p>&nbsp;</p>
+<h4 id=3D"FragenundAntworten-APISecurity">API Security</h4>
+<p>&gt;&gt; Designing security APIs is a very hard problem indeed. &lt;&lt;=
+</p>
+<p><strong><a href=3D"https://www.cl.cam.ac.uk/~rja14/Papers/SEv2-c18.pdf" =
+class=3D"external-link" rel=3D"nofollow">https://www.cl.cam.ac.uk/~rja14/Pa=
+pers/SEv2-c18.pdf</a></strong></p>
+<p>&nbsp;</p>
+<h4 id=3D"FragenundAntworten-Swagger">Swagger</h4>
+<p>&gt;&gt; Swagger is the world=E2=80=99s largest framework of API develop=
+er tools for the OpenAPI Specification(OAS), <br>
+enabling development across the entire API lifecycle, from design and docum=
+entation, to test and deployment. &lt;&lt;</p>
+<p><strong><a href=3D"https://swagger.io/" class=3D"external-link" rel=3D"n=
+ofollow">https://swagger.io/</a></strong></p>
+<p>&nbsp;</p>
+<h4 id=3D"FragenundAntworten-OpenBankProjectAPISandbox">Open Bank Project A=
+PI Sandbox</h4>
+<p>&gt;&gt;<br>
+The Open Bank Project is an open source API and App store<br>
+for banks that empowers financial institutions to securely and rapidly <br>
+enhance their digital offerings using an ecosystem of 3rd party application=
+s and services. &lt;&lt;</p>
+<h5 id=3D"FragenundAntworten-https://apisandbox.openbankproject.com/indexht=
+tps://apiexplorersandbox.openbankproject.com/"><a class=3D"external-link" h=
+ref=3D"https://apisandbox.openbankproject.com/index" rel=3D"nofollow">https=
+://apisandbox.openbankproject.com/index</a> <br><a class=3D"external-link" =
+href=3D"https://apiexplorersandbox.openbankproject.com/" rel=3D"nofollow">h=
+ttps://apiexplorersandbox.openbankproject.com/</a></h5>
+<p>&nbsp;</p>
+<h4 id=3D"FragenundAntworten-STETOrganisation">STET Organisation</h4>
+<p>&gt;&gt;<br>
+Founded in 2004, STET is owned by five major French banks: BNP Paribas, BPC=
+E, Cr=C3=A9dit Agricole, Banque</p>
+<div>
+F=C3=A9d=C3=A9rative du Cr=C3=A9dit Mutuel and Soci=C3=A9t=C3=A9 G=C3=A9n=
+=C3=A9rale. STET is one of the leading processors in Europe,
+</div>
+<div>
+providing Clearing and Settlement services in Real-Time for the full range =
+<br>
+of payments instruments including Cards transactions. &lt;&lt;
+</div>
+<h5 id=3D"FragenundAntworten-https://www.stet.eu/en/psd2/"><a class=3D"exte=
+rnal-link" href=3D"https://www.stet.eu/en/psd2/" rel=3D"nofollow">https://w=
+ww.stet.eu/en/psd2/</a></h5>
+<p>&nbsp;</p>
+<h4 id=3D"FragenundAntworten-Testseitef=C3=BCrHTTPRequests">Testseite f=C3=
+=BCr HTTP Requests</h4>
+<p>&gt;&gt;<br>
+HTTP Request &amp; Response Service.<br>
+Freely hosted in HTTP, HTTPS, &amp; EU flavors by Kenneth Reitz &amp; Runsc=
+ope. &lt;&lt;</p>
+<h5 id=3D"FragenundAntworten-http://httpbin.org/"><a href=3D"http://httpbin=
+.org/" class=3D"external-link" rel=3D"nofollow">http://httpbin.org/</a></h5=
+>
+<p>&nbsp;</p>
+<h4 id=3D"FragenundAntworten-XS2ASpezifikationderBerlinGroup(NextGenPSD2)">=
+XS2A Spezifikation der Berlin Group (NextGenPSD2)</h4>
+<h5 id=3D"FragenundAntworten-03.NextGenPSD2AccesstoAccountInteroperabilityF=
+ramework-ImplementationGuidelinesV1_20180208.pdf#02.NextGenPSD2AccesstoAcco=
+untInteroperabilityFramework-OperationalRulesV1_20180208.pdf#"><a class=3D"=
+unresolved" href=3D"#">03. NextGenPSD2 Access to Account Interoperability F=
+ramework - Implementation Guidelines V1_20180208.pdf</a><br><a class=3D"unr=
+esolved" href=3D"#">02. NextGenPSD2 Access to Account Interoperability Fram=
+ework - Operational Rules V1_20180208.pdf</a></h5>
+<p>&nbsp;</p>
+<h4 id=3D"FragenundAntworten-=C3=84ltereDefinitionderNextGenPsd2alsSwagger-=
+APIvonEntiros">=C3=84ltere Definition der NextGenPsd2 als Swagger-API von E=
+ntiros</h4>
+<p>20.03.2018: Achtung diese Schnittstellenspezifikationen entsprechen nich=
+t mehr dem aktuellen Stand aktuellen BG-NextGenPSD2 Dokumente zum Testen ab=
+er hilfreich.<br>
+Neuere Version siehe <a href=3D"/display/BANKINGAPI/Swagger+YAML">Swagger Y=
+AML</a></p>
+<h5 id=3D"FragenundAntworten-xs2a_swagger_consent_entiros.yaml#xs2a_swagger=
+_consent_entiros.yaml#xs2a_swagger_cards_entiros.yaml#xs2a_swagger_aisp_ent=
+iros.yaml#xs2a_swagger_pisp_entiros.yaml#"><a class=3D"unresolved" href=3D"=
+#">xs2a_swagger_consent_entiros.yaml</a><a class=3D"unresolved" href=3D"#">=
+xs2a_swagger_consent_entiros.yaml</a><br><a class=3D"unresolved" href=3D"#"=
+>xs2a_swagger_cards_entiros.yaml</a><br><a class=3D"unresolved" href=3D"#">=
+xs2a_swagger_aisp_entiros.yaml</a><br><a class=3D"unresolved" href=3D"#">xs=
+2a_swagger_pisp_entiros.yaml</a></h5>
+<p>&gt;&gt;<br>
+... reference solution for PSD2 API Management with practical example imple=
+mentations <br>
+from RedHat 3scale API Management and the Berlin Group NextGenPSD2 Framewor=
+k 1.0. &lt;&lt;</p>
+<h5 id=3D"FragenundAntworten-https://psd2.entiros.se/docshttps://psd2.entir=
+os.se/#vanhttps://psd2.entiros.se/comparehttps://blog.entiros.se/en/blog-me=
+dia/best-practices-of-psd2-api-management"><a class=3D"external-link" href=
+=3D"https://psd2.entiros.se/docs" rel=3D"nofollow">https://psd2.entiros.se/=
+docs</a> <br><a class=3D"external-link" href=3D"https://psd2.entiros.se/#va=
+n" rel=3D"nofollow">https://psd2.entiros.se/#van</a> <br><a class=3D"extern=
+al-link" href=3D"https://psd2.entiros.se/compare" rel=3D"nofollow">https://=
+psd2.entiros.se/compare</a> <br><a class=3D"external-link" href=3D"https://=
+blog.entiros.se/en/blog-media/best-practices-of-psd2-api-management" rel=3D=
+"nofollow">https://blog.entiros.se/en/blog-media/best-practices-of-psd2-api=
+-management</a></h5>
+<p>&nbsp;</p>
+<p><sup><sub>*** Ende des Dokuments ***</sub></sup></p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+    </div>
+</body>
+</html>
+------=_Part_14995_2001868104.1735002643899
+Content-Type: application/octet-stream
+Content-Transfer-Encoding: base64
+Content-Location: file:///C:/ed52b692cc32513d8d332e42e5486f6a
+
+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
+YII=
+------=_Part_14995_2001868104.1735002643899--
