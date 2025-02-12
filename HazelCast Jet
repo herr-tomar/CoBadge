@@ -25,3 +25,11 @@ da ich keinen Zugriff auf das System habe, das die Batch-Jobs orchestriert und a
 📤 Ausgabe (Output)	pAutoResp (tAutoResp *)	Autorisierungsantwort, die den Status der Transaktion angibt (genehmigt, abgelehnt oder weitere Prüfung erforderlich).
 	return code (rc) (int)	0 → Verarbeitung erfolgreich, aber Autorisierung kann trotzdem abgelehnt werden.
 1 → Fehler in der Verarbeitung.
+
+
+📥 Eingabe (Input)	pKAGTWPrm (tKAGTWPRM *)	Enthält Autorisierungsdaten wie PAN, Betrag, Händlerdetails.
+	pMesUebergabe (tGMV_MesUebergabe *)	Repräsentiert die eingehende Transaktionsnachricht.
+	securPruef (int)	Sicherheitsprüfung (z. B. PIN, EMV, Betrugserkennung).
+📤 Ausgabe (Output)	pAutoResp (tAutoResp *)	Autorisierungsantwort (genehmigt, abgelehnt, weitere Prüfung nötig).
+	return code (rc) (int)	0 → Verarbeitung erfolgreich (Autorisierung kann trotzdem abgelehnt werden).
+1 → Fehler.
