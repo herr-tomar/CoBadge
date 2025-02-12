@@ -16,3 +16,12 @@ Vivek Tomar
 Ich habe bereits eine detaillierte High-Level-Analyse des gesamten Codes durchgeführt, der am Batch-Prozess beteiligt ist. 
 Allerdings ist die Erstellung eines technischen Prozessdiagramms des Batch-Ausführungsablaufs nicht möglich, 
 da ich keinen Zugriff auf das System habe, das die Batch-Jobs orchestriert und ausführt.
+
+
+📥 Eingabe (Input)	pKAGMCPrm (tKAGMCPRM *)	Enthält wichtige Autorisierungsdaten wie PAN, Transaktionsbetrag, Händlerdaten.
+	pEingang (tGMCNachrichtEingang *)	Repräsentiert die eingehende Transaktionsnachricht, z. B. von POS, ATM oder Online-Zahlungssystemen.
+	pGmcRouting (tGMC_Routing *)	Bestimmt das Routing der Transaktion (z. B. Verarbeitung im internen System, Weiterleitung an Issuer oder Netzwerk).
+	securPruef (int)	Sicherheitsprüfung (z. B. PIN-Verifikation, EMV-Checks, Betrugserkennung).
+📤 Ausgabe (Output)	pAutoResp (tAutoResp *)	Autorisierungsantwort, die den Status der Transaktion angibt (genehmigt, abgelehnt oder weitere Prüfung erforderlich).
+	return code (rc) (int)	0 → Verarbeitung erfolgreich, aber Autorisierung kann trotzdem abgelehnt werden.
+1 → Fehler in der Verarbeitung.
