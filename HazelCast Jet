@@ -1,0 +1,12 @@
+**📌 Subject:** RE: Zugriff auf Gateway DB2 Non-Prod  
+
+**Hallo Herr Adolph,**  
+
+vielen Dank für Ihre Rückmeldung. Ich verstehe, dass **Hazelcast Jet** in diesem Zusammenhang nicht direkt bekannt ist. Daher möchte ich gerne verstehen, wie **Batch-Operationen im Co-Badge-System aktuell implementiert sind** – insbesondere, ob sie auf **Triggers oder Stored Procedures** in DB2 basieren.  
+
+Falls es bereits **Triggers oder Stored Procedures für Batch-Prozesse** gibt, könnten Sie uns diese bitte mitteilen? Alternativ würde ich mich freuen, wenn Sie uns eine Möglichkeit aufzeigen könnten, dies selbst im Schema zu analysieren. Dies würde uns helfen, eine fundierte **Architekturentscheidung bezüglich Hazelcast Jet** zu treffen, da eine vollständige Neuentwicklung von DB2-Mechanismen innerhalb von Hazelcast Jet vermieden werden sollte.  
+
+Ich freue mich auf Ihr Feedback und danke Ihnen für Ihre Unterstützung.  
+
+**Mit freundlichen Grüßen**  
+Vivek Tomar
