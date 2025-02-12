@@ -1,35 +1,8 @@
-**📌 Subject:** RE: Zugriff auf Gateway DB2 Non-Prod  
+für die Umsetzung des Steckbriefs V1034 https://jira.intern/browse/DEBIT-1014 gibt es jetzt unerwartet Schwierigkeiten bei der Umsetzung im OSPlus-Neo Impuls.
 
-**Hallo Herr Adolph,**  
+Ziel des Termins ist es, Lösungsoptionen zu erarbeiten.H
+Hierzu stelle ich Euch den Sachverhalt auf Basis des Architekturbildes vor N:\Projekte\P49902349\P49902349-ALG\80 - Arbeitsverzeichnis\1-Arbeitspakete\Intern - Ablösung cobGW\Diagramme Architektur und Prozesse\Architektur_CoBadge_Umsatzreklamation_v1_20241211.drawio.png.
 
-vielen Dank für Ihre Rückmeldung. Ich verstehe, dass **Hazelcast Jet** in diesem Zusammenhang nicht direkt bekannt ist. Daher möchte ich gerne verstehen, wie **Batch-Operationen im Co-Badge-System aktuell implementiert sind** – insbesondere, ob sie auf **Triggers oder Stored Procedures** in DB2 basieren.  
+Die entstandene Lösungsoption möchte ich im Anschluss mit Mirko Reinken nochmal verifizieren, bevor es nächsten Donnerstag (20.02.) in den nächsten Termin mit den OSPlus-Neo Impuls KollegInnen geht. @Stein, Christian bei dem Termin hätte ich Dich gern dabei.
 
-Falls es bereits **Triggers oder Stored Procedures für Batch-Prozesse** gibt, könnten Sie uns diese bitte mitteilen? Alternativ würde ich mich freuen, wenn Sie uns eine Möglichkeit aufzeigen könnten, dies selbst im Schema zu analysieren. Dies würde uns helfen, eine fundierte **Architekturentscheidung bezüglich Hazelcast Jet** zu treffen, da eine vollständige Neuentwicklung von DB2-Mechanismen innerhalb von Hazelcast Jet vermieden werden sollte.  
-
-Ich freue mich auf Ihr Feedback und danke Ihnen für Ihre Unterstützung.  
-
-**Mit freundlichen Grüßen**  
-Vivek Tomar
-
-
-
-Ich habe bereits eine detaillierte High-Level-Analyse des gesamten Codes durchgeführt, der am Batch-Prozess beteiligt ist. 
-Allerdings ist die Erstellung eines technischen Prozessdiagramms des Batch-Ausführungsablaufs nicht möglich, 
-da ich keinen Zugriff auf das System habe, das die Batch-Jobs orchestriert und ausführt.
-
-
-📥 Eingabe (Input)	pKAGMCPrm (tKAGMCPRM *)	Enthält wichtige Autorisierungsdaten wie PAN, Transaktionsbetrag, Händlerdaten.
-	pEingang (tGMCNachrichtEingang *)	Repräsentiert die eingehende Transaktionsnachricht, z. B. von POS, ATM oder Online-Zahlungssystemen.
-	pGmcRouting (tGMC_Routing *)	Bestimmt das Routing der Transaktion (z. B. Verarbeitung im internen System, Weiterleitung an Issuer oder Netzwerk).
-	securPruef (int)	Sicherheitsprüfung (z. B. PIN-Verifikation, EMV-Checks, Betrugserkennung).
-📤 Ausgabe (Output)	pAutoResp (tAutoResp *)	Autorisierungsantwort, die den Status der Transaktion angibt (genehmigt, abgelehnt oder weitere Prüfung erforderlich).
-	return code (rc) (int)	0 → Verarbeitung erfolgreich, aber Autorisierung kann trotzdem abgelehnt werden.
-1 → Fehler in der Verarbeitung.
-
-
-📥 Eingabe (Input)	pKAGTWPrm (tKAGTWPRM *)	Enthält Autorisierungsdaten wie PAN, Betrag, Händlerdetails.
-	pMesUebergabe (tGMV_MesUebergabe *)	Repräsentiert die eingehende Transaktionsnachricht.
-	securPruef (int)	Sicherheitsprüfung (z. B. PIN, EMV, Betrugserkennung).
-📤 Ausgabe (Output)	pAutoResp (tAutoResp *)	Autorisierungsantwort (genehmigt, abgelehnt, weitere Prüfung nötig).
-	return code (rc) (int)	0 → Verarbeitung erfolgreich (Autorisierung kann trotzdem abgelehnt werden).
-1 → Fehler.
+VG, Thomas
