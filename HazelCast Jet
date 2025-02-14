@@ -1,119 +1,110 @@
+3.43.5	Nicht-funktionale Anforderungen
 
-Das Co-Badge Gateway muss über ein umfassendes Monitoring- und Observability-System verfügen, um die Einhaltung der definierten Performance- und Verfügbarkeitsziele sicherzustellen. Das Monitoring dient der frühzeitigen Erkennung von Problemen, der Analyse von Systemengpässen und der Sicherstellung eines stabilen Betriebs.
-Systemüberwachung (Infrastructure & Application Monitoring)
-
-    Alle kritischen Infrastrukturkomponenten (Server, Container, Load Balancer, Netzwerke) müssen in Echtzeit überwacht werden.
-    Applikationsmetriken wie Antwortzeiten, CPU- und Speicherverbrauch, aktive Sessions, Fehlerquoten und Datenbank-Performance müssen erfasst und visualisiert werden.
-    End-to-End-Überwachung über alle relevanten Komponenten der Transaktionsverarbeitung hinweg muss sichergestellt werden.
-
-Logging und Tracing
-
-    Alle Schlüsselereignisse und Transaktionen müssen vollständig in zentralisierten Logging-Systemen gespeichert werden.
-    Distributed Tracing (z. B. mit OpenTelemetry oder AWS X-Ray) muss implementiert werden, um die Latenz über verschiedene Systemkomponenten hinweg nachverfolgen zu können.
-    Logs müssen strukturiert, durchsuchbar und filterbar sein, um Fehler und Anomalien effizient analysieren zu können.
-
-Automatisierte Alarmierung (Alerting)
-
-    Kritische Ereignisse und Schwellenwerte müssen automatisch erkannt und in Echtzeit gemeldet werden.
-    Benachrichtigungen müssen über E-Mail, Slack, Microsoft Teams oder ein zentrales Incident-Management-Tool erfolgen.
-    Eskalationsmechanismen müssen definiert sein, um kritische Systemausfälle automatisch an die relevanten Teams weiterzuleiten.
-
-Dashboards und Visualisierung
-
-    Alle relevanten Performance-, Verfügbarkeits- und Fehlerkennzahlen müssen in einem zentralen Monitoring-Dashboard (z. B. Grafana) dargestellt werden.
-    Das Dashboard muss Live-Visualisierungen und historische Daten enthalten, um Trends und potenzielle Probleme frühzeitig zu identifizieren.
-    Zugriff auf Dashboards muss rollenbasiert (RBAC – Role-Based Access Control) gesteuert werden.
-
-Last- und Stresstests
-
-    Regelmäßige Lasttests und Stresstests müssen durchgeführt werden, um die Systemkapazität und Skalierungsfähigkeit zu validieren.
-    Testumgebungen müssen so konzipiert sein, dass sie realistische Lastszenarien simulieren, einschließlich Spitzenlasten und Failover-Situationen.
-    Die Testergebnisse müssen dokumentiert und für Optimierungsmaßnahmen genutzt werden.
-
-Auditierung und Compliance
-
-    Alle Monitoring- und Logging-Daten müssen für mindestens 6 Monate archiviert werden, um Compliance-Anforderungen zu erfüllen.
-    Zugriff auf Logs und Monitoring-Daten muss revisionssicher verwaltet werden.
-    Sicherheitsvorfälle und außergewöhnliche Systemverhalten müssen automatisch protokolliert und gemeldet werden.
-
-Zusätzliche Hinweise zur Umsetzung
-
-    Das Monitoring-System muss integrierbar in bestehende Unternehmenslösungen (z. B. Splunk, Datadog, Prometheus, Grafana, ELK Stack) sein.
-    Konfigurationsänderungen an der Monitoring- und Alerting-Architektur müssen versioniert und nachvollziehbar dokumentiert werden.
-    Alle relevanten Stakeholder (Operations, Support, Security, Architektur) müssen Zugriff auf Dashboards und Alarme haben, entsprechend ihrer Verantwortlichkeiten.
-
-
-
-
-
--------------------------------------------------
+3.4.13.5.1	Performance
 
 Das Co-Badge Gateway muss eine hohe Performance sicherstellen, um eine effiziente Abwicklung von Transaktionsanfragen zu gewährleisten. Die definierten Leistungsparameter unterstützen die Anforderungen an Geschwindigkeit, Skalierbarkeit und Verarbeitungsgenauigkeit im produktiven Betrieb.
-Antwortzeit (Response Time)
 
-    Die maximale Antwortzeit für eine Autorisierungsanfrage darf unter Normalbedingungen 200 ms nicht überschreiten.
-    Während Lastspitzen darf die Antwortzeit in 99% der Fälle maximal 500 ms betragen.
-    Die Antwortzeit bezieht sich auf die gesamte End-to-End-Verarbeitung, einschließlich Netzwerklatenz und interner Systemverarbeitung.
+3.4.1.13.5.1.1	Antwortzeit (Response Time)
 
-Transaktionsrate (Throughput)
+•	Die maximale Antwortzeit für eine Autorisierungsanfrage darf unter Normalbedingungen 200 ms nicht überschreiten.
+•	Während Lastspitzen darf die Antwortzeit in 99% der Fälle maximal 500 ms betragen.
+•	Die Antwortzeit bezieht sich auf die gesamte End-to-End-Verarbeitung, einschließlich Netzwerklatenz und interner Systemverarbeitung.
 
-    Das System muss kontinuierlich eine Durchsatzrate von mindestens 100 Transaktionen pro Sekunde (TPS) gewährleisten.
-    Während Lastspitzen muss das System eine Skalierung auf mindestens 500 TPS unterstützen.
-    Das Co-Badge Gateway muss eine Tageslast von bis zu 1 Million Transaktionen zuverlässig bewältigen, ohne dass die Systemleistung beeinträchtigt wird.
+3.4.1.23.5.1.2	Transaktionsrate (Throughput)
 
-Verarbeitungsgenauigkeit
+•	Das System muss kontinuierlich eine Durchsatzrate von mindestens 100 Transaktionen pro Sekunde (TPS) gewährleisten.
+•	Während Lastspitzen muss das System eine Skalierung auf mindestens 500 TPS unterstützen.
+•	Das Co-Badge Gateway muss eine Tageslast von bis zu 1 Million Transaktionen zuverlässig bewältigen, ohne dass die Systemleistung beeinträchtigt wird.
 
-    Das System muss eine verlustfreie und fehlerfreie Verarbeitung aller Transaktionen sicherstellen.
-    Fehlerhafte oder unvollständige Transaktionen müssen erkannt, protokolliert und nach definierten Wiederholungs- oder Eskalationsmechanismen behandelt werden.
+3.4.1.33.5.1.3	Verarbeitungsgenauigkeit
 
-Skalierbarkeit (Scalability)
+•	Das System muss eine verlustfreie und fehlerfreie Verarbeitung aller Transaktionen sicherstellen.
+•	Fehlerhafte oder unvollständige Transaktionen müssen erkannt, protokolliert und nach definierten Wiederholungs- oder Eskalationsmechanismen behandelt werden.
 
-    Das System muss horizontal skalierbar sein, um steigenden Lastanforderungen gerecht zu werden.
-    Eine automatische Skalierung mit einem Minimum von 3 Instanzen muss implementiert werden, um Lastspitzen effizient zu verarbeiten.
-    Die Skalierung muss ohne Serviceunterbrechung erfolgen, sodass die Gesamtverfügbarkeit des Systems nicht beeinträchtigt wird.
+3.4.1.43.5.1.4	Skalierbarkeit (Scalability)
 
-Durchsatz und Netzverhalten
+•	Das System muss horizontal skalierbar sein, um steigenden Lastanforderungen gerecht zu werden.
+•	Eine automatische Skalierung mit einem Minimum von 3 Instanzen muss implementiert werden, um Lastspitzen effizient zu verarbeiten.
+•	Die Skalierung muss ohne Serviceunterbrechung erfolgen, sodass die Gesamtverfügbarkeit des Systems nicht beeinträchtigt wird.
 
-    Das Co-Badge Gateway muss in der Lage sein, parallele Anfragen effizient zu verarbeiten, ohne eine signifikante Erhöhung der Netzwerklatenz zu verursachen.
-    Kommunikationsschnittstellen müssen für maximale Netzwerkperformance optimiert sein, um Verzögerungen in der Verarbeitung zu vermeiden.
+3.4.1.53.5.1.5	Durchsatz und Netzverhalten
 
-Überwachung und Performance-Monitoring
+•	Das Co-Badge Gateway muss in der Lage sein, parallele Anfragen effizient zu verarbeiten, ohne eine signifikante Erhöhung der Netzwerklatenz zu verursachen.
+•	Kommunikationsschnittstellen müssen für maximale Netzwerkperformance optimiert sein, um Verzögerungen in der Verarbeitung zu vermeiden.
 
-    Das System muss in Grafana und Prometheus integriert werden, um in Echtzeit Leistungsmetriken wie Latenz, Fehlerquote und Systemauslastung zu überwachen.
-    Automatisierte Alarmierungsmechanismen müssen eingerichtet sein, um Anomalien oder Abweichungen von den definierten Leistungskennzahlen frühzeitig zu erkennen.
-    Regelmäßige Last- und Stresstests müssen durchgeführt werden, um die Systemstabilität und Skalierungsfähigkeit zu validieren.
-
-3.5.1.2 Verfügbarkeit (Availability)
+3.4.23.5.2	Verfügbarkeit
 
 Das Co-Badge Gateway muss eine durchgehend hohe Verfügbarkeit gewährleisten, um einen unterbrechungsfreien Betrieb und die Einhaltung der definierten Service Level Agreements (SLAs) sicherzustellen.
-Systemverfügbarkeit
 
-    Das System muss eine Mindestverfügbarkeit von 99,99% über den gesamten Betriebszeitraum gewährleisten.
-    Wartungsfenster müssen so geplant werden, dass sie die Serviceverfügbarkeit nicht beeinträchtigen oder außerhalb der Kernbetriebszeiten durchgeführt werden.
+3.4.2.13.5.2.1	Systemverfügbarkeit
 
-Fehlertoleranz und Ausfallsicherheit
+•	Das System muss eine Mindestverfügbarkeit von 99,99% über den gesamten Betriebszeitraum gewährleisten.
+•	Wartungsfenster müssen so geplant werden, dass sie die Serviceverfügbarkeit nicht beeinträchtigen oder außerhalb der Kernbetriebszeiten durchgeführt werden.
 
-    Das Co-Badge Gateway darf keine Single Points of Failure enthalten. Alle kritischen Komponenten müssen redundant ausgelegt sein.
-    Automatisierte Failover-Mechanismen müssen implementiert sein, um die Last im Falle eines Serverausfalls oder einer Störung nahtlos auf alternative Instanzen zu verteilen.
-    Cluster-Technologien und verteilte Infrastruktur sind erforderlich, um eine hohe Verfügbarkeit und Resilienz zu gewährleisten.
+3.4.2.23.5.2.2	Fehlertoleranz und Ausfallsicherheit
 
-Wiederanlaufverhalten
+•	Das Co-Badge Gateway darf keine Single Points of Failure enthalten. Alle kritischen Komponenten müssen redundant ausgelegt sein.
+•	Automatisierte Failover-Mechanismen müssen implementiert sein, um die Last im Falle eines Serverausfalls oder einer Störung nahtlos auf alternative Instanzen zu verteilen.
+•	Cluster-Technologien und verteilte Infrastruktur sind erforderlich, um eine hohe Verfügbarkeit und Resilienz zu gewährleisten.
 
-    Nach einem Systemausfall muss das Co-Badge Gateway innerhalb von 5 Sekunden wieder vollständig betriebsbereit sein.
-    Es darf kein Datenverlust auftreten. Transaktionen müssen konsistent gespeichert und im Fehlerfall automatisch wiederhergestellt werden.
+3.4.2.33.5.2.3	Wiederanlaufverhalten
 
-Backup- und Recovery-Mechanismen
+•	Nach einem Systemausfall muss das Co-Badge Gateway innerhalb von 5 Sekunden wieder vollständig betriebsbereit sein.
+•	Es darf kein Datenverlust auftreten. Transaktionen müssen konsistent gespeichert und im Fehlerfall automatisch wiederhergestellt werden.
 
-    Alle geschäftskritischen Daten und Konfigurationen müssen mindestens alle 4 Stunden gesichert werden.
-    Disaster-Recovery-Maßnahmen müssen eine vollständige Wiederherstellung des Systems innerhalb von 15 Minuten ermöglichen.
+3.4.2.43.5.2.4	Backup- und Recovery-Mechanismen
 
-Geografische Redundanz
+•	Alle geschäftskritischen Daten und Konfigurationen müssen mindestens alle 4 Stunden gesichert werden.
+•	Disaster-Recovery-Maßnahmen müssen eine vollständige Wiederherstellung des Systems innerhalb von 15 Minuten ermöglichen.
 
-    Der Betrieb des Co-Badge Gateways muss über mehrere Standorte hinweg abgesichert werden, um regionale Ausfälle zu vermeiden.
-    Alle relevanten Transaktions- und Konfigurationsdaten müssen in mindestens zwei geographisch getrennten Rechenzentren in Echtzeit repliziert werden.
+3.4.2.53.5.2.5	Geografische Redundanz
 
-Zusätzliche Hinweise zur Umsetzung
+•	Der Betrieb des Co-Badge Gateways muss über mehrere Standorte hinweg abgesichert werden, um regionale Ausfälle zu vermeiden.
+•	Alle relevanten Transaktions- und Konfigurationsdaten müssen in mindestens zwei geographisch getrennten Rechenzentren in Echtzeit repliziert werden.
 
-    Die definierten Performance- und Verfügbarkeitsziele müssen durch regelmäßige Systemtests und Lastsimulationen validiert werden.
-    Die Implementierung der Überwachungs- und Failover-Mechanismen muss frühzeitig in die Entwicklungsphase integriert werden, um eine optimale Systemstabilität zu gewährleisten.
-    Alle Metriken müssen in einem zentralen Dashboard dargestellt werden, um eine transparente Überwachung und frühzeitige Problembehandlung zu ermöglichen.
+
+
+3.4.33.5.3	Monitoring
+Das Co-Badge Gateway muss über ein umfassendes Monitoring- und Observability-System verfügen, um die Einhaltung der definierten Performance- und Verfügbarkeitsziele sicherzustellen. Das Monitoring dient der frühzeitigen Erkennung von Problemen, der Analyse von Systemengpässen und der Sicherstellung eines stabilen Betriebs.
+
+3.4.3.13.5.3.1	Systemüberwachung (Infrastructure & Application Monitoring)
+
+•	Alle kritischen Infrastrukturkomponenten (Server, Container, Load Balancer, Netzwerke) müssen in Echtzeit überwacht werden.
+•	Applikationsmetriken wie Antwortzeiten, CPU- und Speicherverbrauch, aktive Sessions, Fehlerquoten und Datenbank-Performance müssen erfasst und visualisiert werden.
+•	End-to-End-Überwachung über alle relevanten Komponenten der Transaktionsverarbeitung hinweg muss sichergestellt werden.
+
+3.4.3.23.5.3.2	Logging und Tracing
+
+•	Alle Schlüsselereignisse und Transaktionen müssen vollständig in zentralisierten Logging-Systemen gespeichert werden.
+•	Distributed Tracing (z. B. mit OpenTelemetry oder AWS X-Ray) muss implementiert werden, um die Latenz über verschiedene Systemkomponenten hinweg nachverfolgen zu können.
+•	Logs müssen strukturiert, durchsuchbar und filterbar sein, um Fehler und Anomalien effizient analysieren zu können.
+
+3.4.3.33.5.3.3	Automatisierte Alarmierung (Alerting)
+
+•	Kritische Ereignisse und Schwellenwerte müssen automatisch erkannt und in Echtzeit gemeldet werden.
+•	Benachrichtigungen müssen über E-Mail, Slack, Microsoft Teams oder ein zentrales Incident-Management-Tool erfolgen.
+•	Eskalationsmechanismen müssen definiert sein, um kritische Systemausfälle automatisch an die relevanten Teams weiterzuleiten.
+
+3.4.3.43.5.3.4	Dashboards und Visualisierung
+
+•	Alle relevanten Performance-, Verfügbarkeits- und Fehlerkennzahlen müssen in einem zentralen Monitoring-Dashboard (z. B. Grafana) dargestellt werden.
+•	Das Dashboard muss Live-Visualisierungen und historische Daten enthalten, um Trends und potenzielle Probleme frühzeitig zu identifizieren.
+•	Zugriff auf Dashboards muss rollenbasiert (RBAC – Role-Based Access Control) gesteuert werden.
+
+3.4.3.53.5.3.5	Last- und Stresstests
+
+•	Regelmäßige Lasttests und Stresstests müssen durchgeführt werden, um die Systemkapazität und Skalierungsfähigkeit zu validieren.
+•	Testumgebungen müssen so konzipiert sein, dass sie realistische Lastszenarien simulieren, einschließlich Spitzenlasten und Failover-Situationen.
+•	Die Testergebnisse müssen dokumentiert und für Optimierungsmaßnahmen genutzt werden.
+
+3.4.3.63.5.3.6	Auditierung und Compliance
+
+•	Alle Monitoring- und Logging-Daten müssen für mindestens 6 Monate archiviert werden, um Compliance-Anforderungen zu erfüllen.
+•	Zugriff auf Logs und Monitoring-Daten muss revisionssicher verwaltet werden.
+•	Sicherheitsvorfälle und außergewöhnliche Systemverhalten müssen automatisch protokolliert und gemeldet werden.
+
+3.4.3.73.5.3.7	Zusätzliche Hinweise zur Umsetzung
+
+•	Das Monitoring-System muss integrierbar in bestehende Unternehmenslösungen (z. B. Splunk, Prometheus, Grafana) sein.
+•	Konfigurationsänderungen an der Monitoring- und Alerting-Architektur müssen versioniert und nachvollziehbar dokumentiert werden.
+•	Alle relevanten Stakeholder (Operations, Support, Security, Architektur) müssen Zugriff auf Dashboards und Alarme haben, entsprechend ihrer Verantwortlichkeiten.
