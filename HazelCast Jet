@@ -4,7 +4,8 @@ Das Co-Badge Gateway ist eine interne Intranet-Anwendung, die auf der PKP (Kuber
 1. Service-Design & Microservice-Architektur
 
 Philosophie
-Das Co-Badge Gateway basiert auf einer Domain-Driven Design (DDD)-Strategie und nutzt eine ereignisgesteuerte Architektur (Choreographie), um Flexibilität und Skalierbarkeit zu gewährleisten. Die Anwendung ist in klar abgegrenzte Microservices unterteilt, die über Hazelcast als verteiltes In-Memory-Data-Grid kommunizieren. Dies ermöglicht eine optimale Performance und Lastverteilung.
+Das Co-Badge Gateway basiert auf einer Domain-Driven Design (DDD)-Strategie und nutzt eine ereignisgesteuerte Architektur (Choreographie), um Flexibilität und Skalierbarkeit zu gewährleisten. 
+Die Anwendung ist in klar abgegrenzte Microservices unterteilt, die über Hazelcast als verteiltes In-Memory-Data-Grid kommunizieren. Dies ermöglicht eine optimale Performance und Lastverteilung.
 
 Microservice-Ansatz
 
@@ -23,6 +24,11 @@ Kern-Microservices & Verantwortlichkeiten
         Bearbeitet Echtzeit-Transaktionsfreigaben (ISO 8583-Nachrichten).
 
         Integriert sich mit Kartennetzwerken (Visa, Mastercard).
+Kartenservice
+
+Bearbeitet Kartenbestellungen (Batch & Online).
+
+Integriert sich mit internen und externen Kartenmanagementsystemen.
 
     Sperrservice (Sperre-Management)
 
