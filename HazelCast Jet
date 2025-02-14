@@ -1,17 +1,69 @@
+Das Co-Badge Gateway muss eine hohe Performance sicherstellen, um eine effiziente Abwicklung von Transaktionsanfragen zu gewährleisten. Die definierten Leistungsparameter unterstützen die Anforderungen an Geschwindigkeit, Skalierbarkeit und Verarbeitungsgenauigkeit im produktiven Betrieb.
+Antwortzeit (Response Time)
 
+    Die maximale Antwortzeit für eine Autorisierungsanfrage darf unter Normalbedingungen 200 ms nicht überschreiten.
+    Während Lastspitzen darf die Antwortzeit in 99% der Fälle maximal 500 ms betragen.
+    Die Antwortzeit bezieht sich auf die gesamte End-to-End-Verarbeitung, einschließlich Netzwerklatenz und interner Systemverarbeitung.
 
+Transaktionsrate (Throughput)
 
+    Das System muss kontinuierlich eine Durchsatzrate von mindestens 100 Transaktionen pro Sekunde (TPS) gewährleisten.
+    Während Lastspitzen muss das System eine Skalierung auf mindestens 500 TPS unterstützen.
+    Das Co-Badge Gateway muss eine Tageslast von bis zu 1 Million Transaktionen zuverlässig bewältigen, ohne dass die Systemleistung beeinträchtigt wird.
 
-3.5	Nicht-funktionale Anforderungen
-WIP Vivek
-3.5.1.1	Performance
-cobGW Autorisierung <100ms
+Verarbeitungsgenauigkeit
 
+    Das System muss eine verlustfreie und fehlerfreie Verarbeitung aller Transaktionen sicherstellen.
+    Fehlerhafte oder unvollständige Transaktionen müssen erkannt, protokolliert und nach definierten Wiederholungs- oder Eskalationsmechanismen behandelt werden.
 
-3.5.1.2	Verfügbarkeit
-WIP Vivek
-[Hinweis: Bitte orientieren Sie sich bei der Befüllung an dem in PMOplus als Inputdokument für die Fachliche Spezifikation ausgewiesenem Leitfaden für nicht-funktionale Anforderungen für OSPlus (siehe Leitfaden nicht-funktionale Anforderungen im PMOplus-Wiki).
-Der Gliederungspunkt ist zwingend zu befüllen und darf nicht gelöscht werden!
-Für den Fall, dass es sich bei dem Projekt um eine Erweiterung von Funktionalitäten einer bestehenden Anwendung handelt und es keine Veränderungen der vorliegenden nicht-funktionalen Anforderungen gibt, ist der Hinweis wie folgt auszuweisen:
-Im Rahmen des Projekts werden Anpassungen an bestehenden IT-Systemen durchgeführt, es besteht kein Anpassungsbedarf an den vorliegenden nicht-funktionalen Anforderungen.
-In allen anderen Fällen sind die nicht-funktionalen Anforderungen auszuweisen / zu dokumentieren.]
+Skalierbarkeit (Scalability)
+
+    Das System muss horizontal skalierbar sein, um steigenden Lastanforderungen gerecht zu werden.
+    Eine automatische Skalierung mit einem Minimum von 3 Instanzen muss implementiert werden, um Lastspitzen effizient zu verarbeiten.
+    Die Skalierung muss ohne Serviceunterbrechung erfolgen, sodass die Gesamtverfügbarkeit des Systems nicht beeinträchtigt wird.
+
+Durchsatz und Netzverhalten
+
+    Das Co-Badge Gateway muss in der Lage sein, parallele Anfragen effizient zu verarbeiten, ohne eine signifikante Erhöhung der Netzwerklatenz zu verursachen.
+    Kommunikationsschnittstellen müssen für maximale Netzwerkperformance optimiert sein, um Verzögerungen in der Verarbeitung zu vermeiden.
+
+Überwachung und Performance-Monitoring
+
+    Das System muss in Grafana und Prometheus integriert werden, um in Echtzeit Leistungsmetriken wie Latenz, Fehlerquote und Systemauslastung zu überwachen.
+    Automatisierte Alarmierungsmechanismen müssen eingerichtet sein, um Anomalien oder Abweichungen von den definierten Leistungskennzahlen frühzeitig zu erkennen.
+    Regelmäßige Last- und Stresstests müssen durchgeführt werden, um die Systemstabilität und Skalierungsfähigkeit zu validieren.
+
+3.5.1.2 Verfügbarkeit (Availability)
+
+Das Co-Badge Gateway muss eine durchgehend hohe Verfügbarkeit gewährleisten, um einen unterbrechungsfreien Betrieb und die Einhaltung der definierten Service Level Agreements (SLAs) sicherzustellen.
+Systemverfügbarkeit
+
+    Das System muss eine Mindestverfügbarkeit von 99,99% über den gesamten Betriebszeitraum gewährleisten.
+    Wartungsfenster müssen so geplant werden, dass sie die Serviceverfügbarkeit nicht beeinträchtigen oder außerhalb der Kernbetriebszeiten durchgeführt werden.
+
+Fehlertoleranz und Ausfallsicherheit
+
+    Das Co-Badge Gateway darf keine Single Points of Failure enthalten. Alle kritischen Komponenten müssen redundant ausgelegt sein.
+    Automatisierte Failover-Mechanismen müssen implementiert sein, um die Last im Falle eines Serverausfalls oder einer Störung nahtlos auf alternative Instanzen zu verteilen.
+    Cluster-Technologien und verteilte Infrastruktur sind erforderlich, um eine hohe Verfügbarkeit und Resilienz zu gewährleisten.
+
+Wiederanlaufverhalten
+
+    Nach einem Systemausfall muss das Co-Badge Gateway innerhalb von 5 Sekunden wieder vollständig betriebsbereit sein.
+    Es darf kein Datenverlust auftreten. Transaktionen müssen konsistent gespeichert und im Fehlerfall automatisch wiederhergestellt werden.
+
+Backup- und Recovery-Mechanismen
+
+    Alle geschäftskritischen Daten und Konfigurationen müssen mindestens alle 4 Stunden gesichert werden.
+    Disaster-Recovery-Maßnahmen müssen eine vollständige Wiederherstellung des Systems innerhalb von 15 Minuten ermöglichen.
+
+Geografische Redundanz
+
+    Der Betrieb des Co-Badge Gateways muss über mehrere Standorte hinweg abgesichert werden, um regionale Ausfälle zu vermeiden.
+    Alle relevanten Transaktions- und Konfigurationsdaten müssen in mindestens zwei geographisch getrennten Rechenzentren in Echtzeit repliziert werden.
+
+Zusätzliche Hinweise zur Umsetzung
+
+    Die definierten Performance- und Verfügbarkeitsziele müssen durch regelmäßige Systemtests und Lastsimulationen validiert werden.
+    Die Implementierung der Überwachungs- und Failover-Mechanismen muss frühzeitig in die Entwicklungsphase integriert werden, um eine optimale Systemstabilität zu gewährleisten.
+    Alle Metriken müssen in einem zentralen Dashboard dargestellt werden, um eine transparente Überwachung und frühzeitige Problembehandlung zu ermöglichen.
