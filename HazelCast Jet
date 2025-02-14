@@ -1,1 +1,35 @@
-Es ist wichtig, in der Spezifikation zu zeigen, dass wir HazelCast im Vergleich zu Kafka richtig evaluiert haben, um zu der Entscheidung zu gelangen, dass HazelCast in der vorgeschlagenen Architektur funktionieren kann. Ich würde empfehlen, dass diese Analyse bestehen bleibt.
+3.3	Service-Design
+WIP Vivek
+Fachliche Funktionen, Domänen, Entitäten (Karten, Sperren, …) auf Microservices drehen
+
+Philosophie
+Komponenten/Module
+Schnittstellen
+
+[Die weitere Untergliederung orientiert sich idealerweise an der vorliegenden IST-Beschreibung.]
+
+Text
+
+3.4	Nutzungsmessung
+WIP Vivek
+WIP brauchen wir das?
+Die Nutzung der in der Fachlichen Spezifikation dargestellten Funktionalitäten / Prozesse / Anwendungen soll für einen Bericht zu OSPlus-Nutzungskennzahlen anhand folgender Nutzungskennzahlen messbar gemacht werden:
+Kennzahl 1 (Erläuterung inkl. Angabe der „Kennzahlenquelle“ wie z.B. ET3 des DSGV oder IT-nahes Fachkonzept) der SR
+Kennzahl 2 (Erläuterung inkl. Angabe der „Kennzahlenquelle“ wie z.B. ET3 des DSGV oder IT-nahes Fachkonzept) der SR
+Kennzahl n (Erläuterung inkl. Angabe der „Kennzahlenquelle“ wie z.B. ET3 des DSGV oder IT-nahes Fachkonzept) der SR
+Wenn das Thema Nutzungsmessung für die vorliegende Fachliche Spezifikation keine Relevanz besitzt, ist der folgende Satz mit dem Standard-Format zu formatieren und der Rest des Textes zum Thema Nutzung zu löschen. 
+„Für die vorliegende Fachliche Spezifikation ist das Thema Nutzungsmessung nicht relevant.“
+
+3.5	Nicht-funktionale Anforderungen
+WIP Vivek
+3.5.1.1	Performance
+cobGW Autorisierung <100ms
+
+
+3.5.1.2	Verfügbarkeit
+WIP Vivek
+[Hinweis: Bitte orientieren Sie sich bei der Befüllung an dem in PMOplus als Inputdokument für die Fachliche Spezifikation ausgewiesenem Leitfaden für nicht-funktionale Anforderungen für OSPlus (siehe Leitfaden nicht-funktionale Anforderungen im PMOplus-Wiki).
+Der Gliederungspunkt ist zwingend zu befüllen und darf nicht gelöscht werden!
+Für den Fall, dass es sich bei dem Projekt um eine Erweiterung von Funktionalitäten einer bestehenden Anwendung handelt und es keine Veränderungen der vorliegenden nicht-funktionalen Anforderungen gibt, ist der Hinweis wie folgt auszuweisen:
+Im Rahmen des Projekts werden Anpassungen an bestehenden IT-Systemen durchgeführt, es besteht kein Anpassungsbedarf an den vorliegenden nicht-funktionalen Anforderungen.
+In allen anderen Fällen sind die nicht-funktionalen Anforderungen auszuweisen / zu dokumentieren.]
