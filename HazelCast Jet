@@ -1,12 +1,134 @@
 3.3	Service-Design
-WIP Vivek
-Fachliche Funktionen, Domänen, Entitäten (Karten, Sperren, …) auf Microservices drehen
+Übersicht
+Das Co-Badge Gateway ist eine interne Intranet-Anwendung, die auf der PKP (Kubernetes-Plattform) neu entwickelt wird. Da es sich um eine interne Anwendung handelt, sind Authentifizierung und Autorisierung nicht erforderlich. Die bestehende Datenbank bleibt unverändert, und der Fokus liegt auf der Modernisierung der Anwendungsarchitektur unter Verwendung von Microservices, Choreographie, Hazelcast, DB2, REST, ISO 8583, Java und Spring. Der DevOps-Stack umfasst Jenkins für CI/CD, Grafana für Monitoring und Splunk für Log-Analyse.
+1. Service-Design & Microservice-Architektur
 
 Philosophie
-Komponenten/Module
-Schnittstellen
+Das Co-Badge Gateway basiert auf einer Domain-Driven Design (DDD)-Strategie und nutzt eine ereignisgesteuerte Architektur (Choreographie), um Flexibilität und Skalierbarkeit zu gewährleisten. Die Anwendung ist in klar abgegrenzte Microservices unterteilt, die über Hazelcast als verteiltes In-Memory-Data-Grid kommunizieren. Dies ermöglicht eine optimale Performance und Lastverteilung.
 
-[Die weitere Untergliederung orientiert sich idealerweise an der vorliegenden IST-Beschreibung.]
+Microservice-Ansatz
+
+    Fachliche Funktionen wie Kartentransaktionen, Sperrverwaltung (Sperre 60, 61, 62) und Clearing werden in unabhängige Microservices aufgeteilt.
+
+    Choreographie-basierte Kommunikation über Hazelcast für ereignisgesteuerte Verarbeitung.
+
+    Zustandslose Dienste mit REST-API-Endpunkten für synchrone Operationen.
+
+    ISO 8583-Nachrichtentransformation für die Integration mit Altsystemen.
+
+Kern-Microservices & Verantwortlichkeiten
+
+    Autorisierungsservice (Authorisierung)
+
+        Bearbeitet Echtzeit-Transaktionsfreigaben (ISO 8583-Nachrichten).
+
+        Integriert sich mit Kartennetzwerken (Visa, Mastercard).
+
+    Sperrservice (Sperre-Management)
+
+        Verwaltet Sperrungen (Sperre 60, 61, 62).
+
+        Synchronisiert mit externen Banksystemen.
+
+    Clearing & Abrechnungsservice (Clearing & Nachweise)
+
+        Verarbeitet nachträgliche Transaktionsabrechnungen.
+
+        Führt asynchrone Abstimmungen mit Partnern durch.
+
+    Helaba EZB Referenzkurs-Service
+
+        Ruft Wechselkurs-Referenzdaten ab.
+
+        Veröffentlicht Kurse zur Verarbeitung durch Finanztransaktionen.
+
+    Helaba Datenbereitstellungsservice
+
+        Stellt Helaba die notwendigen Dateien für Reporting & Abrechnung zur Verfügung.
+
+Schnittstellen & API-Kommunikation
+
+    Ereignisgesteuerte Nachrichtenübertragung über Hazelcast für serviceübergreifende Kommunikation.
+
+    REST-APIs für externe Integrationen.
+
+    ISO 8583-Unterstützung für die Integration mit Altsystemen im Bankenumfeld.
+
+2. Skalierbarkeit & Performance-Optimierung
+
+Horizontale Skalierung
+
+    Kubernetes Horizontal Pod Autoscaling (HPA) zur dynamischen Skalierung basierend auf der Last.
+
+    Effiziente Hazelcast-Partitionierung zur Vermeidung doppelter Verarbeitungen.
+
+Optimierter Datenzugriff
+
+    Hazelcast als verteiltes Caching zur Reduzierung von DB-Abfragen.
+
+    Ereignisgesteuerte Aktualisierungen aus DB2 für Echtzeit-Transaktionsstatus.
+
+Latenz- & Durchsatzverbesserungen
+
+    Optimierte API-Antwortzeiten durch In-Memory-Verarbeitung.
+
+    Lasttests zur Benchmarking von erwarteten Requests per Second (RPS).
+
+3. Zuverlässigkeit & Fehlertoleranz
+
+Strategien zur Fehlerbehebung
+
+    Circuit Breaker mit Resilience4j zur Handhabung externer Fehler.
+
+    Dead-Letter-Queue (DLQ) zur Wiederverarbeitung fehlgeschlagener Nachrichten.
+
+Selbstheilungsmechanismen
+
+    Kubernetes Liveness & Readiness Probes zur Sicherstellung der Dienstverfügbarkeit.
+
+    Automatisierte Wiederholungsversuche bei temporären Fehlern.
+
+4. Deployment & DevOps
+
+CI/CD-Pipeline
+
+    Jenkins zur Automatisierung von Builds und Deployments.
+
+    Helm-Charts für Kubernetes-Deployments.
+
+Monitoring & Log-Management
+
+    Grafana für Echtzeit-Monitoring der Performance.
+
+    Splunk zur zentralen Log-Analyse und Debugging-Unterstützung.
+
+5. Compliance & Auditierbarkeit
+
+Logging & Audit-Trail
+
+    Vollständige Transaktionsprotokollierung zur Nachverfolgbarkeit.
+
+    Audit-Daten in DB2 gespeichert für Compliance-Berichterstattung.
+
+ISO 8583-Konformität
+
+    Unterstützung für verschiedene Nachrichtentypen (Autorisierungen, Stornierungen, Abrechnungen).
+
+    Sicherstellung der Abwärtskompatibilität mit Altsystemen.
+
+6. Business Continuity & Notfallwiederherstellung
+
+Hochverfügbarkeitssetup
+
+    Multi-Node-Deployment in Kubernetes zur Vermeidung von Single Points of Failure.
+
+    Hazelcast-basierte verteilte Zustandsverwaltung.
+
+Disaster Recovery & Failover
+
+    Datenbank-Failover-Strategie für DB2.
+
+    Automatisierte Backups und Wiederherstellungsmechanismen.
 
 Text
 
