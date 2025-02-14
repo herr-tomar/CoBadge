@@ -132,7 +132,7 @@ Hochverfügbarkeitssetup
 
 Disaster Recovery & Failover
 
-    Datenbank-Failover-Strategie für DB2.
+    Die bestehende Failover-Strategie für DB2 bleibt unverändert und wird weiterhin genutzt. Es sind keine Anpassungen oder Erweiterungen erforderlich, da die Datenbank nicht Teil der Neuentwicklung ist.
 
     Automatisierte Backups und Wiederherstellungsmechanismen.
 
