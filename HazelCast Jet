@@ -1,3 +1,65 @@
+1. Die fehlgeschlagenen Anfragen entstanden hauptsächlich durch zwei Faktoren: Erstens war die Startup Probe fehlerhaft konfiguriert und überprüfte /health, während der tatsächliche Endpunkt /actuator/health war. Dies führte dazu, dass Kubernetes den Pod als nicht bereit ansah und keine Anfragen weiterleitete. Zweitens kam es während des Lasttests zur dynamischen Skalierung von 1 auf 3 Pods, wobei Kubernetes bereits Traffic an frisch gestartete, noch nicht vollständig initialisierte Pods weiterleitete. Dies führte zu 502 Bad Gateway Fehlern.
+Lösung:
+Die Startup Probe wurde auf /actuator/health angepasst, sodass Pods erst dann als bereit markiert werden, wenn sie wirklich einsatzfähig sind.
+Zusätzlich wurde eine Readiness Probe hinzugefügt, um sicherzustellen, dass keine Anfragen an noch nicht betriebsbereite Pods gesendet werden.
+=== Load Test Summary ===
+Total Requests Sent: 200
+Successful Requests: 200
+Failed Requests: 0
+Total Execution Time: 33507 ms
+Average Response Time: 662.54 ms
+Requests Per Second (RPS): 5.97
+ 
+ 
+=== Load Test Summary ===
+Total Requests Sent: 2000
+Successful Requests: 2000
+Failed Requests: 0
+Total Execution Time: 375021 ms
+Average Response Time: 676.15 ms
+Requests Per Second (RPS): 5.33
+ 
+ 
+=== Load Test Summary ===
+Total Requests Sent: 3000
+Successful Requests: 3000
+Failed Requests: 0
+Total Execution Time: 364575 ms
+Average Response Time: 647.36 ms
+Requests Per Second (RPS): 8.23
+ 
+2. Nach der Analyse der Hazelcast-Pods zeigt sich eine ungleichmäßige Speicherverteilung zwischen den Knoten:
+Hazelcast Pod
+CPU-Nutzung
+Speichernutzung
+hc-hazelcast-0
+92m
+1.3 GB (1362Mi)
+hc-hazelcast-1
+191m
+5.1 GB (5191Mi)
+hc-hazelcast-2
+236m
+5.2 GB (5200Mi)
+Während hc-hazelcast-0 nur 1.3 GB verbraucht, liegen hc-hazelcast-1 und hc-hazelcast-2 bei über 5 GB. Diese ungleichmäßige Verteilung deutet darauf hin, dass einige Knoten mehr Partitionen halten als andere, was zu einer ungleichmäßigen Speicherauslastung führt. Zudem könnte die JVM für Hazelcast eine hohe Heap-Größe (-Xmx) reserviert haben, die jedoch nicht vollständig genutzt wird.
+ 
+3.  Jede Nachricht, die während der Tests verarbeitet wird, ist 1MB groß.
+ 
+4. Die JVM-Speichergröße von -Xms10GB -Xmx20GB konnte nicht verwendet werden, aus folgenden Gründen:
+Kubernetes-Pod-Limit (max. 4GB Speicher pro Pod)
+Die Kubernetes-Konfiguration erlaubt maximal 4GB Speicher (limits.memory: 4Gi) pro Pod.
+Würde Java versuchen, mehr als 4GB Heap zu reservieren, würde der Pod direkt beendet werden (OOMKilled).
+Stattdessen habe ich die Heap-Größe auf -Xms1536M -Xmx2560M begrenzt, was ein optimales Gleichgewicht zwischen Speicherverbrauch und Leistung bietet.
+ 
+5.  Ja, die Garbage Collection wurde bereits optimiert.
+-XX:+UseG1GC ist aktiv, da dieser GC für niedrige Latenz und große Heap-Größen (2GB+) optimiert ist.
+-XX:InitiatingHeapOccupancyPercent=60 wurde hinzugefügt, um eine frühzeitige Speicherbereinigung für Hazelcast sicherzustellen.
+Ich danke dir noch einmal für dein Feedback und deine Hilfe und freue mich auf weitere Kommentare, insbesondere zur Latenz und zum Durchsatz.
+Viele Grüße,
+
+Vivek
+
+
 WQeuwL.i6LSX6.7A6bRM
 
 https://gitlab.syngenio.info/finzaninformatik/poc-autorisierung
