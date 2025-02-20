@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+        <title>View Source</title>
+        <link rel="canonical" href="https://info.syngenio.net/confluence/pages/viewpage.action?pageId=$action.page.id">
+        <script>
+window.WRM=window.WRM||{};window.WRM._unparsedData=window.WRM._unparsedData||{};window.WRM._unparsedErrors=window.WRM._unparsedErrors||{};
+WRM._unparsedData["com.atlassian.plugins.atlassian-plugins-webresource-plugin:context-path.context-path"]="\u0022/confluence\u0022";
+if(window.WRM._dataArrived)window.WRM._dataArrived();</script>
+<link rel="stylesheet" href="APL-%20Vivek_files/batch_003.css" data-wrm-key="_super" data-wrm-batch-type="context" media="all">
+<link rel="stylesheet" href="APL-%20Vivek_files/batch.css" data-wrm-key="plugin.viewsource,-_super" data-wrm-batch-type="context" media="all">
+<link rel="stylesheet" href="APL-%20Vivek_files/batch_002.css" data-wrm-key="page,-_super" data-wrm-batch-type="context" media="all">
+<link rel="stylesheet" href="APL-%20Vivek_files/batch_004.css" data-wrm-key="editor-content,-_super" data-wrm-batch-type="context" media="all">
+
+    </head>
+
+    <body class="mceContentBody aui-theme-default wiki-content fullsize">
+        <p>&nbsp;</p>         <h3>Introduction</h3><p>The 
+Anwendungsplattform (APL) is the technical foundation for all 
+multichannel applications developed within the Multikanalarchitektur 
+(MKA). It provides a modular structure, deployment procedures, 
+operational concepts, and security mechanisms. This document aims to 
+guide your development team through the intricacies of the APL 
+framework, including setup, development processes, tools, and code 
+snippets.</p><p><img class="editor-inline-macro" src="APL-%20Vivek_files/macro.png" data-macro-name="toc" data-macro-id="1036043a-fc3c-401e-a356-ddcc2cc05b90" data-macro-schema-version="1"></p><h3><strong>Setting Up the Development Environment</strong></h3><ul><li><h4><strong>Prerequisites</strong></h4></li></ul><p style="margin-left: 40.0px;">Before starting development, ensure you have the following:</p><ul><li style="list-style-type: none;"><ul><li>Access to the code repository (GitHub/Subversion).</li><li>Access to the build system: [MKP Jenkins](<a href="https://mkp.jenkinsbuild.intern/">https://mkp.jenkinsbuild.intern/</a>).</li><li>An IDE (Eclipse or IntelliJ IDEA).</li></ul></li></ul><ul><li><h4><strong>Eclipse and Ultimate Workbench Setup</strong></h4><ul><li>Eclipse:&nbsp; Contact support if needed.</li><li>Ultimate Workbench (IntelliJ): Follow the general setup guide: [Ultimate Workbench Setup](<a href="https://wiki.intern/x/J5w1G">https://wiki.intern/x/J5w1G</a>).<br><br></li></ul></li><li><h4><strong>JDK and Maven Configuration</strong></h4><ul><li>JDK: Use Java 21 JDK (ZULU). Install via Workbench Assistant:<br>&nbsp; <br><strong>Maven </strong></li><li><p>Configure the `<strong>settings-mkp.xml</strong>` file in `<strong>%USERPROFILE%/.m2/`</strong> with the following content:<br>&nbsp;</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="e26cbfba-efd4-4ec2-b128-4d1e3c725e4b" data-macro-parameters="language=xml" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9eG1sfQ&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&nbsp; &lt;settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd"&gt;
+&nbsp; &nbsp; &lt;localRepository&gt;${user.home}/.m2/repository&lt;/localRepository&gt;
+&nbsp; &nbsp; &lt;pluginGroups&gt;
+&nbsp; &nbsp; &nbsp; &lt;pluginGroup&gt;osplus.maven.plugins&lt;/pluginGroup&gt;
+&nbsp; &nbsp; &lt;/pluginGroups&gt;
+&nbsp; &nbsp; &lt;mirrors&gt;
+&nbsp; &nbsp; &nbsp; &lt;mirror&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &lt;id&gt;nexus-maven-central&lt;/id&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &lt;url&gt;https://nexus.intern/repository/maven-central&lt;/url&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &lt;mirrorOf&gt;central&lt;/mirrorOf&gt;
+&nbsp; &nbsp; &nbsp; &lt;/mirror&gt;
+&nbsp; &nbsp; &lt;/mirrors&gt;
+&nbsp; &nbsp; &lt;profiles&gt;
+&nbsp; &nbsp; &nbsp; &lt;profile&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &lt;id&gt;nexus-public&lt;/id&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &lt;repositories&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &lt;repository&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &lt;id&gt;nexus-public&lt;/id&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &lt;url&gt;https://nexus.intern/repository/public&lt;/url&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &lt;releases&gt;&lt;enabled&gt;true&lt;/enabled&gt;&lt;/releases&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &lt;snapshots&gt;&lt;enabled&gt;true&lt;/enabled&gt;&lt;/snapshots&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &lt;/repository&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &lt;/repositories&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &lt;pluginRepositories&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &lt;pluginRepository&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &lt;id&gt;nexus-public&lt;/id&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &lt;url&gt;https://nexus.intern/repository/public&lt;/url&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &lt;releases&gt;&lt;enabled&gt;true&lt;/enabled&gt;&lt;/releases&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &lt;snapshots&gt;&lt;enabled&gt;true&lt;/enabled&gt;&lt;/snapshots&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &lt;/pluginRepository&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &lt;/pluginRepositories&gt;
+&nbsp; &nbsp; &nbsp; &lt;/profile&gt;
+&nbsp; &nbsp; &lt;/profiles&gt;
+&nbsp; &nbsp; &lt;activeProfiles&gt;
+&nbsp; &nbsp; &nbsp; &lt;activeProfile&gt;nexus-public&lt;/activeProfile&gt;
+&nbsp; &nbsp; &lt;/activeProfiles&gt;
+&nbsp; &lt;/settings&gt;</pre></td></tr></tbody></table></li></ul></li></ul><h4 style="margin-left: 40.0px;">PMD Plugin Installation</h4><p style="margin-left: 40.0px;">Install the PMD plugin for IntelliJ via the FI Marketplace. Use the FI rule set for PMD:</p><h3>APL Development Basics</h3><h4><strong>Workspace Structure</strong></h4><ul><li>A typical APL workspace consists of at least two Maven modules:<br>- <strong>Application Module:</strong> Contains the business logic.<br>- <strong>Runner Module:</strong> Used to run the application.</li></ul><p>Ensure the `<strong>application.properties</strong>` file in the runner module contains:</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="ce5ac35a-4b2a-4187-8aec-6977726da6b1" data-macro-parameters="language=xml" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9eG1sfQ&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>apl.application.name=your-app-name
+apl.application.version=1.0.0</pre></td></tr></tbody></table><h4><strong>Dependency Management</strong></h4><p>APL manages dependencies and versions. Include the following in your "pom.xml" :</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="2196ceba-9a4a-4219-b00e-d49a977194ec" data-macro-parameters="language=xml" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9eG1sfQ&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>&lt;parent&gt;
+&nbsp; &nbsp; &lt;groupId&gt;osplus.api&lt;/groupId&gt;
+&nbsp; &nbsp; &lt;artifactId&gt;apl-parent&lt;/artifactId&gt;
+&nbsp; &nbsp; &lt;version&gt;{apl-version}&lt;/version&gt;
+&lt;/parent&gt;</pre></td></tr></tbody></table><p><span>Ensure you are using the latest milestone versions instead of fixed versions.</span></p><h4><strong>APL Releases</strong></h4><p>APL
+ releases are published every 3 weeks. Use Milestone versions during 
+development and Release versions during integration testing.</p><h3><strong>Local Development Mode</strong></h3><h4>Online vs. Offline Development</h4><ul><li>Online Development: Connects to ETAPS components. Start the application with the "localDevelopment" profile.</li><li>Offline Development: Runs entirely locally. Start with the "offlineDevelopment" profile.</li></ul><h4>Running APL Locally</h4><p style="margin-left: 40.0px;">To run APL locally, ensure the <code><span><strong>osplus.fiss:fiss-apl-localdevelopment</strong> </span></code>dependency is in the classpath.</p><p style="margin-left: 40.0px;">Set the system property:</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="0042c192-a941-430d-a2e4-daf2dc87d42b" data-macro-parameters="language=xml" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9eG1sfQ&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>-DUMG_ENV_TYPE=NICHT-PROD</pre></td></tr></tbody></table><p>Access the application at:<br><br><a>https://localhost:&lt;server.port&gt;/testui/login.html</a></p><h3>Unit Testing with JUnit</h3><h4>Implementing Unit Tests</h4><p><br>Include the `apl-core-test` dependency:</p><p><br></p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="28bc4836-e28d-425e-af70-a5560adfbf43" data-macro-parameters="language=xml" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9eG1sfQ&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>&lt;dependency&gt;
+&nbsp; &nbsp; &lt;groupId&gt;osplus.api&lt;/groupId&gt;
+&nbsp; &nbsp; &lt;artifactId&gt;apl-core-test&lt;/artifactId&gt;
+&nbsp; &nbsp; &lt;scope&gt;test&lt;/scope&gt;
+&lt;/dependency&gt;</pre></td></tr></tbody></table><p><span>Automated tests </span><span><strong>must</strong></span><span> be executed in the Automated Test Environment (ATU).</span></p><p>Example test class:</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="f6e1cdb4-bf80-44db-8873-0d7010e7d27a" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>@SpringBootTest(classes = {ApiTestRunner.class, YourTestConfiguration.class})
+@AutoConfigureMockMvc
+public class YourServiceTest extends BaseApiTest {
+
+&nbsp; &nbsp; @Test
+&nbsp; &nbsp; public void testServiceCall() throws Exception {
+&nbsp; &nbsp; &nbsp; &nbsp; mvc.perform(post("/service/endpoint")
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .header("X-Request-Nonce", UUID.randomUUID().toString())
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .header("X-Request-Time", System.currentTimeMillis())
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .accept("application/json"))
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .andExpect(status().isOk());
+&nbsp; &nbsp; }
+}</pre></td></tr></tbody></table><h4>APL Core Features:<br><br>Dependency Injection</h4><p>Use `<strong>@ApiComponent</strong>` for dependency injection</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="5ee89fc0-d530-46a9-889a-3884f7c7211c" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>@ApiComponent
+public class YourService {
+&nbsp; &nbsp; private final AnotherService anotherService;
+
+&nbsp; &nbsp; public YourService(AnotherService anotherService) {
+&nbsp; &nbsp; &nbsp; &nbsp; this.anotherService = anotherService;
+&nbsp; &nbsp; }
+}</pre></td></tr></tbody></table><h4>Logging and Metrics</h4><p>Use the "LoggerFactory" for logging:</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="d9e3903b-ffa7-4731-b5a4-4cb16f9b7873" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>private static final Logger LOGGER = LoggerFactory.getLogger(YourClass.class);</pre></td></tr></tbody></table><p><br></p><p>For metrics, inject "MetricService":</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="d26ab0fc-f58e-4245-b85f-f2783de083b7" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>metricsService.increaseCounter("your.metric.name", MetricTag.create("tag", "value"));</pre></td></tr></tbody></table><h4>Health Status and Endpoints</h4><p>Access health status at:</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="f2abfef4-3155-479e-af2b-406aa3e52779" data-macro-parameters="language=xml" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9eG1sfQ&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>/management/health</pre></td></tr></tbody></table><h4>Advanced Features</h4><p>HBCI Transactions:&nbsp; Generate HBCI classes and create adapters for transactions. Example:</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="36b664ab-0c05-4710-89b4-5af512913b02" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>public class YourHbciAdapter extends HbciAdapter&lt;YourInputClass, YourOutputClass&gt; {
+&nbsp; &nbsp; // Implement methods
+}</pre></td></tr></tbody></table><h4>Publish/Subscribe Functionality</h4><p>Use the `SimplePublisherApi` and `SimpleSubscriberApi` for pub/sub:</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="1b42e216-352e-414a-8b03-4a11a5aa79a5" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>@PubsubListener(topicName = "your-topic", topicPrefix = "your-prefix")
+public class YourListener implements SimpleSubscriberApi&lt;YourMessageType, Serializable&gt; {
+&nbsp; &nbsp; // Implement methods
+}</pre></td></tr></tbody></table><h3>HTTP and UUI Services</h3><h4>Calling Remote HTTP Services</h4><p><br>Use the `HttpClient` for HTTP requests:</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="7b1f8d9f-47c9-4fda-94c5-36335fa665cc" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>HttpResponse&lt;String&gt; response = httpClient.execute(new HttpRequest&lt;Void&gt;().method(Method.GET).url("https://example.com"));</pre></td></tr></tbody></table><h4>UUI Service Client</h4><p><br>Configure the UUI Service Client for inter-service communication:</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="6998e581-d56e-4599-8b66-ee2b2badf1ce" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>UuiServiceResponse&lt;YourResponseType&gt; response = uuiServiceClient.get("/service/endpoint", YourResponseType.class);</pre></td></tr></tbody></table><h3><span><strong>Hazelcast Integration in APL</strong></span></h3><h4><span><strong>Overview</strong></span></h4><p>Hazelcast
+ is used within APL as an in-memory data grid (IMDG) and a messaging 
+broker for publish-subscribe communication. It provides a highly 
+available, distributed cache and messaging system that supports 
+high-throughput operations.</p><h4><span><strong>Publish/Subscribe with Hazelcast</strong></span></h4><p>APL provides an abstracted publish-subscribe messaging API (<code>SimplePublisherApi</code> and <code>SimpleSubscriberApi</code>),
+ which allows applications to send and receive messages asynchronously. 
+Hazelcast acts as the underlying message broker for this mechanism.</p><ul><li><p>Publisher (<code>SimplePublisherApi</code>) → Sends messages to Hazelcast topics.</p></li><li><p>Subscriber (<code>SimpleSubscriberApi</code>) → Listens for messages published on topics.</p></li><li><p>Annotation <code>@PubsubListener</code> → Registers a subscriber for a Hazelcast-backed topic.</p></li></ul><h4><span><strong>Hazelcast Configuration Parameters</strong></span></h4><p><span>To configure Hazelcast in APL, the following properties are defined:</span></p><p><br></p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="00e12a40-144e-41f3-aa22-1b987550583d" data-macro-parameters="language=xml" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9eG1sfQ&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>mkp.grid.cluster-name=grid-hazelcastimdg-in02
+mkp.grid.endpoints=en01-dev.sfg-mkg-etaps.intern:5701</pre></td></tr></tbody></table><pre><br></pre><p><span>These parameters ensure that all Hazelcast nodes are part of the </span><span><strong>same cluster</strong></span><span> and can communicate with each other for data synchronization.</span></p><h4><span><strong>Implementing Publish/Subscribe with Hazelcast</strong></span></h4><p><span><strong>Publisher Example</strong></span></p><p><br></p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="00680b91-18c4-46bf-a830-612d12d20ed1" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>@ApiComponent
+public class HazelcastPublisher implements SimplePublisherApi&lt;String&gt; {
+    private final HazelcastInstance hazelcastInstance;
+
+    public HazelcastPublisher(HazelcastInstance hazelcastInstance) {
+        this.hazelcastInstance = hazelcastInstance;
+    }
+
+    @Override
+    public void publish(String message) {
+        ITopic&lt;String&gt; topic = hazelcastInstance.getTopic("apl-messaging-topic");
+        topic.publish(message);
+    }
+}</pre></td></tr></tbody></table><p><span><strong>Subscriber Example</strong></span></p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="19254e9f-5e44-42be-8dd4-9ff87bd14b2b" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>@PubsubListener(topicName = "apl-messaging-topic", topicPrefix = "hazelcast")
+public class HazelcastSubscriber implements SimpleSubscriberApi&lt;String, Serializable&gt; {
+    @Override
+    public void receive(String message, Serializable metadata) {
+        System.out.println("Received message: " + message);
+    }
+}</pre></td></tr></tbody></table><pre><br></pre><p><span><strong>Publishing a Message Manually</strong></span></p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="716482fa-713d-41ad-a2cd-e692046ed3e8" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>hazelcastInstance.getTopic("apl-messaging-topic").publish("Test Message from Hazelcast!");</pre></td></tr></tbody></table><h3><span><strong>FiSessionData in APL Development</strong></span></h3><h4><strong>Overview</strong></h4><p>FiSessionData
+ is a session management framework used within APL (Anwendungsplattform)
+ to store and retrieve user session data. It is stored in the Hazelcast 
+Grid and enables session-specific business data retrieval. However, with
+ OSPlus 24.0, generic FiSessionData is being replaced by the application
+ <code>mki</code>, introducing more specific classes and methods.</p><h4><strong>Key Features of FiSessionData</strong></h4><ul><li><p>Session Persistence: Stores user-related session data such as BLZ, authentication status, and client details.</p></li><li><p>Immutable by Default: Prevents modifications unless explicitly designed to allow updates.</p></li><li><p>Distributed Storage: Uses Hazelcast to ensure data consistency across multiple nodes.</p></li><li><p>Integration
+ with OSPlus: FiSessionData interacts with OSPlus to fetch 
+session-specific data, but its usage is being phased out in favor of <code>mki</code> classes in OSPlus 24.0.</p></li></ul><h4><strong>FiSessionData API Changes in OSPlus 24.0</strong></h4><p><span>Several methods in the </span><span><strong>FiSession API</strong></span><span> have been marked as </span><span><strong>deprecated</strong></span><span> due to their planned replacement:</span></p><ul><li><p><code><span>getOrFetchSessionData(Class&lt;T&gt; clazz)</span></code></p></li><li><p><code><span>getOrFetchSessionData(Class&lt;T&gt; clazz, String key)</span></code></p></li><li><p><code><span>hasSessionData(Class&lt;T&gt; clazz)</span></code></p></li></ul><p><span>This means that future applications should transition towards the </span><span><strong>new session management approach in OSPlus 24.0</strong></span><span>.</span></p><h4><span><strong>Implementing FiSessionData</strong></span></h4><p><span><strong>Accessing Session Data</strong></span></p><p><br></p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="fd405c63-9e57-4b4c-95c7-196e8ea9e4f4" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>@UiModule("fisession")
+public class SessionService {
+    private final FiSession fiSession;
+
+    public SessionService(FiSession fiSession) {
+        this.fiSession = fiSession;
+    }
+
+    @UiService(value = "get-session-data", method = MethodType.GET)
+    public UserSessionData getSessionData() {
+        return this.fiSession.get(UserSessionData.class);
+    }
+}</pre></td></tr></tbody></table><p><br></p><p><br></p><p>This retrieves session-based request data, including:</p><ul><li><p>Client IP Address</p></li><li><p>Timestamp</p></li><li><p>Channel (Web, Mobile, Branch)</p></li><li><p>BLZ (Bank Identifier Code)</p></li></ul><h3><span><strong>DevProxy and ETAPS in APL Development</strong></span></h3><h4><span><strong>What is ETAPS?</strong></span></h4><p>ETAPS
+ (Entwicklungs-, Test- und Abnahmeplattform) is the development, test, 
+and acceptance platform used for APL (Anwendungsplattform) applications.
+ It serves as the central integration and validation environment before 
+applications are deployed into production.</p><h4><span><strong>Overview of DevProxy</strong></span></h4><p>DevProxy
+ is a tool built on Spring Cloud Gateway that enables local APL 
+applications to communicate with ETAPS as if they were deployed in a 
+real integrated environment. It acts as a development proxy, allowing 
+local applications to be accessed by ETAPS services and vice versa.</p><h4><span><strong>Purpose of DevProxy</strong></span></h4><ul><li><p>Seamless Integration Testing: Enables developers to test applications locally in combination with services running in ETAPS.</p></li><li><p>Hybrid Request Handling: Routes requests between local applications and ETAPS services dynamically.</p></li><li><p>Hazelcast-Based Request Mapping: Ensures request consistency and proper session handling.</p></li><li><p>Simulated ETAPS Access: Allows locally running applications to be treated as if they are deployed in ETAPS.</p></li></ul><h4><span><strong>How DevProxy Works</strong></span></h4><p>DevProxy allows three types of request routing:</p><ol><li><p>Local Requests (<code>target=LOCAL</code>) → Sent to a local application running on the developer's machine.</p></li><li><p>ETAPS Requests (<code>target=ETAPS</code>) → Forwarded to an application in ETAPS.</p></li><li><p>Hybrid Requests → A request first calls an ETAPS service, which then invokes a local application.</p></li></ol><h4><span><strong>Starting DevProxy</strong></span></h4><p><span>To start DevProxy, execute:</span></p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="2f3cafc8-09e0-45ba-90d2-de20eb0bd9c9" data-macro-parameters="language=xml" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9eG1sfQ&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>mvn osplus.apl:apl-maven-plugin:250-SNAPSHOT:start-devproxy</pre></td></tr></tbody></table><p><span>Alternatively:</span></p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="18ab07ee-0800-4db4-9428-f9103c87a77d" data-macro-parameters="language=xml" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9eG1sfQ&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>mvn apl:start-devproxy</pre></td></tr></tbody></table><p><span>This command generates a </span><code><span>dev-proxy.yml</span></code><span> configuration file.</span></p><h4><strong>Example Configuration File (<code>dev-proxy.yml</code>)</strong></h4><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="297a0cfb-595d-44cc-8253-b6494172c5f6" data-macro-parameters="language=yml" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9eW1sfQ&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>devproxy:
+  enabled: true
+  local:
+    appName: my-local-app
+    baseUrl: http://localhost:8080
+  etaps:
+    baseUrl: https://etaps.mkg.intern
+  proxyRules:
+    - path: /api/
+      target: LOCAL
+    - path: /etaps-api/
+      target: ETAPS
+logging:
+  level:
+    devproxy: DEBUG</pre></td></tr></tbody></table><h4><span><strong>Integration with ETAPS</strong></span></h4><p><span>For local development, set the following in </span><code><span>application.properties</span></code><span>:</span></p><pre><code><span>apl.uui.mkgEndpointUrl=http://localhost:7777</span></code></pre><p><span>This ensures that </span><span><strong>UUI service client requests</strong></span><span> from your local application are handled correctly.</span></p><h3><strong>UUI Services in APL</strong></h3><p>UUI
+ (Universal UI) services in APL provide a standardized way to define 
+HTTP-based APIs within the framework. The name "Universal UI" originates
+ from the idea of creating OSPlus frontends in a generic format, but the
+ UUI framework is also used for all HTTP-APIs in APL.</p><h4><strong>Dependencies for UUI</strong></h4><p>To utilize UUI services, the following dependencies are required:</p><p><strong>Implementation Module</strong></p><p><br></p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="defdfc67-a929-4771-980d-50572c4bf618" data-macro-parameters="language=xml" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9eG1sfQ&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>&lt;dependency&gt;
+    &lt;groupId&gt;osplus.apl&lt;/groupId&gt;
+    &lt;artifactId&gt;apl-uui-api&lt;/artifactId&gt;
+&lt;/dependency&gt;</pre></td></tr></tbody></table><p><br></p><p><strong>Runner Module</strong></p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="788273a4-47ed-4143-8ca1-8490b7283dcf" data-macro-parameters="language=xml" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9eG1sfQ&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>&lt;dependency&gt;
+    &lt;groupId&gt;osplus.apl&lt;/groupId&gt;
+    &lt;artifactId&gt;apl-uui&lt;/artifactId&gt;
+    &lt;scope&gt;runtime&lt;/scope&gt;
+&lt;/dependency&gt;</pre></td></tr></tbody></table><p><br></p><h4><strong>Defining a UUI Module</strong></h4><p>A
+ UiModule groups multiple UI services under a single namespace. Each 
+UiModule corresponds to a single Java class annotated with <code>@UiModule</code>. This class defines the HTTP services available within the module.</p><h4><strong>Example of a Basic UiModule</strong></h4><p><br></p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="95bef971-8000-4bd3-91a5-5514e781be5e" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>@UiModule("myFirstModule")
+public class MyFirstModule {
+
+    @UiService(value = "myFirstService")
+    public void myFirstMethod() {
+    }
+
+    @UiService(value = "mySecondService")
+    public void mySecondMethod() {
+    }
+}</pre></td></tr></tbody></table><p><br></p><p><br></p><p>When an APL application is started with <code>MyFirstModule</code>, it automatically creates callable HTTP endpoints following this pattern:</p><pre><code>&lt;environment&gt;/service/&lt;uiModule&gt;/v&lt;uiModuleVersion&gt;/&lt;uiService&gt;/v&lt;uiServiceVersion&gt;
+</code></pre><p>For example, in local development mode:</p><ul><li><code><a href="http://localhost:8080/service/myFirstModule/v1/myFirstService/v1">http://localhost:8080/service/myFirstModule/v1/myFirstService/v1</a></code></li><li><code><a href="http://localhost:8080/service/myFirstModule/v1/mySecondService/v1">http://localhost:8080/service/myFirstModule/v1/mySecondService/v1</a></code></li></ul><p>For remote environments (e.g., ETAPS):</p><pre><code>https://en01.sfg-mkg-etaps.intern/&lt;application-prefix&gt;/service/myFirstModule/v1/myFirstService/v1
+</code></pre><p>By default, the version is set to <code>1</code>, but a specific version can be defined in the annotation.</p><h4><strong>Defining a UiService</strong></h4><p>A <strong>UiService</strong> is a method within a UiModule that is exposed as an HTTP endpoint. It is annotated with <code>@UiService</code>.</p><p><strong>Example</strong></p><p><br></p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="29126a30-0dfc-49fc-9ca8-49ba902973f5" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>@UiModule("testModule")
+public class TestModule {
+
+    @UiService(value = "getData", method = MethodType.GET)
+    public String getData() {
+        return "Hello, UUI!";
+    }
+}</pre></td></tr></tbody></table><p><br></p><p>This would expose an endpoint:</p><pre><code>http://localhost:8080/service/testModule/v1/getData/v1
+</code></pre><h4><strong>Executing UUI Service Calls</strong></h4><p>The <code>UuiServiceClient</code> is used to make HTTP calls to UUI services in a fluent API style. It supports:</p><ul><li>HTTP Method &amp; Response Type</li><li>UiModule &amp; UiService identification</li><li>Query parameters</li><li>Headers</li><li>Request Body (for POST/PUT requests)</li></ul><h4><strong>Example Usage</strong></h4><p><br></p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="db4bea25-d1f7-4d41-aaac-09d08607629e" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>PayloadBuilder&lt;TestResponse, ?&gt; builder = serviceClient.forApplication("xyz")
+        .get(TestResponse.class)
+        .module("ui-module-name", 3)
+        .service("ui-service-name", 2)
+        .queryParameters(Map.of("query-key", "query-value"))
+        .headers(headers -&gt; headers.header("header-key", "header-value"));
+
+UuiServiceResponse&lt;TestResponse&gt; uuiServiceResponse = builder.send();
+TestResponse payload = uuiServiceResponse.getPayload();</pre></td></tr></tbody></table><p><br></p><p><code class="language-java">
+</code></p><p>By default, UUI service requests are routed through the <strong>Multichannel Gateway (MKG)</strong>, which handles service lookups and session management.</p><h4><strong>Versioning of UUI Services</strong></h4><p>The default version of a UiModule and UiService is <code>1</code>. To define multiple versions:</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="85ebe128-4150-4c62-b3cd-bcc7ebb391b6" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>@UiModule(value = "testModule", version = 2)
+public class TestModuleV2 {
+}</pre></td></tr></tbody></table><p>This will generate:</p><pre><code>&lt;environment&gt;/service/testModule/v2/(…)<br></code></pre><h3><strong>DynS-Service Usage and HBCI Transactions in APL</strong></h3><h4><strong>Introduction</strong></h4><p>The
+ APL framework provides access to DynS services, which facilitate 
+dynamic banking operations, and HBCI transactions, which handle secure 
+financial transactions. These services are used for tasks such as 
+fetching account details, validating transactions, and executing 
+payments.</p><h4><strong>Using DynS Services</strong></h4><p>DynS services allow <strong>banking-related service calls</strong> within the APL framework. To use them, a <strong>license key</strong> and authentication credentials must be set.</p><h4><strong>Setting DynS Credentials</strong></h4><p>To enable DynS services, <strong>license keys</strong> must be configured per environment (<strong>PROD, ETAPS, local development</strong>)​</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="2f55e67c-d19f-41e4-b20e-4f7d638f8122" data-macro-parameters="language=text" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9dGV4dH0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre># InternetFiliale
+mkp.dyns.auth.ifDynsUser.username=&lt;your-username&gt;
+mkp.dyns.auth.ifDynsUser.password=ENC(&lt;your-password&gt;)
+mkp.dyns.auth.ifDynsUser.licenseKey=&lt;your-license-key&gt;
+
+# S-App
+mkp.dyns.auth.sAppDynsUser.username=&lt;your-username&gt;
+mkp.dyns.auth.sAppDynsUser.password=ENC(&lt;your-password&gt;)
+mkp.dyns.auth.sAppDynsUser.licenseKey=&lt;your-license-key&gt;</pre></td></tr></tbody></table><p>Ensure passwords are encrypted (<code>ENC(...)</code>).</p><h4>Basic DynS API Call</h4><p>After setting credentials, DynS services can be accessed via the <strong>Fachobjekte framework</strong>:</p><p><br></p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="9d830463-b0d5-4181-af7c-cf4a4923b8f2" data-macro-parameters="language=text" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9dGV4dH0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>IBicIbanKontoBlzErmParameter serviceParameter = bicIbanKontoBlzErmService.getNewParameter();
+serviceParameter.setFunktionsNr((short) 4);
+serviceParameter.setBankCode(BANK_CODE);
+serviceParameter.setKontonr(KONTONR);</pre></td></tr></tbody></table><p><code><code>Calls a banking service to validate IBAN/BIC details​</code></code></p><p><br></p><h4>Accessing DynS Without User Login</h4><p>For services not requiring user authentication, create a new DynS context:</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="3dd20087-2004-495c-a2de-70136c35031a" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>public void fetchBankingData() {
+    DynsContext context = dynsService.createContext();
+    context.execute(() -&gt; {
+        DynsResponse response = dynsService.call("FETCH_TRANSACTIONS");
+        System.out.println(response.getResult());
+    });
+}</pre></td></tr></tbody></table><p>Useful for: System-wide background tasks</p><h4>Using DynS Without Request Scope</h4><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="0e68e692-060e-4d76-92c9-aa795f0b4d95" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>@AplDynsScope
+public void executeScopedService() {
+    dynsService.call("FETCH_TRANSACTIONS");
+}</pre></td></tr></tbody></table><p>This annotation ensures DynS works outside standard request lifecycles​</p><h4>Mocking DynS Calls for Testing</h4><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="19885b5b-275d-4b4d-af97-32266e0be574" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>@Test
+public void testMockDynsService() {
+    DynsService mockService = mock(DynsService.class);
+    when(mockService.call("GET_BALANCE")).thenReturn(new DynsResponse("100 EUR"));
+
+    assertEquals("100 EUR", mockService.call("GET_BALANCE").getResult());
+}</pre></td></tr></tbody></table><p>Avoids real API calls, speeding up development​</p><h4><strong>Executing HBCI Transactions</strong></h4><p>HBCI transactions enable <strong>secure banking operations</strong> like transfers, payments, and transaction monitoring.</p><h4><strong>Running an HBCI Payment</strong></h4><p>HBCI transactions are executed as <strong>Java objects</strong> converted from <strong>XML streams</strong>​</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="12380c63-7482-4e07-8b5d-4d59b38a3801" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>public abstract void fillOrderArguments(Map&lt;String, Object&gt; hbciInput, List&lt;KeyValue&gt; hbciArguments);</pre></td></tr></tbody></table><p>This method processes HBCI transactions and sends them to the banking system.</p><h4><strong>HBCI Monitoring</strong></h4><p>HBCI transactions must be logged and monitored for performance and security​</p><ul><li>Transactions lasting &gt; 500ms are flagged.</li><li>If execution time exceeds limits, transactions are blocked automatically.</li></ul><p>Ensure monitoring is enabled to prevent system overloads.</p><h4><strong>Generating HBCI Adapter Classes</strong></h4><p>HBCI transactions require adapter classes to convert Java objects into banking-compatible XML messages​</p><p>Example <strong>adapter class</strong> for executing an HBCI login request:</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="61513e24-abf4-4480-b92e-a64760a15796" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>public class LoginHbciAdapter extends HbciAdapter&lt;WrapGVXKLGN2203, GVXILGN2203&gt; {
+    @Override
+    public void fillOutputMap(GVXILGN2203 response, Map&lt;String, Object&gt; hbciOutput) {
+        hbciOutput.put(HBCIConstants.BENUTZERKENNUNG, response.getBenutzerkennung());
+    }
+}</pre></td></tr></tbody></table><p>Handles login operations via HBCI protocols.</p><h3><span><strong>CI/CD &amp; Deployment</strong></span></h3><h4><span><strong>Image Registry Usage</strong></span></h4><p>All images should be tagged under <code>quay-etaps.registry.intern/cicd/</code>.</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="4316c7a0-8ba0-47a5-a334-f8df9eacd376" data-macro-parameters="language=xml" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9eG1sfQ&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>podman build -t quay-etaps.registry.intern/cicd/&lt;your-app&gt;:latest . podman push quay-etaps.registry.intern/cicd/&lt;your-app&gt;:latest</pre></td></tr></tbody></table><p>These steps are automated via Jenkins Pipelines. Ensure your pipeline includes this build and push step.</p><h4><span><strong>Helm Deployment</strong></span></h4><p><span>Use the </span><code><span>apl-app</span></code><span> umbrella chart instead of standalone Helm charts. Ensure that you override necessary configuration values via <code>my-values.yaml</code> before deploying.<br></span></p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="006395ac-62e1-438a-8991-5ae810c00a9f" data-macro-parameters="language=xml" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9eG1sfQ&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>helm upgrade --install my-app apl-app -n my-namespace --values my-values.yaml
+
+</pre></td></tr></tbody></table><h3><span><strong>Logging and Monitoring<br></strong></span></h3><p>Use
+ Grafana for dashboards, Prometheus for metrics, and Splunk for log 
+aggregation. OpenTelemetry should be used for distributed tracing. 
+Monitoring should be performed via Grafana dashboards, not just <code>kubectl logs</code>.</p><h3>Shared Services</h3><h4>Creating Typed Shared Service Clients</h4><p><span>Ensure UUI services are validated against service contracts using </span><code><span>UuiServiceResponse&lt;T&gt;</span></code><span>.</span></p><p><br></p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="acc1199e-3b67-4e55-aaa9-49f969237562" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>UuiServiceResponse&lt;YourResponseType&gt; response = uuiServiceClient.get("/service/endpoint", YourResponseType.class);</pre></td></tr></tbody></table><p>Use the `SharedServiceClientFactory` to create clients:</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="2c7170ec-69f5-405f-90d4-7b439603fabf" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>SharedServiceClient&lt;YourReadType, YourWriteType&gt; client = sharedServiceClientFactory.createServiceClient(config, cacheReader);</pre></td></tr></tbody></table><h3>Best Practices and Troubleshooting</h3><p><span>Common issues should include CI/CD pipeline errors:</span></p><table class="wrapped confluenceTable"><tbody class=""><tr class=""><th class="confluenceTh"><span>Issue</span></th><th class="confluenceTh"><span>Resolution</span></th></tr><tr class=""><td class="confluenceTd"><code><span>ImagePullBackOff</span></code></td><td class="confluenceTd"><span>Ensure the image is correctly pushed to </span><code><span>quay-etaps.registry.intern/cicd/</span></code></td></tr><tr class=""><td class="confluenceTd"><code><span>Helm Deployment Failure</span></code></td><td class="confluenceTd"><span>Validate Helm chart values before deployment</span></td></tr><tr class=""><td class="confluenceTd"><code><span>Test Failures in ATU</span></code></td><td class="confluenceTd"><span>Check environment variables and service dependencies</span></td></tr></tbody></table><h4>Architecture Decision Records (ADRs)</h4><p>Document architectural decisions using ADRs. Example:</p><table class="wysiwyg-macro" data-macro-name="code" data-macro-id="9e32db4a-ad68-463e-8981-e04862aaf59a" data-macro-parameters="language=java" data-macro-schema-version="1" style="background-image: url(https://info.syngenio.net/confluence/plugins/servlet/confluence/placeholder/macro-heading?definition=e2NvZGU6bGFuZ3VhZ2U9amF2YX0&amp;locale=en_GB&amp;version=2); background-repeat: no-repeat;" data-macro-body-type="PLAIN_TEXT"><tbody><tr><td class="wysiwyg-macro-body"><pre>mvn apl:create-adr -Dtitle="Your Decision Title"</pre></td></tr></tbody></table><h4>Common Issues and Solutions</h4><ul><li>Dependency Conflicts:&nbsp; Ensure correct versions in "pom.xml".</li><li>Local Development Issues: Check `application.properties` and system properties.</li></ul><div class="notranslate"><br></div>
+        <p>&nbsp;</p>
+    
+
+</body></html>
