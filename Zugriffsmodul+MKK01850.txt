@@ -1,0 +1,1026 @@
+Zugriffsmodul MKK01850
+Auf dieser Seite ist das Ergebnis der Analyse des Cobol Moduls  MKK01850 (Stand: 20.02.2025) beschrieben.
+* Cursor O20/F20/C20 
+o O20/F20/C20 - Eingabe
+o O20/F20/C20 - Ausgabe
+o O20/F20/C20 - SQL
+* Select S01 
+o S01 - Eingabe
+o S01 - Ausgabe
+o S01 - SQL
+* Select S11 
+o S11 - Eingabe
+o S11 - Ausgabe
+o S11 - SQL
+* Select S12 
+o S12 - Eingabe
+o S12 - Ausgabe
+o S12 - SQL
+* Select S13 
+o S13 - Eingabe
+o S13 - Ausgabe
+o S13 - SQL
+* Select S14 
+o S14 - Eingabe
+o S14 - Ausgabe
+o S14 - SQL
+* Select S15 
+o S15 - Eingabe
+o S15 - Ausgabe
+o S15 - SQL
+* Update U05 
+o U05 - Eingabe
+o U05 - Ausgabe
+o U05 - SQL
+* Update U06 
+o U06 - Eingabe
+o U06 - Ausgabe
+o U06 - SQL
+
+Cursor O20/F20/C20
+ERMITTLUNG VON DATEN ZU DIGITALEN KARTEN HCE ÜBER DIE 5 FREUNDE
+DER PHYSISCHEN KARTE
+O20/F20/C20 - Eingabe
+O20/F20/C20 - Eingabe Expand source 
+              10 MKK01850-IN-O20.
+                 15 BLZ                                PIC  9(08).
+                 15 KONTONR                            PIC  9(10).
+                 15 KARTE-FOLGE-NR                     PIC  S9(07).
+                 15 VERFALL-DATUM                      PIC  X(10).
+                 15 FREIZGK-SCHL                       PIC  X(01).
+                    88 B-FREIZGK-SCHL-EC-KARTE         VALUE '1'.
+                    88 B-FREIZGK-SCHL-S-CARD           VALUE '2'.
+                    88 B-FREIZGK-SCHL-AUTOM-KARTE      VALUE '7'.
+                    88 B-FREIZGK-SCHL-KUNDEN-KARTE     VALUE '8'.
+                    88 B-FREIZGK-SCHL-SPARCARD         VALUE '9'.
+   
+O20/F20/C20 - Ausgabe
+O20/F20/C20 - Ausgabe Expand source 
+              10 MKK01850-OUT-F20.
+                 15 DCRD-TOKEN-SCHL                    PIC X(48).
+                    88 B-DCRD-TOKEN-SCHL-NL            VALUE SPACES.
+                 15 DCRD-INHB-APP-DKMT-ID              PIC  X(26).
+                    88 B-DCRD-INHB-APP-DKMT-ID-NL      VALUE
+                                      '0001-01-01-00.00.00.000000'.
+                 15 HCE-CLOUD-DKMT-ID                  PIC  X(26).
+                    88 B-HCE-CLOUD-DKMT-ID-NL          VALUE
+                                      '0001-01-01-00.00.00.000000'.
+                 15 DCRD-QTTG-STAT                     PIC  X(01).
+                 15 DCRD-BSG-TS                        PIC X(26).
+                    88 B-DCRD-BSG-TS-NL                VALUE
+                                      '0001-01-01-00.00.00.000000'.
+   
+O20/F20/C20 - SQL
+Hinweise:
+* Vor dem Select alle Felder aus MKK01850-IN-O20 nach KARTE-KSB übertragen
+* Nach dem Select die gelesenen Felder KKH.* nach MKK01850-OUT-F20 übertragen
+
+O20/F20/C20 - SQL 
+	SELECT KKH.DCRD_TOKEN_SCHL,
+		KKH.DCRD_INHB_APP_DKMT_ID,
+		KKH.HCE_CLOUD_DKMT_ID,
+		KKH.DCRD_QTTG_STAT,
+		KKH.DCRD_BSG_TS
+	FROM KARTE_KSB  KKH
+	JOIN KARTE_KSB  KKP
+		ON KKH.KARTE_ID_HAUPT  = KKP.KARTE_ID
+	
+	WHERE  KKH.KARTE_ART       = 'V-DIGI-KARTE'
+	AND   (KKH.LOESCH_DATUM    = '01.01.0001' OR
+			KKH.LOESCH_DATUM    > CURRENT DATE)
+	AND   KKH.VERFALL_DATUM    > CURRENT DATE
+	AND   KKH.DCRD_QTTG_STAT = 'E'
+	AND   KKH.DCRD_TOKEN_MM   = 'H'
+	AND   KKP.BLZ              = :KARTE-KSB.BLZ
+	AND   KKP.KONTONR          = :KARTE-KSB.KONTONR
+	AND   KKP.KARTE_FOLGE_NR   = :KARTE-KSB.KARTE-FOLGE-NR
+	AND   KKP.VERFALL_DATUM    = :KARTE-KSB.VERFALL-DATUM
+	AND   KKP.FREIZGK_SCHL     = :KARTE-KSB.FREIZGK-SCHL
+	
+	FOR FETCH ONLY
+     
+Select S01
+LIEFERT ALLE BENÖTIGTEN DATEN ZUR BESTELLUNG EINER DIGITALEN
+KARTE.
+S01 - Eingabe
+S01 - Eingabe Expand source 
+              10 MKK01850-IN-S01.
+                 15 KARTE-ID                           PIC  X(26).
+   
+S01 - Ausgabe
+S01 - Ausgabe Expand source 
+              10 MKK01850-OUT-S01.
+                 15 KARTE-ID-PHYS                      PIC  X(26).
+                 15 KARTE-NR-PHYS                      PIC  9(10).
+                    88 B-KARTE-NR-PHYS-NL              VALUE ZERO.
+                 15 BLZ-PHYS                           PIC  9(08).
+                 15 KONTONR-PHYS                       PIC  9(10).
+                 15 KFN-PHYS                           PIC  S9(07).
+                 15 KFN-INT-PHYS                       PIC  9(03).
+                 15 VERFALL-DATUM-PHYS                 PIC  X(10).
+                 15 FREIZGK-SCHL-PHYS                  PIC  X(01).
+                 15 PAN-PHYS                           PIC  X(19).
+                 15 KARTE-ID-DIGI                      PIC  X(26).
+                 15 KARTE-NR-DIGI                      PIC  9(10).
+                    88 B-KARTE-NR-DIGI-NL              VALUE ZERO.
+                 15 BLZ-DIGI                           PIC  9(08).
+                 15 KONTONR-DIGI                       PIC  9(10).
+                 15 KFN-DIGI                           PIC  S9(07).
+                 15 KFN-INT-DIGI                       PIC  9(03).
+                 15 VERFALL-DATUM-DIGI                 PIC  X(10).
+                 15 FREIZGK-SCHL-DIGI                  PIC  X(01).
+                 15 SERVICECODE                        PIC  X(03).
+                 15 PAN-DIGI                           PIC  X(19).
+                 15 KARTE-NAME-1                       PIC  X(32).
+                 15 KARTE-NAME-2                       PIC  X(32).
+                    88 B-KARTE-NAME-2-NL               VALUE SPACE.
+                 15 IBAN                               PIC  X(34).
+                    88 B-IBAN-NL                       VALUE SPACE.
+                 15 IBAN-URSPRUNG                      PIC  X(34).
+                    88 B-IBAN-URSPRUNG-NL              VALUE SPACE.
+                 15 ANFORDER-ART                       PIC  X(02).
+                    88 B-ANFORDER-ART-NEU              VALUE 'N '.
+                    88 B-ANFORDER-ART-UMTAUSCH         VALUE 'U '.
+                    88 B-ANFORDER-ART-ERSATZ-VERLUST   VALUE 'EV'.
+                    88 B-ANFORDER-ART-ERSATZ-DIEBSTL   VALUE 'EK'.
+                    88 B-ANFORDER-ART-ERSATZ-DEFEKT    VALUE 'ED'.
+                    88 B-ANFORDER-ART-ERSATZ-NAME      VALUE 'EN'.
+                    88 B-ANFORDER-ART-ERSATZ-SONST     VALUE 'ES'.
+                 15 DCRD-TOKEN-SCHL-A                  PIC  X(30).
+                    88 B-DCRD-TOKEN-SCHL-A-NL          VALUE SPACE.
+                 15 DCRD-TOKEN-SCHL-VORG-A             PIC  X(30).
+                    88 B-DCRD-TOKEN-SCHL-VORG-A-NL     VALUE SPACE.
+                 15 MBL-GRAT-HSTL                      PIC  X(32).
+                    88 B-MBL-GRAT-HSTL-NL              VALUE SPACE.
+                 15 MBL-GRAT-MODL-REIHE                PIC  X(32).
+                    88 B-MBL-GRAT-MODL-REIHE-NL        VALUE SPACE.
+                 15 MBL-GRAT-MODL                      PIC  X(32).
+                    88 B-MBL-GRAT-MODL-NL              VALUE SPACE.
+                 15 MBL-GRAT-OS-NAME                   PIC  X(32).
+                    88 B-MBL-GRAT-OS-NAME-NL           VALUE SPACE.
+                 15 MBL-GRAT-OS-VERS                   PIC  X(32).
+                    88 B-MBL-GRAT-OS-VERS-NL           VALUE SPACE.
+                 15 DCRD-ESTL-REGS-CODE                PIC  X(32).
+                    88 B-DCRD-ESTL-REGS-CODE-NL        VALUE SPACE.
+                 15 DCRD-INHB-APP-DKMT-ID              PIC  X(26).
+                    88 B-DCRD-INHB-APP-DKMT-ID-NL      VALUE
+                                      '0001-01-01-00.00.00.000000'.
+                 15 APP-ID                             PIC  X(256).
+                 15 HCE-CLOUD-DKMT-ID                  PIC  X(26).
+                    88 B-HCE-CLOUD-DKMT-ID-NL          VALUE
+                                      '0001-01-01-00.00.00.000000'.
+                 15 DCRD-TOKEN-SCHL                    PIC  X(48).
+                    88 B-DCRD-TOKEN-SCHL-NL            VALUE SPACE.
+                 15 DCRD-TOKEN-MM                      PIC  X(01).
+                 15 DCRD-TOKEN-SCHL-VORG               PIC  X(48).
+                    88 B-DCRD-TOKEN-SCHL-VORG-NL       VALUE SPACE.
+                 15 DCRD-TOKEN-MM-VORG                 PIC  X(01).
+                 15 CHARGE-PHYS                        PIC  X(04).
+                 15 DCRD-BILD-REF-SCHL                 PIC  X(36).
+                    88 B-DCRD-BILD-REF-SCHL-NL         VALUE SPACES.
+                 15 DKRT-KRKT-NR                       PIC S9(16)
+                                                       COMP-3.
+                    88 B-DKRT-KRKT-NR-NL               VALUE ZERO.
+                 15 KARTEN-BRANDING                    PIC  X(01).
+                 15 DKRT-KRKT-NTZG-MM-VORG             PIC  X(01).
+                 15 DKRT-KRKT-NTZG-MM-FOLG             PIC  X(01).
+                 15 DCRD-BRI-PHYS                      PIC  X(36).
+                    88 B-DCRD-BRI-PHYS-NL              VALUE SPACES.
+	
+S01 - SQL
+Hinweise:
+* Vor dem Select
+o KARTE-KSB.KARTE-ID = MKK01850-IN-S01.KARTE-ID
+* Nach dem Select die gelesenen Felder nach MKK01850-OUT-S01 folgendermaßen übertragen:
+MKK01850-OUT-S01.KARTE-ID-PHYS = D-C-KARTE-IDMKK01850-OUT-S01.KARTE-NR-PHYS = D-N-KARTE-NRMKK01850-OUT-S01.BLZ-PHYS = D-C-BLZMKK01850-OUT-S01.KONTONR-PHYS = D-N-KONTONRMKK01850-OUT-S01.KFN-PHYS = D-N-KARTE-FOLGE-NRMKK01850-OUT-S01.KFN-INT-PHYS = D-N-KARTE-FOLGE-NR-INTMKK01850-OUT-S01.VERFALL-DATUM-PHYS = D-C-DATUMMKK01850-OUT-S01.FREIZGK-SCHL-PHYS = D-C-FZSMKK01850-OUT-S01.PAN-PHYS = D-C-PANMKK01850-OUT-S01.KARTE-ID-DIGI = KARTE-KSB.KARTE-IDMKK01850-OUT-S01.KARTE-NR-DIGI = KARTE-KSB.KARTE-NRMKK01850-OUT-S01.BLZ-DIGI = KARTE-KSB.BLZMKK01850-OUT-S01.KONTONR-DIGI = KARTE-KSB.KONTONRMKK01850-OUT-S01.KFN-DIGI = KARTE-KSB.KARTE-FOLGE-NRMKK01850-OUT-S01.KFN-INT-DIGI = KARTE-KSB.KARTE-FOLGE-NR-INTMKK01850-OUT-S01.VERFALL-DATUM-DIGI = KARTE-KSB.VERFALL-DATUMMKK01850-OUT-S01.FREIZGK-SCHL-DIGI = KARTE-KSB.FREIZGK-SCHLMKK01850-OUT-S01.SERVICECODE = D-C-SERVICECODEMKK01850-OUT-S01.PAN-DIGI = KARTE-KSB.PANIf Länge(KARTE-KSB.KARTE-NAME-1) = 0
+   MKK01850-OUT-S01.KARTE-NAME-1 = SPACE
+Else
+   MKK01850-OUT-S01.KARTE-NAME-1 = KARTE-KSB.KARTE-NAME-1
+End-IfIf Länge(KARTE-KSB.KARTE-NAME-2) = 0
+   MKK01850-OUT-S01.KARTE-NAME-2 = SPACE
+Else
+   MKK01850-OUT-S01.KARTE-NAME-2 = KARTE-KSB.KARTE-NAME-2
+End-IfMKK01850-OUT-S01.IBAN = KARTE-KSB.IBANMKK01850-OUT-S01.IBAN-URSPRUNG = KARTE-KSB.IBAN-URSPRUNGMKK01850-OUT-S01.ANFORDER-ART = KARTE-DATEN-KSB.ANFORDER-ARTIf KARTE-KSB.DCRD-TOKEN-SCHL is NULL
+   MKK01850-OUT-S01.DCRD-TOKEN-SCHL = SPACE
+Else
+   MKK01850-OUT-S01.DCRD-TOKEN-SCHL = KARTE-KSB.DCRD-TOKEN-SCHL
+End-IfMKK01850-OUT-S01.DCRD-TOKEN-MM = KARTE-KSB.DCRD-TOKEN-MMIf D-C-TOKEN-ID is NULL
+   MKK01850-OUT-S01.DCRD-TOKEN-SCHL-VORG = SPACE
+Else
+   MKK01850-OUT-S01.DCRD-TOKEN-SCHL-VORG = D-C-TOKEN-ID
+End-IfIf D-C-TOKEN-MM is NULL
+   MKK01850-OUT-S01.DCRD-TOKEN-MM-VORG = SPACE
+Else
+   MKK01850-OUT-S01.DCRD-TOKEN-MM-VORG = D-C-TOKEN-MM
+End-IfMKK01850-OUT-S01.MBL-GRAT-HSTL = KARTE-KSB.MBL-GRAT-HSTLMKK01850-OUT-S01.MBL-GRAT-MODL-REIHE = KARTE-KSB.MBL-GRAT-MODL-REIHEMKK01850-OUT-S01.MBL-GRAT-MODL = KARTE-KSB.MBL-GRAT-MODLMKK01850-OUT-S01.MBL-GRAT-OS-NAME = KARTE-KSB.MBL-GRAT-OS-NAMEMKK01850-OUT-S01.MBL-GRAT-OS-VERS = KARTE-KSB.MBL-GRAT-OS-VERSMKK01850-OUT-S01.DCRD-ESTL-REGS-CODE = KARTE-KSB.DCRD-ESTL-REGS-CODEMKK01850-OUT-S01.DCRD-INHB-APP-DKMT-ID = KARTE-KSB.DCRD-INHB-APP-DKMT-IDMKK01850-OUT-S01.APP-ID = D-C-APP-IDMKK01850-OUT-S01.HCE-CLOUD-DKMT-ID = KARTE-KSB.HCE-CLOUD-DKMT-IDMKK01850-OUT-S01.CHARGE-PHYS = D-C-CHARGEMKK01850-OUT-S01.DCRD-BILD-REF-SCHL = D-C-BILD-REF-SCHLMKK01850-OUT-S01.KARTEN-BRANDING = D-C-BRANDINGMKK01850-OUT-S01.DKRT-KRKT-NR = D-N-DKRT-KRKT-NRMKK01850-OUT-S01.DKRT-KRKT-NTZG-MM-FOLG = KARTE-KSB.DKRT-KRKT-NTZG-MMIf D-C-NTZG-MM-DIGI is NULL
+   MKK01850-OUT-S01.DKRT-KRKT-NTZG-MM-VORG = SPACE
+Else
+   MKK01850-OUT-S01.DKRT-KRKT-NTZG-MM-VORG = D-C-NTZG-MM-DIGI
+End-IfMKK01850-OUT-S01.DCRD-BRI-PHYS = D-C-DCRD-BRI-PHYS
+S01 - SQL 
+	SELECT KKA.KARTE_ID
+		, KKA.KARTE_NR
+		, KKA.BLZ
+		, KKA.KONTONR
+		, KKA.KARTE_FOLGE_NR
+		, KKA.KARTE_FOLGE_NR_INT
+		, KKA.VERFALL_DATUM
+		, KKA.FREIZGK_SCHL
+		, KKA.PAN
+		, SUBSTR(KKA.ROHLING_NR,7,4)  AS CHARGE
+		, KKA.DKRT_KRKT_NR
+		, KDA.DCRD_BILD_REF_SCHL
+		, CASE WHEN KDA.DCRD_BILD_REF_SCHL = ' '
+				AND KKA.DKRT_KRKT_NTZG_MM IN ('N',' ')
+				THEN COALESCE(T1.BRI,' ')
+				WHEN KDA.DCRD_BILD_REF_SCHL = ' '
+				AND KKA.DKRT_KRKT_NTZG_MM IN ('P','V')
+				THEN COALESCE(T2.BRI3,' ')
+				WHEN KDA.DCRD_BILD_REF_SCHL = ' '
+				AND KKA.DKRT_KRKT_NTZG_MM IN ('H','D')
+				THEN COALESCE(T3.BRI4,' ')
+				ELSE KDA.DCRD_BILD_REF_SCHL
+		END  AS BRI
+		, KKB.KARTE_ID
+		, KKB.KARTE_NR
+		, KKB.BLZ
+		, KKB.KONTONR
+		, KKB.KARTE_FOLGE_NR
+		, KKB.KARTE_FOLGE_NR_INT
+		, KKB.VERFALL_DATUM
+		, KKB.FREIZGK_SCHL
+		, CASE KKB.FREIZGK_SCHL
+		WHEN '1' THEN '201'
+		WHEN '2' THEN '221'
+		WHEN '7' THEN CASE KKB.FREIZGK_SCHL_ALT
+						WHEN '6' THEN '726'
+								ELSE '727'
+						END
+		WHEN '9' THEN CASE KKB.FREIZGK_SCHL_ALT
+						WHEN '7' THEN '727'
+								ELSE '729'
+						END
+					ELSE '000'
+		END AS SERVICECODE
+		, KKB.PAN
+		, KKB.KARTE_NAME_1
+		, KKB.KARTE_NAME_2
+		, KKB.IBAN
+		, KKB.IBAN_URSPRUNG
+		, KKB.DCRD_ESTL_REGS_CODE
+		, CASE WHEN KKB.DKRT_KRKT_NTZG_MM = 'M'
+				THEN 'D'
+				WHEN KKB.DKRT_KRKT_NTZG_MM = 'I'
+				THEN 'I'
+				ELSE 'G'
+		END  AS BRANDING
+		, KKB.DCRD_TOKEN_SCHL
+		, KKB.DCRD_TOKEN_MM
+		, KKB.MBL_GRAT_HSTL
+		, KKB.MBL_GRAT_MODL_REIHE
+		, KKB.MBL_GRAT_MODL
+		, KKB.MBL_GRAT_OS_NAME
+		, KKB.MBL_GRAT_OS_VERS
+		, KKB.DCRD_INHB_APP_DKMT_ID
+		, KKB.HCE_CLOUD_DKMT_ID
+		, KKB.DKRT_KRKT_NTZG_MM
+		, KDB.ANFORDER_ART
+		, KKC.DCRD_TOKEN_SCHL
+		, KKC.DCRD_TOKEN_MM
+		, KKC.DKRT_KRKT_NTZG_MM
+		, SUBSTR(DLS.DKMT_LANG_TEXT,1,256) AS APP_ID
+	INTO   :D-C-KARTE-ID
+		, :D-N-KARTE-NR
+		, :D-C-BLZ
+		, :D-N-KONTONR
+		, :D-N-KARTE-FOLGE-NR
+		, :D-N-KARTE-FOLGE-NR-INT
+		, :D-C-DATUM
+		, :D-C-FZS
+		, :D-C-PAN
+		, :D-C-CHARGE
+		, :D-N-DKRT-KRKT-NR
+		, :D-C-DCRD-BRI-PHYS
+		, :D-C-BILD-REF-SCHL
+		, :KARTE-KSB.KARTE-ID
+		, :KARTE-KSB.KARTE-NR
+		, :KARTE-KSB.BLZ
+		, :KARTE-KSB.KONTONR
+		, :KARTE-KSB.KARTE-FOLGE-NR
+		, :KARTE-KSB.KARTE-FOLGE-NR-INT
+		, :KARTE-KSB.VERFALL-DATUM
+		, :KARTE-KSB.FREIZGK-SCHL
+		, :D-C-SERVICECODE
+		, :KARTE-KSB.PAN
+		, :KARTE-KSB.KARTE-NAME-1
+		, :KARTE-KSB.KARTE-NAME-2
+		, :KARTE-KSB.IBAN
+		, :KARTE-KSB.IBAN-URSPRUNG
+		, :KARTE-KSB.DCRD-ESTL-REGS-CODE
+		, :D-C-BRANDING
+		, :KARTE-KSB.DCRD-TOKEN-SCHL
+				:D-N-DCRD-TOKEN-SCHL-I
+		, :KARTE-KSB.DCRD-TOKEN-MM
+		, :KARTE-KSB.MBL-GRAT-HSTL
+		, :KARTE-KSB.MBL-GRAT-MODL-REIHE
+		, :KARTE-KSB.MBL-GRAT-MODL
+		, :KARTE-KSB.MBL-GRAT-OS-NAME
+		, :KARTE-KSB.MBL-GRAT-OS-VERS
+		, :KARTE-KSB.DCRD-INHB-APP-DKMT-ID
+		, :KARTE-KSB.HCE-CLOUD-DKMT-ID
+		, :KARTE-KSB.DKRT-KRKT-NTZG-MM
+		, :KARTE-DATEN-KSB.ANFORDER-ART
+		, :D-C-TOKEN-ID
+				:D-N-TOKEN-ID-I
+		, :D-C-TOKEN-MM
+				:D-N-DCRD-TOKEN-MM-I
+		, :D-C-NTZG-MM-DIGI
+				:D-N-NTZG-MM-DIGI-I
+		, :D-C-APP-ID
+	
+	--------------------------------------------------------
+	-- PHYSISCHE FOLGEKARTE - KARTE_KSB
+	--------------------------------------------------------
+	FROM KARTE_KSB KKA
+	
+	--------------------------------------------------------
+	-- PHYSISCHE FOLGEKARTE - KARTE_DATEN_KSB
+	--------------------------------------------------------
+	JOIN KARTE_DATEN_KSB KDA
+		ON KDA.KARTE_ID  = KKA.KARTE_ID
+	AND KDA.GUELTIG_BIS = '9999-12-31-23.59.59.999999'
+	
+	--------------------------------------------------------
+	-- DIGITALE FOLGEKARTE - KARTE_KSB
+	--------------------------------------------------------
+	JOIN KARTE_KSB KKB
+		ON KKB.KARTE_ID_HAUPT = KKA.KARTE_ID
+	
+	--------------------------------------------------------
+	-- DIGITALE FOLGEKARTE - KARTE_DATEN_KSB
+	--------------------------------------------------------
+	JOIN KARTE_DATEN_KSB KDB
+		ON KDB.KARTE_ID  = KKB.KARTE_ID
+	AND KDB.GUELTIG_BIS = '9999-12-31-23.59.59.999999'
+	
+	--------------------------------------------------------
+	-- DIGITALE VORGÄNGERKARTE - KARTE_KSB
+	--------------------------------------------------------
+	LEFT JOIN KARTE_KSB KKC
+		ON KKC.KARTE_ID_ERS_FOLGE = KKB.KARTE_ID
+	
+	--------------------------------------------------------
+	-- ERMITTLUNG APP-ID
+	--------------------------------------------------------
+	JOIN DKMT_LANG_SEGM DLS
+		ON DLS.DKMT_LANG_ID = KKB.DCRD_INHB_APP_DKMT_ID
+	AND DLS.DKMT_LANG_TYP = 'KXK'
+	
+	--------------------------------------------------------
+	-- ERMITTLUNG DEFAULT-BRI FÜR STANDARD-EC-KARTEN
+	--------------------------------------------------------
+	LEFT JOIN
+		(
+		SELECT SUBSTR(VG.STANDARDWERT,1,32) AS BRI
+		FROM   VERTRAG_GP_OBJ VG
+		WHERE  VG.OBJEKT_KEY = '0001-01-01-00.00.00.020000'
+		AND    VG.GP_VARIANTE = 'SPARKASSE'
+		AND    VG.FELD        = 'DEFAULT-BRI'
+		AND    VG.BIS        >= CURRENT TIMESTAMP
+		AND    VG.VON        <= CURRENT TIMESTAMP
+		AND    VG.RANG        = 8000
+		) AS T1
+	ON     1 = 1
+	
+	--------------------------------------------------------
+	-- ERMITTLUNG DEFAULT-BRI FÜR DMC-KARTEN
+	--------------------------------------------------------
+	LEFT JOIN
+		(
+		SELECT SUBSTR(VG.STANDARDWERT,1,32) AS BRI3
+		FROM   VERTRAG_GP_OBJ VG
+		WHERE  VG.OBJEKT_KEY = '0001-01-01-00.00.00.020000'
+		AND    VG.GP_VARIANTE = 'SPARKASSE'
+		AND    VG.FELD        = 'DEFAULT-BRI3'
+		AND    VG.BIS        >= CURRENT TIMESTAMP
+		AND    VG.VON        <= CURRENT TIMESTAMP
+		AND    VG.RANG        = 8000
+		) AS T2
+	ON     1 = 1
+	
+	--------------------------------------------------------
+	-- ERMITTLUNG DEFAULT-BRI FÜR VID-KARTEN
+	--------------------------------------------------------
+	LEFT JOIN
+		(
+		SELECT SUBSTR(VG.STANDARDWERT,1,32) AS BRI4
+		FROM   VERTRAG_GP_OBJ VG
+		WHERE  VG.OBJEKT_KEY = '0001-01-01-00.00.00.020000'
+		AND    VG.GP_VARIANTE = 'SPARKASSE'
+		AND    VG.FELD        = 'DEFAULT-BRI4'
+		AND    VG.BIS        >= CURRENT TIMESTAMP
+		AND    VG.VON        <= CURRENT TIMESTAMP
+		AND    VG.RANG        = 8000
+		) AS T3
+	ON     1 = 1
+	
+	--------------------------------------------------------
+	-- WHERE-BEDINGUNG
+	--------------------------------------------------------
+	WHERE KKB.KARTE_ID = :KARTE-KSB.KARTE-ID     
+	
+Select S11
+LIEFERT DIE DIGITALE KARTE ZU DEN 5 FREUNDEN EINER PHYSISCHEN SPARKASSENCARD DMC
+S11 - Eingabe
+S11 - Eingabe Expand source 
+           02 MKK01850-DATEN-S11  REDEFINES MKK01850-DATEN-VAR.
+              10 MKK01850-IN-S11.
+                 15 BLZ                                PIC 9(08).
+                 15 KONTONR                            PIC 9(10).
+                 15 FREIZGK-SCHL                       PIC X(01).
+                 15 VERFALL-DATUM                      PIC X(10).
+                 15 KARTE-FOLGE-NR                     PIC 9(02).
+                 15 DKRT-KRKT-NR                       PIC X(16).
+                 15 VERFALL-DIGI                       PIC X(10).              
+S11 - Ausgabe
+S11 - Ausgabe Expand source 
+              10 MKK01850-OUT-S11.
+                 15 BLZ                                PIC 9(08).
+                 15 KONTONR                            PIC 9(10).
+                 15 FREIZGK-SCHL                       PIC X(01).
+                 15 VERFALL-DATUM                      PIC X(10).
+                 15 KARTE-FOLGE-NR                     PIC S9(07).
+                 15 KARTE-ART                          PIC X(12).
+                 15 KARTE-ID                           PIC X(26).
+                 15 OBJEKT-KEY                         PIC X(26).
+                 15 MDES-SPERRE                        PIC X(01).
+                    88 MDES-SPERRE-JA                      VALUE 'J'.
+                    88 MDES-SPERRE-NEIN                    VALUE 'N'. 
+S11 - SQL
+S11 - SQL 
+      ******************************************************************
+      *  D 0 9 3 0 - F U N K T I O N - A U S F U E H R E N - S 1 1
+      *-----------------------------------------------------------------
+      * DATENZUGRIFF FÜR FUNKTIONSCODE S11:
+      *
+      * 24.03.2021 - KEINE BERÜCKSICHTIGUNG VON VERFALL-DIGI
+      *
+      * ZU ÜBERGEBENEN 5 FREUNDEN EINER PHYS. COBADGE-KARTE, DER
+      * DIGITALEN PAN (DKRT-KRKT-NR) UND DEM TOKEN VERFALLDATUM
+      * WERDEN DIE 5 FREUNDE, KARTENART, KARTE-ID UND OBJEKT-KEY DER
+      * ZUGEHÖRIGEN DIGITALEN KARTE (APPLE, HCE, MERCHTOKEN) MITTELS
+      * FETCH-FIRST-1-ROW-ONLY ERMITTELT.
+      *
+      * ANMERKUNG: DIE DIGITALE PAN (KA.DKRT-KRKT-NR) WIRD VON
+      * MASTERCARD FÜR TOKEN NEU VERGEBEN UND IST IMMER UNTERSCHIEDLICH
+      * ZUR PAN (KA.DKRT-KRKT-NR) DER PHYSISCHEN SPARKASSEN-CARD.
+      *
+      * INFO:
+      * REIN GEHEN PARAMETER AUS KARTE
+      * RAUS GEHEN PARAMETER AUS KARTE-KSB
+      ******************************************************************
+
+           EXEC SQL
+              SELECT DIG.BLZ
+                   , DIG.KONTONR
+                   , DIG.FREIZGK_SCHL
+                   , DIG.VERFALL_DATUM
+                   , DIG.KARTE_FOLGE_NR
+                   , DIG.KARTE_ART
+                   , DIG.KARTE_ID
+                   , DIG.OBJEKT_KEY
+                   , CASE WHEN KD.DCRD_SPER_GRND = ''
+                          THEN 'N' ELSE 'J'
+                     END AS MDES_SPERRE
+              INTO  :KARTE-KSB.BLZ
+                   ,:KARTE-KSB.KONTONR
+                   ,:KARTE-KSB.FREIZGK-SCHL
+                   ,:KARTE-KSB.VERFALL-DATUM
+                   ,:KARTE-KSB.KARTE-FOLGE-NR
+                   ,:KARTE-KSB.KARTE-ART
+                   ,:KARTE-KSB.KARTE-ID
+                   ,:KARTE-KSB.OBJEKT-KEY
+                   ,:D-C-MDES-SPERRE
+
+              FROM   KARTE_KSB KA -- PHYS  SPARKASSEN-CARD MIT DMC/VID
+
+              JOIN   KARTE_KSB DIG
+              ON     DIG.KARTE_ID_HAUPT = KA.KARTE_ID
+
+              JOIN   KARTE_DATEN_KSB KD
+              ON     KD.KARTE_ID       = DIG.KARTE_ID
+              AND    KD.GUELTIG_AB    <= CURRENT TIMESTAMP
+              AND    KD.GUELTIG_BIS   >= CURRENT TIMESTAMP
+
+              WHERE  KA.KONTONR        = :KARTE.KONTONR
+              AND    KA.BLZ            = :KARTE.BLZ
+              AND    KA.VERFALL_DATUM  = :KARTE.VERFALL-DATUM
+              AND    KA.FREIZGK_SCHL   = :KARTE.FREIZGK-SCHL
+              AND    KA.FREIZGK_SCHL   = '1'
+              AND    KA.KARTE_FOLGE_NR = :KARTE.KARTE-FOLGE-NR
+              AND    KA.KARTE_ART      = 'V-EC-KARTE'
+              AND   (KA.LOESCH_DATUM   = '01.01.0001'
+                  OR KA.LOESCH_DATUM   > CURRENT DATE)
+              AND    KA.BESTELL_DATUM  > '01.01.0001'
+              AND    KA.KARTE_NR       > 0
+              AND    KA.DKRT_KRKT_NR   > 0             -- COBADGE KNR
+              AND    KA.DEBIT_KARTE_ZHSM   = 'G'       -- COBADGE ZHSM
+              AND    KA.DKRT_KRKT_NTZG_MM IN ('D','H'  -- VID
+                                             ,'P')     -- DMC
+              AND    DIG.DKRT_KRKT_NR   = :KARTE.DKRT-KRKT-NR
+              AND    DIG.VERFALL_DATUM >= CURRENT DATE
+              AND    DIG.FREIZGK_SCHL   = '1'
+              AND    DIG.DCRD_QTTG_STAT = 'E'
+              AND    DIG.BESTELL_DATUM  > '01.01.0001'
+              AND   (DIG.LOESCH_DATUM   = '01.01.0001'
+                  OR DIG.LOESCH_DATUM   > CURRENT DATE)
+
+           END-EXEC
+Select S12
+LIEFERT DIVERSE FELDER ZU DIGITALEN VORGÄNGER- UND FOLGEKARTEN
+VOM TYP HCE, IDENTIFIZIERT DURCH DEN TOKEN-SCHLÜSSEL DER VORGÄNGERKARTE.
+S12 - Eingabe
+S12 - Eingabe Expand source 
+              10 MKK01850-IN-S12.
+                 15 DCRD-TOKEN-SCHL                  PIC  X(48).
+   
+S12 - Ausgabe
+S12 - Ausgabe Expand source 
+              10 MKK01850-OUT-S12.
+                 15 KARTE-ID-DIGI-FOLG               PIC  X(26).
+                 15 OBJEKT-KEY-FOLG                  PIC  X(26).
+                 15 LOESCH-DATUM-FOLG                PIC  X(10).
+                 15 AUSGABE-DATUM                    PIC  X(10).
+                 15 DCRD-QTTG-STAT                   PIC  X(01).
+                 15 MBL-GRAT-DCRD-AUSG-TS            PIC  X(26).
+                 15 NTZG-MM-FOLG                     PIC  X(01).
+                 15 DKRT-KRKT-NR                     PIC S9(16) COMP-3.
+                 15 TOKEN-VFD-FOLG                   PIC  X(10).
+                 15 KARTE-ID-DIGI-VORG               PIC  X(26).
+                 15 OBJEKT-KEY-VORG                  PIC  X(26).
+                 15 LOESCH-DATUM-VORG                PIC  X(10).
+                 15 NTZG-MM-VORG                     PIC  X(01).
+                 15 TOKEN-VFD-VORG                   PIC  X(10).
+                 15 DCRD-TOKEN-STAT                  PIC  X(01).
+                 15 VERFALL-DATUM-FOLG               PIC  X(10).
+                 15 VERFALL-DATUM-VORG               PIC  X(10).
+                 15 KARTE-ID-PHYS-FOLG               PIC  X(26).
+                 15 KARTE-ID-PHYS-VORG               PIC  X(26).
+  
+S12 - SQL
+Hinweise:
+* Vor dem Select
+o KARTE-KSB.DCRD-TOKEN-SCHL = MKK01850-IN-S12.DCRD-TOKEN-SCHL
+* Nach dem Select die gelesenen Felder nach MKK01850-OUT-S12 übertragen
+* Zusätzlich 
+o MKK01850-OUT-S12.KARTE-ID-DIGI-FOLG = KARTE-KSB.KARTE-ID
+o MKK01850-OUT-S12.OBJEKT-KEY-FOLG = KARTE-KSB.OBJEKT-KEY
+o MKK01850-OUT-S12.VERFALL-DATUM-FOLG = KARTE-KSB.VERFALL-DATUM
+o MKK01850-OUT-S12.LOESCH-DATUM-FOLG = KARTE-KSB.LOESCH-DATUM
+o MKK01850-OUT-S12.KARTE-ID-PHYS-FOLG = KARTE-KSB.KARTE-ID-HAUPT
+o MKK01850-OUT-S12.NTZG-MM-FOLG = KARTE-KSB.DKRT-KRKT-NTZG-MM
+o MKK01850-OUT-S12.TOKEN-VFD-FOLG = KARTE-DATEN-KSB.TOKEN-VERFALL-DTM
+o MKK01850-OUT-S12.KARTE-ID-DIGI-VORG = D-C-KARTE-ID
+o MKK01850-OUT-S12.OBJEKT-KEY-VORG = D-C-OBJEKT-KEY
+o MKK01850-OUT-S12.VERFALL-DATUM-VORG = D-C-VERFALL-DATUM
+o MKK01850-OUT-S12.LOESCH-DATUM-VORG = D-C-LOESCH-DATUM
+o MKK01850-OUT-S12.KARTE-ID-PHYS-VORG = D-C-KARTE-ID-HAUPT
+o MKK01850-OUT-S12.NTZG-MM-VORG = D-C-NTZG-MM-DIGI
+o MKK01850-OUT-S12.TOKEN-VFD-VORG = D-C-TOKEN-VFD
+o MKK01850-OUT-S12.DCRD-TOKEN-STAT = D-C-DIGI-STATUS
+
+S12 - SQL 
+	SELECT KKA.KARTE_ID
+		, KKA.OBJEKT_KEY
+		, KKA.VERFALL_DATUM
+		, KKA.LOESCH_DATUM
+		, KKA.AUSGABE_DATUM
+		, KKA.KARTE_ID_HAUPT
+		, KKA.DCRD_QTTG_STAT
+		, KKA.MBL_GRAT_DCRD_AUSG_TS
+		, KKA.DKRT_KRKT_NTZG_MM
+		, KKA.DKRT_KRKT_NR
+		, KDA.TOKEN_VERFALL_DTM
+		---------------------------------------------------
+		, COALESCE(KKB.KARTE_ID,'0001-01-01-00.00.00.000000')
+		AS KID
+		, COALESCE(KKB.OBJEKT_KEY,
+		'0001-01-01-00.00.00.000000') AS OBJ_KEY
+		, COALESCE(KKB.VERFALL_DATUM,'01.01.0001')
+		AS VERF_DAT
+		, COALESCE(KKB.LOESCH_DATUM,'01.01.0001')
+		AS LOE_DAT
+		, COALESCE(KKB.KARTE_ID_HAUPT,
+		'0001-01-01-00.00.00.000000') AS KID_HAUPT
+		, COALESCE(KKB.DKRT_KRKT_NTZG_MM,'')
+		AS NTZG_MM
+		, COALESCE(KDB.TOKEN_VERFALL_DTM,'01.01.0001')
+		AS VFD
+		, COALESCE(KPD.DCRD_TOKEN_STAT,'')
+		AS TOKEN_STAT
+		---------------------------------------------------
+	INTO  :KARTE-KSB.KARTE-ID
+		,:KARTE-KSB.OBJEKT-KEY
+		,:KARTE-KSB.VERFALL-DATUM
+		,:KARTE-KSB.LOESCH-DATUM
+		,:KARTE-KSB.AUSGABE-DATUM
+		,:KARTE-KSB.KARTE-ID-HAUPT
+		,:KARTE-KSB.DCRD-QTTG-STAT
+		,:KARTE-KSB.MBL-GRAT-DCRD-AUSG-TS
+		,:KARTE-KSB.DKRT-KRKT-NTZG-MM
+		,:KARTE-KSB.DKRT-KRKT-NR
+		,:KARTE-DATEN-KSB.TOKEN-VERFALL-DTM
+		,:D-C-KARTE-ID
+		,:D-C-OBJEKT-KEY
+		,:D-C-VERFALL-DATUM
+		,:D-C-LOESCH-DATUM
+		,:D-C-KARTE-ID-HAUPT
+		,:D-C-NTZG-MM-DIGI
+		,:D-C-TOKEN-VFD
+		,:D-C-DIGI-STATUS
+		---------------------------------------------------
+		-- DIGITALE FOLGEKARTE KARTE_KSB
+	FROM   KARTE_KSB KKA
+		---------------------------------------------------
+		-- DIGITALE FOLGEKARTE KARTE_DATEN_KSB
+	JOIN   KARTE_DATEN_KSB KDA
+	ON     KDA.KARTE_ID            = KKA.KARTE_ID
+	AND    KDA.GUELTIG_AB         <= CURRENT TIMESTAMP
+	AND    KDA.GUELTIG_BIS        >= CURRENT TIMESTAMP
+		---------------------------------------------------
+		-- DIGITALE VORGÄNGERKARTE KARTE_KSB
+	LEFT
+	JOIN   KARTE_KSB KKB
+	ON     KKB.KARTE_ID_ERS_FOLGE  = KKA.KARTE_ID
+	AND    KKB.KARTE_ART           = 'V-DIGI-KARTE'
+	AND    KKA.KARTE_ART           = 'V-DIGI-KARTE'
+		---------------------------------------------------
+		-- DIGITALE VORGÄNGERKARTE KARTE_DATEN_KSB
+	LEFT
+	JOIN   KARTE_DATEN_KSB KDB
+	ON     KDB.KARTE_ID            = KKB.KARTE_ID
+	AND    KDB.GUELTIG_AB         <= CURRENT TIMESTAMP
+	AND    KDB.GUELTIG_BIS        >= CURRENT TIMESTAMP
+		---------------------------------------------------
+		-- DIGITALE VORGÄNGERKARTE KARTE_PRW_DCRD
+	LEFT
+	JOIN   KARTE_PRW_DCRD KPD
+	ON     KPD.KONTONR             = KKB.KONTONR
+	AND    KPD.BLZ                 = KKB.BLZ
+	AND    KPD.KARTE_FOLGE_NR      = KKB.KARTE_FOLGE_NR
+	AND    KPD.VERFALL_DATUM       = KKB.VERFALL_DATUM
+	AND    KPD.FREIZGK_SCHL        = KKB.FREIZGK_SCHL
+		---------------------------------------------------
+	WHERE  KKA.DCRD_TOKEN_SCHL  = :KARTE-KSB.DCRD-TOKEN-SCHL
+	AND    KKA.DCRD_TOKEN_MM    = 'H'
+	  	
+Select S13
+LIEFERT DIVERSE FELDER ZU EINER PHYSISCHEN KARTE UND EINER
+DIGITALEN KARTE, JEWEILS IDENTIFIZIERT DURCH IHRE 5 FREUNDE.
+S13 - Eingabe
+S13 - Eingabe Expand source 
+              10 MKK01850-IN-S13.
+                 15 BLZ-PHYS                         PIC 9(08).
+                 15 KONTONR-PHYS                     PIC 9(10).
+                 15 KARTE-FOLGE-NR-PHYS              PIC 9(02).
+                 15 VERFALL-DATUM-PHYS               PIC X(10).
+                 15 FREIZGK-SCHL-PHYS                PIC X(01).
+                 15 BLZ-DIGI                         PIC 9(08).
+                 15 KONTONR-DIGI                     PIC 9(10).
+                 15 KARTE-FOLGE-NR-DIGI              PIC 9(02).
+                 15 VERFALL-DATUM-DIGI               PIC X(10).
+                 15 FREIZGK-SCHL-DIGI                PIC X(01).
+   
+S13 - Ausgabe
+S13 - Ausgabe Expand source 
+              10 MKK01850-OUT-S13.
+                 15 KARTE-ID-PHYS                    PIC  X(26).
+                 15 KARTE-ART-PHYS                   PIC  X(12).
+                 15 DKRT-KRKT-NR                     PIC S9(16) COMP-3.
+                 15 KARTE-ID-DIGI-FOLG               PIC  X(26).
+                 15 KARTE-ART-DIGI-FOLG              PIC  X(12).
+                 15 BESTELL-DATUM                    PIC  X(10).
+                 15 DCRD-QTTG-STAT                   PIC  X(01).
+                 15 DCRD-BSG-TS                      PIC  X(26).
+                    88 B-DCRD-BSG-TS-NL              VALUE
+                                      '0001-01-01-00.00.00.000000'.
+                 15 MBL-GRAT-DCRD-BTSG-TS            PIC  X(26).
+                    88 B-MBL-GRAT-DCRD-BTSG-TS-NL    VALUE
+                                      '0001-01-01-00.00.00.000000'.
+                 15 NTZG-MM-DIGI-FOLG                PIC  X(01).
+                 15 KARTE-ID-DIGI-VORG               PIC  X(26).
+                 15 NTZG-MM-DIGI-VORG                PIC  X(01).
+                 15 DCRD-TOKEN-STAT                  PIC  X(01).
+                 15 OBJEKT-KEY-FOLG                  PIC  X(26).
+	   
+S13 - SQL
+Hinweise:
+* Vor dem Select
+o D-N-BLZ = MKK01850-IN-S13.BLZ-PHYS
+o D-N-KONTONR = MKK01850-IN-S13.KONTONR-PHYS
+o D-N-KARTE-FOLGE-NR = MKK01850-IN-S13.KARTE-FOLGE-NR-PHYS
+o D-C-VERFALL-DATUM = MKK01850-IN-S13.VERFALL-DATUM-PHYS
+o D-C-FREIZGK-SCHL = MKK01850-IN-S13.FREIZGK-SCHL-PHYS
+o KARTE-KSB.BLZ = MKK01850-IN-S13.BLZ-DIGI
+o KARTE-KSB.KONTONR = MKK01850-IN-S13.KONTONR-DIGI
+o KARTE-KSB.KARTE-FOLGE-NR = MKK01850-IN-S13.KARTE-FOLGE-NR-DIGI
+o KARTE-KSB.VERFALL-DATUM = MKK01850-IN-S13.VERFALL-DATUM-DIGI
+o KARTE-KSB.FREIZGK-SCHL = MKK01850-IN-S13.FREIZGK-SCHL-DIGI
+* Nach dem Select die gelesenen Felder nach MKK01850-OUT-S13 übertragen
+* Zusätzlich 
+o MKK01850-OUT-S13.KARTE-ID-PHYS = KARTE-KSB.KARTE-ID-HAUPT
+o MKK01850-OUT-S13.KARTE-ART-PHYS = D-C-KARTE-ART
+o MKK01850-OUT-S13.DKRT-KRKT-NR = D-N-DKRT-KRKT-NR
+o MKK01850-OUT-S13.KARTE-ID-DIGI-FOLG = KARTE-KSB.KARTE-ID
+o MKK01850-OUT-S13.OBJEKT-KEY-FOLG = KARTE-KSB.OBJEKT-KEY
+o MKK01850-OUT-S13.KARTE-ART-DIGI-FOLG = KARTE-KSB.KARTE-ART
+o MKK01850-OUT-S13.NTZG-MM-DIGI-FOLG = KARTE-KSB.DKRT-KRKT-NTZG-MM
+o MKK01850-OUT-S13.KARTE-ID-DIGI-VORG = D-C-KARTE-ID
+o MKK01850-OUT-S13.NTZG-MM-DIGI-VORG = D-C-NTZG-MM-DIGI
+o MKK01850-OUT-S13.DCRD-TOKEN-STAT = KARTE-PRW-DCRD.DCRD-TOKEN-STAT
+
+S13 - SQL 
+	SELECT KKA.KARTE_ART
+		, KKA.DKRT_KRKT_NR
+		, KKB.KARTE_ID
+		, KKB.OBJEKT_KEY
+		, KKB.BESTELL_DATUM
+		, KKB.KARTE_ART
+		, KKB.KARTE_ID_HAUPT
+		, KKB.DCRD_QTTG_STAT
+		, KKB.DCRD_BSG_TS
+		, KKB.MBL_GRAT_DCRD_BTSG_TS
+		, KKB.DKRT_KRKT_NTZG_MM
+		---------------------------------------------------
+		, COALESCE(KKC.KARTE_ID,'0001-01-01-00.00.00.000000')
+		AS KID_DIGI_VORG
+		, COALESCE(KKC.DKRT_KRKT_NTZG_MM,'')
+		AS NTZG_MM_DIGI_VORG
+		, COALESCE(KPD.DCRD_TOKEN_STAT,'')
+		AS TOKEN_STAT
+		---------------------------------------------------
+	INTO  :D-C-KARTE-ART
+		,:D-N-DKRT-KRKT-NR
+		,:KARTE-KSB.KARTE-ID
+		,:KARTE-KSB.OBJEKT-KEY
+		,:KARTE-KSB.BESTELL-DATUM
+		,:KARTE-KSB.KARTE-ART
+		,:KARTE-KSB.KARTE-ID-HAUPT
+		,:KARTE-KSB.DCRD-QTTG-STAT
+		,:KARTE-KSB.DCRD-BSG-TS
+		,:KARTE-KSB.MBL-GRAT-DCRD-BTSG-TS
+		,:KARTE-KSB.DKRT-KRKT-NTZG-MM
+		,:D-C-KARTE-ID
+		,:D-C-NTZG-MM-DIGI
+		,:KARTE-PRW-DCRD.DCRD-TOKEN-STAT
+		---------------------------------------------------
+		PHYSISCHE FOLGEKARTE KARTE_KSB
+	FROM   KARTE_KSB KKA
+		---------------------------------------------------
+		DIGITALE FOLGEKARTE KARTE_KSB
+	JOIN   KARTE_KSB KKB
+	ON     KKB.KARTE_ID_HAUPT      = KKA.KARTE_ID
+		---------------------------------------------------
+		DIGITALE VORGÄNGERKARTE KARTE_KSB
+	LEFT
+	JOIN   KARTE_KSB KKC
+	ON     KKC.KARTE_ID_ERS_FOLGE  = KKB.KARTE_ID
+		---------------------------------------------------
+		DIGITALE VORGÄNGERKARTE KARTE_PRW_DCRD
+	LEFT
+	JOIN   KARTE_PRW_DCRD KPD
+	ON     KPD.KONTONR             = KKB.KONTONR
+	AND    KPD.BLZ                 = KKB.BLZ
+	AND    KPD.KARTE_FOLGE_NR      = KKB.KARTE_FOLGE_NR
+	AND    KPD.VERFALL_DATUM       = KKB.VERFALL_DATUM
+	AND    KPD.FREIZGK_SCHL        = KKB.FREIZGK_SCHL
+		---------------------------------------------------
+	WHERE  KKA.BLZ                 = :D-N-BLZ
+	AND    KKA.KONTONR             = :D-N-KONTONR
+	AND    KKA.KARTE_FOLGE_NR      = :D-N-KARTE-FOLGE-NR
+	AND    KKA.VERFALL_DATUM       = :D-C-VERFALL-DATUM
+	AND    KKA.FREIZGK_SCHL        = :D-C-FREIZGK-SCHL
+	AND    KKB.BLZ                 = :KARTE-KSB.BLZ
+	AND    KKB.KONTONR             = :KARTE-KSB.KONTONR
+	AND    KKB.KARTE_FOLGE_NR      = :KARTE-KSB.KARTE-FOLGE-NR
+	AND    KKB.VERFALL_DATUM       = :KARTE-KSB.VERFALL-DATUM
+	AND    KKB.FREIZGK_SCHL        = :KARTE-KSB.FREIZGK-SCHL
+	     
+Select S14
+LIEFERT ALLE BENÖTIGTEN DATEN ZUM BRI-UPDATE EINER DIGITALEN
+KARTE HCE.
+S14 - Eingabe
+S14 - Eingabe Expand source 
+              10 MKK01850-IN-S14.
+                 15 KARTE-ID                           PIC  X(26).
+     
+S14 - Ausgabe
+S14 - Ausgabe Expand source 
+              10 MKK01850-OUT-S14.
+                 15 DCRD-TOKEN-SCHL                    PIC  X(48).
+                    88 B-DCRD-TOKEN-SCHL-NL            VALUE SPACE.
+                 15 DCRD-INHB-APP-DKMT-ID              PIC  X(26).
+                    88 B-DCRD-INHB-APP-DKMT-ID-NL      VALUE
+                                      '0001-01-01-00.00.00.000000'.
+                 15 APP-ID                             PIC  X(256).
+                 15 HCE-CLOUD-DKMT-ID                  PIC  X(26).
+                    88 B-HCE-CLOUD-DKMT-ID-NL          VALUE
+                                      '0001-01-01-00.00.00.000000'.
+                 15 DCRD-BILD-REF-SCHL                 PIC  X(36).
+                    88 B-DCRD-BILD-REF-SCHL-NL         VALUE SPACES.
+   
+S14 - SQL
+Hinweise:
+* Vor dem Select
+o KARTE-KSB.KARTE-ID = MKK01850-IN-S14.KARTE-ID
+* Nach dem Select 
+o MKK01850-OUT-S14.DCRD-TOKEN-SCHL = KARTE-KSB.DCRD-TOKEN-SCHL
+o MKK01850-OUT-S14.DCRD-INHB-APP-DKMT-ID = KARTE-KSB.DCRD-INHB-APP-DKMT-ID
+o MKK01850-OUT-S14.HCE-CLOUD-DKMT-ID = KARTE-KSB.HCE-CLOUD-DKMT-ID
+o MKK01850-OUT-S14.DCRD-BILD-REF-SCHL = KARTE-KSB.DCRD-BILD-REF-SCHL
+o MKK01850-OUT-S14.APP-ID = D-C-APP-ID
+
+S14 - SQL 
+	SELECT KPD.DCRD_TOKEN_SCHL
+		, KPD.DCRD_INHB_APP_DKMT_ID
+		, KPD.HCE_CLOUD_DKMT_ID
+		, KHD.DCRD_BILD_REF_SCHL
+		, SUBSTR(DLS.DKMT_LANG_TEXT,1,256) AS APP_ID
+	
+		---------------------------------------------------
+	INTO  :KARTE-KSB.DCRD-TOKEN-SCHL
+		,:KARTE-KSB.DCRD-INHB-APP-DKMT-ID
+		,:KARTE-KSB.HCE-CLOUD-DKMT-ID
+		,:KARTE-DATEN.DCRD-BILD-REF-SCHL
+		,:D-C-APP-ID
+	-- Digitale Karte HCE
+	FROM KARTE_KSB KPD
+	-- Physische Karte
+	JOIN KARTE_KSB KPP
+	ON KPP.KARTE_ID = KPD.KARTE_ID_HAUPT
+	-- KARTE_DATEN zur physischen Karte
+	JOIN KARTE_DATEN KHD
+	ON KPD.KARTE_ID_HAUPT = KHD.KARTE_ID
+	AND KHD.GUELTIG_BIS = '9999-12-31-23.59.59.999999'
+	-- Ermittlung APP-ID
+	--------------------------------------------------------
+	JOIN DKMT_LANG_SEGM DLS
+	ON DLS.DKMT_LANG_ID = KPD.DCRD_INHB_APP_DKMT_ID
+	AND DLS.DKMT_LANG_TYP = 'KXK'
+	
+	WHERE KPD.KARTE_ID = :KARTE-KSB.KARTE-ID
+      
+Select S15
+LIEFERT ZU EINER ÜBER DIE KARTE-ID SPEZIFIZIERTEN DIGITALEN
+KARTE DEN NIEDRIGSTEN SPERR-SCHLÜSSEL, DEN ZUGEHÖRIGEN SPERR-
+ANLASS, DEN SPERR-SCHLÜSSEL FÜR DIE BANKLEITZAHLENSPERRE
+SOWIE DIE GESAMTANZAHL AN SPERREN, WENN ENTSPRECHENDE SPERREN
+GESETZT SIND.
+S15 - Eingabe
+S15 - Eingabe Expand source 
+              10 MKK01850-IN-S15.
+                 15 KARTE-ID                           PIC  X(26).
+    
+S15 - Ausgabe
+S15 - Ausgabe Expand source 
+              10 MKK01850-OUT-S15.
+                 15 SPER-SCHL-1                        PIC S9(04) COMP.
+                 15 SPER-SCHL-2                        PIC S9(04) COMP.
+  
+S15 - SQL
+Hinweise:
+* Vor dem Select
+o KARTE-KSB.KARTE-ID = MKK01850-IN-S15.KARTE-ID
+* Nach dem Select 
+o MKK01850-OUT-S15.SPER-SCHL-1 = D-N-SPER-SCHL-1
+o MKK01850-OUT-S15.SPER-SCHL-2 = D-N-SPER-SCHL-2
+
+S15 - SQL 
+	SELECT COALESCE(SP1.SPER_SCHL,0) AS SPER_SCHL_1
+		, COALESCE(SP2.SPER_SCHL,0) AS SPER_SCHL_2
+		-------------------------------------------------
+	INTO   :D-N-SPER-SCHL-1
+		, :D-N-SPER-SCHL-2
+		-------------------------------------------------
+		-- KARTE
+	FROM   KARTE_KSB KK
+		-------------------------------------------------
+		-- AUF MÖGLICHE SPERREN PRÜFEN
+	LEFT
+	JOIN   TABLE
+		(
+		SELECT  SN.SPER_SCHL
+		FROM    SPERRE_NEU SN
+		WHERE   SN.BLZ            =  KK.BLZ
+		AND     SN.KONTONR_KARTE  =  KK.KONTONR
+		AND     SN.FREIZGK_SCHL  IN (KK.FREIZGK_SCHL
+									,' ')
+		AND     SN.FOLGENR_KARTE IN (KK.KARTE_FOLGE_NR
+									,-1)
+		AND     SN.VERFALL_DATUM IN (KK.VERFALL_DATUM
+									,'31.12.9999')
+		AND     SN.SPER_SCHL   IN (20,24,36,43,85,86,89)
+		ORDER   BY SN.SPER_SCHL
+		FETCH   FIRST 1 ROW ONLY
+		) SP1
+	ON     1 = 1
+		-------------------------------------------------
+		-- MÖGLICHE BLZ-SPERRE
+	LEFT
+	JOIN   TABLE
+		(
+		SELECT  SN.SPER_SCHL
+		FROM    SPERRE_NEU SN
+		WHERE   SN.BLZ            =  KK.BLZ
+		AND     SN.KONTONR_KARTE  =  0
+		AND     SN.FREIZGK_SCHL   =  ' '
+		AND     SN.FOLGENR_KARTE  =  -1
+		AND     SN.VERFALL_DATUM  =  '31.12.9999'
+		AND     SN.SPER_SCHL      =  29
+			) SP2
+	ON     1 = 1
+		-------------------------------------------------
+		-- WHERE-BEDINGUNG
+	WHERE   KK.KARTE_ID    =  :KARTE-KSB.KARTE-ID
+     
+Update U05
+Update Eintrag zu einer digitalen Karte in Tabelle Karte nach
+Erhalt der Mapping-Informationen
+U05 - Eingabe
+U05 - Eingabe Expand source 
+              10 MKK01850-IN-U05.
+                 15 KARTE-ID                         PIC  X(26).
+                 15 BESTELL-DATUM                    PIC  X(10).
+                    88 B-BESTELL-DATUM-NL            VALUE '01.01.0001'.
+                 15 DCRD-QTTG-STAT                   PIC  X.
+                    88 B-DCRD-QTTG-STAT-NL           VALUE SPACE.
+                    88 B-DCRD-QTTG-STAT-BEST-ERF     VALUE 'B'.
+                    88 B-DCRD-QTTG-STAT-AUSG-ANST    VALUE 'A'.
+                    88 B-DCRD-QTTG-STAT-AUSG-ERF     VALUE 'E'.
+                    88 B-DCRD-QTTG-STAT-AUSG-NMGL    VALUE 'N'.
+                 15 DCRD-BSG-TS                      PIC  X(26).
+                    88 B-DCRD-BSG-TS-NL              VALUE
+                                      '0001-01-01-00.00.00.000000'.
+                 15 MBL-GRAT-DCRD-BTSG-TS            PIC  X(26).
+                    88 B-MBL-GRAT-DCRD-BTSG-TS-NL    VALUE
+                                      '0001-01-01-00.00.00.000000'.
+   
+U05 - Ausgabe
+U05 - Ausgabe Expand source 
+	*** Keine
+  
+U05 - SQL
+Hinweise:
+* Vor dem Update die übergebenen Felder aus MKK01850-IN-U05 nach KARTE-KSB übertragen
+
+U05 - SQL 
+              UPDATE KARTE_KSB
+              SET    BESTELL_DATUM          = :KARTE-KSB.BESTELL-DATUM
+                    ,DCRD_QTTG_STAT         = :KARTE-KSB.DCRD-QTTG-STAT
+                    ,DCRD_BSG_TS            = :KARTE-KSB.DCRD-BSG-TS
+                    ,MBL_GRAT_DCRD_BTSG_TS  =
+                                       :KARTE-KSB.MBL-GRAT-DCRD-BTSG-TS
+              WHERE  KARTE_ID               = :KARTE-KSB.KARTE-ID
+     
+Update U06
+Update Eintrag zu einer digitalen Karte in Tabelle Karte nach
+Erhalte der Quittung zur Ausgabe eines HCE-Tokens auf dem Handy
+U06 - Eingabe
+U06 - Eingabe Expand source 
+              10 MKK01850-IN-U06.
+                 15 KARTE-ID                         PIC  X(26).
+                 15 AUSGABE-DATUM                    PIC  X(10).
+                    88 B-AUSGABE-DATUM-NL            VALUE '01.01.0001'.
+                 15 DCRD-QTTG-STAT                   PIC  X.
+                    88 B-DCRD-QTTG-STAT-NL           VALUE SPACE.
+                    88 B-DCRD-QTTG-STAT-BEST-ERF     VALUE 'B'.
+                    88 B-DCRD-QTTG-STAT-AUSG-ANST    VALUE 'A'.
+                    88 B-DCRD-QTTG-STAT-AUSG-ERF     VALUE 'E'.
+                    88 B-DCRD-QTTG-STAT-AUSG-NMGL    VALUE 'N'.
+                 15 DCRD-QTTG-CODE-LTZT              PIC S9(09).
+                    88 B-DCRD-QTTG-CODE-LTZT-NL      VALUE -1.
+                 15 MBL-GRAT-DCRD-AUSG-TS            PIC  X(26).
+                    88 B-MBL-GRAT-DCRD-AUDG-TS-NL    VALUE
+                                      '0001-01-01-00.00.00.000000'.
+   
+U06 - Ausgabe
+U06 - Ausgabe Expand source 
+	*** Keine
+  
+U06 - SQL
+Hinweise:
+* Vor dem Update die übergebenen Felder aus MKK01850-IN-U06 nach KARTE-KSB übertragen
+
+U06 - SQL 
+              UPDATE KARTE_KSB
+              SET    AUSGABE_DATUM          = :KARTE-KSB.AUSGABE-DATUM
+                    ,DCRD_QTTG_STAT         = :KARTE-KSB.DCRD-QTTG-STAT
+                    ,DCRD_QTTG_CODE_LTZT    =
+                                       :KARTE-KSB.DCRD-QTTG-CODE-LTZT
+                    ,MBL_GRAT_DCRD_AUSG_TS  =
+                                       :KARTE-KSB.MBL-GRAT-DCRD-AUSG-TS
+              WHERE  KARTE_ID               = :KARTE-KSB.KARTE-ID
+    
+
+
+
