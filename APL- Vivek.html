@@ -1,9 +1,333 @@
-Monitoring & Logging Bereich	APL Dokument Abschnitt
-Logging API & Konfiguration	Abschnitt 2.3
-Logging-Annotationen für Methoden	Abschnitt 2.3.2
-Speicherung und Verwaltung von Logs	Abschnitt 2.3.3
-Logging-Level und Debugging	Abschnitt 2.3.4
-Standard-Logging-Level für Produktion	Abschnitt 2.3.5
-Mapped Diagnostic Context (MDC)	Abschnitt 2.3.7
-Prometheus-Metriken Endpoint	Abschnitt 2.4.4.1
-Health-Check API (Liveness/Readiness)	Abschnitt 2.5.2
+ 
+
+Das Inhaltsverzeichnis für diesen Abschnitt wird für den PDF-Export nicht berücksichtigt.
+
+
+
+Fachliche Beschreibung - IST
+Funktionsbeschreibung
+Ziel der Funktion ist es, unter Angabe der Kartenmerkmale einer physischen Co-Badge-Karte und eines Token die Daten der zugehörigen digitalen Karte zu bestimmen. 
+
+Zur Eingabe 
+
+Kartenmerkmale BLZ, Kontonummer, Folgenummer, Freizügigkeitsschlüssel und Verfalldatum ("5 Freunde") einer physischen Karte
+digitalen PAN (Token)
+liefert die Funktion  
+
+Kartenmerkmale BLZ, Kontonummer, Folgenummer, Freizügigkeitsschlüssel und Verfalldatum ("5 Freunde") 
+Kartenart,
+Karte-ID und Objekt-Key
+einer digitalen Karte.
+
+Zusätzlich prüft die Funktion, ob die digitale Karte gesperrt ist und gibt ein entsprechendes Merkmal aus. 
+
+Die Funktion liest die Tabellen KARTE_KSB zu physischer und digitaler Karte und KARTE_DATEN_KSB zur digitalen Karte. 
+
+
+
+Felder und deren Verwendung	Erläuterungen und ggf. Beschreibung zum Datenelement (Rochade)
+KA: KARTE_KSB zur physischen Karte
+KA.KONTONR = MKK01850-IN-S11.KONTONR
+KA.BLZ = MKK01850-IN-S11.BLZ
+KA.VERFALL_DATUM = MKK01850-IN-S11.VERFALL-DATUM
+KA.KARTE_FOLGE_NR = MKK01850-IN-S11.KARTE-FOLGE-NR
+KA.FREIZGK_SCHL = '1'	
+Bedingung an physische Karte
+
+Kartenmerkmale entsprechen der Eingabe, FREIZGK_SCHL = 1
+
+KA.KARTE_ART = 'V-EC-KARTE'	
+Bedingung an physische Karte
+
+KA.LOESCH_DATUM   = '01.01.0001' oder
+KA.LOESCH_DATUM   > aktuelles Datum         	
+Bedingung an physische Karte
+
+KA.BESTELL_DATUM  > '01.01.0001'
+KA.KARTE_NR > 0
+KA.DKRT_KRKT_NR   > 0	
+Bedingung an physische Karte
+
+KA.DEBIT_KARTE_ZHSM   = 'G'	
+Bedingung an physische Karte
+
+DEBIT_KARTE_ZHSM   = 'G': COBADGE ZHSM
+
+DEBIT_KARTE_ZHSM ist der Schlüssel einer Zentralisierungsstelle für Zahlungsströme und  Autorisierungsnachrichten für Debitkartenverfügungen.
+
+Zulässige Werte (SVZ EMV) sind:
+M: Maestro
+V: V PAY
+G: Girocard
+
+KA.DKRT_KRKT_NTZG_MM IN ('D','H', 'P')
+
+Im SVZ DMC ist der Wert 'D' nicht mehr vorhanden, der Wert kann in der Abfrage entfallen.
+
+Bedingung an physische Karte
+
+DKRT_KRKT_NTZG_MM IN ('D','H'): VID
+DKRT_KRKT_NTZG_MM IN ('P'): DMC
+
+DKRT_KRKT_NTZG_MM ist ein Merkmal zur Nutzung einer Debitkarte mit zusätzlichem Zahlungssystem für die Sparkassen-Card (V-EC-KARTE).
+
+Ausprägungen (SVZ DMC):
+N: ohne zusätzliches Zahlungssystem
+P: physische DMC
+H: physische VID
+
+DIG.DKRT_KRKT_NR   = MKK01850-IN-S11.DKRT-KRKT-NR
+
+Bedingung an digitale Karte
+
+Digitale PAN entspricht PAN aus Eingabe
+
+DIG.VERFALL_DATUM >= CURRENT DATE
+DIG.BESTELL_DATUM  > '01.01.0001'
+(DIG.LOESCH_DATUM   = '01.01.0001' oder 
+                    DIG.LOESCH_DATUM   > CURRENT DATE)
+
+Bedingung an digitale Karte
+
+Karte nicht verfallen, bestellt und nicht gelöscht
+
+DIG.FREIZGK_SCHL   = '1'
+
+Bedingung an digitale Karte
+
+FREIZGK_SCHL = 1
+
+DIG.DCRD_QTTG_STAT = 'E'
+
+Bedingung an digitale Karte
+
+Status der Quittung des HCE-Servers zu einer digitalen Karte:
+Ausgabe der Quittung auf Endgerät erfolgt
+
+Grundsätzlich zulässige Werte für DCRD_QTTG_STAT:
+B - Bestellung erfolgt
+A - Ausgabe der Quittung auf Endgerät anstehend
+E - Ausgabe der Quittung auf Endgerät erfolgt
+N - Ausgabe der Quittung auf Endgerät nicht möglich.
+
+DIG: KARTE_KSB zur digitalen Karte 
+
+DIG.KARTE_ID_HAUPT = KA.KARTE_ID	
+Verknüpfung digitale Karte in KARTE_KSB zur physischen Karte 
+
+KD: KARTE_DATEN_KSB zur digitalen Karte
+
+KD.KARTE_ID = DIG.KARTE_ID
+KD.GUELTIG_AB <= CURRENT TIMESTAMP
+KD.GUELTIG_BIS >= CURRENT TIMESTAMP
+
+Verknüpfung digitale Karte in KARTE_KSB zum aktuell gültigen Datensatz in KARTE_DATEN_KSB
+
+
+
+Technische Beschreibung - IST
+Technische Umsetzung und Aufrufvarianten
+Die Funktion ist als eine Aufrufvariante des Cobol-Moduls MKK01850 implementiert (Funktionscode "S11"). 
+
+Diese und weitere Funktionen des Cobol-Moduls sind näher beschrieben unter Zugriffsmodul MKK01850.
+
+Eingabeparameter
+
+
+Feldbezeichnung	Datentyp	Werteset	Notizen und Sonstiges
+MKK01850-DATEN-S11
+
+MKK01850-IN-S11
+
+
+BLZ	long	DB2 DECIMAL(8,0)	Kartenmerkmal ("5 Freunde") einer physischen Karte
+
+
+KONTONR	long	DB2 DECIMAL(10,0)	Kartenmerkmal ("5 Freunde") einer physischen Karte
+
+
+FREIZGK-SCHL	char(01)	
+Kartenmerkmal ("5 Freunde") einer physischen Karte
+
+
+VERFALL-DATUM	char(10)	DB2 Date	Kartenmerkmal ("5 Freunde") einer physischen Karte
+
+
+KARTE-FOLGE-NR	int	DB2 INTEGER	Kartenmerkmal ("5 Freunde") einer physischen Karte
+
+
+DKRT-KRKT-NR	char(16)	
+Primary Account Number (PAN), eindeutige Kartennummer der digitalen Karte, die ermittelt werden soll
+
+Möglichen Arten der PAN:
+
+Co-Badge-PAN
+PAN der digitalen Karte (in MDES/VTS)
+PAN des Händler-Tokens (in MDES/VTS)
+
+
+VERFALL-DIGI	char(10)	DB2 Date	
+Ohne Verwendung
+
+Kommentar im Modul MKK01850 vom 12.02.2021: Keine Berücksichtigung des Eingabefeldes VERFALL-DIGI in Funktion S11.
+
+Ausgabeparameter
+
+
+Feldbezeichnung	Datentyp	Werteset	Notizen und Sonstiges
+
+MKK01850-OUT
+
+
+MKK01850-RETURNCODE	byte	0 (ok)
+1 (unzulässiger Funktionscode)
+2 (ungültige/ unvollständige Parameter)
+3 (keine Daten (SQL Code 100)
+99 (SQL Code <> 0 und <> 100)	
+
+
+MKK01850-SQL-RETURNCODE	short	SQL Code aus SQLCA	belegt, wenn MKK01850-RETURNCODE = 99 (SQL Code <> 0 und <> 100)
+
+MKK01850-OUT-S11
+
+
+BLZ	long	DB2 DECIMAL(8,0)	Kartenmerkmal ("5 Freunde") einer digitalen Karte
+
+
+KONTONR	long	DB2 DECIMAL(10,0)	Kartenmerkmal ("5 Freunde") einer digitalen Karte
+
+
+FREIZGK-SCHL	char(01)	
+Kartenmerkmal ("5 Freunde") einer digitalen Karte
+
+
+VERFALL-DATUM	char(10)	DB2 Date	Kartenmerkmal ("5 Freunde") einer digitalen Karte
+
+
+KARTE-FOLGE-NR	int	DB2 INTEGER	Kartenmerkmal ("5 Freunde") einer digitalen Karte
+
+
+KARTE-ART	char(12)	Kartenart der digitalen Karte	
+Werteset für alle Karten (digital und physisch):
+
+V-EC-KARTE: EC-Karten/SparkassenCards
+V-S-CARD: S-Card
+V-AUTOMA-KA: Automatenkarten
+V-KUNDEN-KA: Kundenkarten
+V-HAENDLERKA: Händlerkarten (physisch)
+V-HAENDLER-V: Händlerkarten (virtuell)
+V-WERTKARTE: Wertkarten/HBCI-Karten
+V-EUROCARD: Eurocard
+V-VISA-CARD: Visacard
+V-SPARCARD: Sparcard
+V-MC-PCS: Eurocard PCS
+V-VI-PCS: Visacard PCS
+V-GELDKARTE: Geldkarte
+V-DIGI-KARTE: Digitale Karte
+V-APPL-KARTE: Apple Pay-Karte
+V-MERCHTOKEN: Händler-Token
+
+
+
+KARTE-ID	char(26)	Timestamp	Karte-ID der digitalen Karte
+
+
+OBJEKT-KEY	char(26)	Timestamp	Objekt-Key der digitalen Karte
+
+
+MDES-SPERRE	char(01)	J: Sperre Ja
+N: Sperre Nein	Merkmal, ob digitale Karte gesperrt ist
+Detailablauf
+Schritt 1: Vorlauf und Initialisierung 
+Die Eingabeparameter werden wie folgt geprüft. Falls eine Bedingung nicht erfüllt ist, ist das ein Eingabefehler und die Funktion wird nicht ausgeführt. Es wird MKK01850-RETURNCODE = 2 (ungültige/ unvollständige Parameter) gesetzt.
+
+Falls MKK01850-IN-S11.BLZ nicht numerisch
+   or MKA01000-IN-S11.BLZ = 0
+   or MKK01850-IN-S11.KONTONR nicht numerisch
+   or MKK01850-IN-S11.KONTONR = 0
+   or MKK01850-IN-S11.KARTE-FOLGE-NR nicht numerisch
+   or MKK01850-IN-S11.VERFALLDATUM ist leer
+   or MKK01850-IN-S11.VERFALLDATUM ist '01.01.0001' 
+   or MKK01850-IN-S11.VERFALLDATUM ist '31.12.9999'
+   or MKK01850-IN-S11.FREIZGK-SCHL ist nicht '1'
+   or MKK01850-IN-S11.DKRT-KRKT-NR nicht numerisch   
+   or MKK01850-IN-S11.DKRT-KRKT-NR = 0
+ 
+Dann ist das ein entsprechender Eingabefehler.
+
+
+Schritt 2: Datenbankzugriff
+Anhand der in der Eingabeschnittstelle übergebenen Kartenmerkmale ("5 Freunde") und der PAN der digitalen Karte werden die Kartenmerkmale der digitalen Karte ermittelt.  
+
+            EXEC SQL
+              SELECT DIG.BLZ
+                   , DIG.KONTONR
+                   , DIG.FREIZGK_SCHL
+                   , DIG.VERFALL_DATUM
+                   , DIG.KARTE_FOLGE_NR
+                   , DIG.KARTE_ART
+                   , DIG.KARTE_ID
+                   , DIG.OBJEKT_KEY
+                   , CASE WHEN KD.DCRD_SPER_GRND = ''
+                          THEN 'N' ELSE 'J'
+                     END AS MDES_SPERRE
+              INTO  :KARTE-KSB.BLZ
+                   ,:KARTE-KSB.KONTONR
+                   ,:KARTE-KSB.FREIZGK-SCHL
+                   ,:KARTE-KSB.VERFALL-DATUM
+                   ,:KARTE-KSB.KARTE-FOLGE-NR
+                   ,:KARTE-KSB.KARTE-ART
+                   ,:KARTE-KSB.KARTE-ID
+                   ,:KARTE-KSB.OBJEKT-KEY
+                   ,:D-C-MDES-SPERRE
+
+              FROM   KARTE_KSB KA -- PHYS  SPARKASSEN-CARD MIT DMC/VID
+
+              JOIN   KARTE_KSB DIG
+              ON     DIG.KARTE_ID_HAUPT = KA.KARTE_ID
+
+              JOIN   KARTE_DATEN_KSB KD
+              ON     KD.KARTE_ID       = DIG.KARTE_ID
+              AND    KD.GUELTIG_AB    <= CURRENT TIMESTAMP
+              AND    KD.GUELTIG_BIS   >= CURRENT TIMESTAMP
+
+              WHERE  KA.KONTONR        = :KARTE.KONTONR
+              AND    KA.BLZ            = :KARTE.BLZ
+              AND    KA.VERFALL_DATUM  = :KARTE.VERFALL-DATUM
+              AND    KA.FREIZGK_SCHL   = :KARTE.FREIZGK-SCHL
+              AND    KA.FREIZGK_SCHL   = '1'
+              AND    KA.KARTE_FOLGE_NR = :KARTE.KARTE-FOLGE-NR
+              AND    KA.KARTE_ART      = 'V-EC-KARTE'
+              AND   (KA.LOESCH_DATUM   = '01.01.0001'
+                  OR KA.LOESCH_DATUM   > CURRENT DATE)
+              AND    KA.BESTELL_DATUM  > '01.01.0001'
+              AND    KA.KARTE_NR       > 0
+              AND    KA.DKRT_KRKT_NR   > 0             -- COBADGE KNR
+              AND    KA.DEBIT_KARTE_ZHSM   = 'G'       -- COBADGE ZHSM
+              AND    KA.DKRT_KRKT_NTZG_MM IN ('D','H'  -- VID
+                                             ,'P')     -- DMC
+              AND    DIG.DKRT_KRKT_NR   = :KARTE.DKRT-KRKT-NR
+              AND    DIG.VERFALL_DATUM >= CURRENT DATE
+              AND    DIG.FREIZGK_SCHL   = '1'
+              AND    DIG.DCRD_QTTG_STAT = 'E'
+              AND    DIG.BESTELL_DATUM  > '01.01.0001'
+              AND   (DIG.LOESCH_DATUM   = '01.01.0001'
+                  OR DIG.LOESCH_DATUM   > CURRENT DATE)
+
+           END-EXEC
+Laut Kommentar erfolgt der Datenbankzugriff über FETCH FIRST 1 ROW ONLY. 
+
+Fehlermeldungen
+Fehler	Bedingung	Ausgabe	Text
+1	Eingabeparameter fehlerhaft	MKK01850-RETURNCODE = 2 	
+ungültige/ unvollständige Parameter
+
+2	SQLCODE aus DB-Zugriff  == 100 	MKK01850-RETURNCODE = 3	keine Daten (SQL Code 100)
+3	SQLCODE aus DB-Zugriff <> 0  und <> 100	
+MKK01850-RETURNCODE = 3
+
+MKK01850-SQL-RETURNCODE
+= SQLCODE aus DB-Zugriff 
+
+SQL Code <> 0 und <> 100
+ 
