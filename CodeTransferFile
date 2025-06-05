@@ -1,45 +1,375 @@
-025-06-05 12:13:07.909  INFO 21592 --- [omcat-handler-0] o.a.c.c.C.[.[localhost].[/pkppuma]      : Initializing Spring DispatcherServlet 'dispatcherServlet'
-2025-06-05 12:13:07.909  INFO 21592 --- [omcat-handler-0] o.s.web.servlet.DispatcherServlet       : Initializing Servlet 'dispatcherServlet'
-2025-06-05 12:13:07.912  INFO 21592 --- [omcat-handler-0] o.s.web.servlet.DispatcherServlet       : Completed initialization in 3 ms
-2025-06-05 12:13:08.364  INFO 21592 --- [omcat-handler-0] o.a.c.d.s.OnlineSessionContextProvider  : Login against https://en02-dev.sfg-mkg-etaps.intern/fisession/keepAlive ends with status 200. RequestId: c57087fd-6ecb-4fea-9e27-498d25cb33ef
-2025-06-05 12:13:41.149  INFO 21592 --- [omcat-handler-2] o.a.c.d.s.OnlineSessionContextProvider  : Login against https://en02-dev.sfg-mkg-etaps.intern/fisession/keepAlive ends with status 200. RequestId: 61620eab-f384-4c4c-b80e-0baa469916e7
+https://issuing-solutions.eae.apis.svc.as8677.net/issbox/api/v2/issuers/{issuerId}/cards/{cardReference}/disputes
 
+Content type
+application/json
 
-package osplus.pkppuma.uimodule;
+Response 200 
 
-import osplus.apl.core.api.validation.AplValidated;
-import osplus.apl.uui.api.MethodType;
-import osplus.apl.uui.api.UiModule;
-import osplus.apl.uui.api.UiService;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.util.Map;
-
-@UiModule("helloModule")
-@AplValidated
-public class InitialUiModule {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(InitialUiModule.class);
-
-    @UiService(value = "dateTime", method = MethodType.GET, internalOnly = true, requiresAuthentication = false)
-    public Map<String, Object> getDateTimeInfo() {
-        final Instant instant = Instant.now();
-        final long currentTimeMillis = instant.toEpochMilli();
-        final String dateTimeString = DateTimeUtil.DATE_TIME_FORMATTER.format(instant.atOffset(ZoneOffset.UTC));
-        final ZoneId serverTimezone = ZoneId.systemDefault();
-
-        return Map.of(
-                "dateTime", dateTimeString,
-                "zoneId", serverTimezone,
-                "epoch", currentTimeMillis
-        );
+{
+  "responseMetadata": {
+    "correlationId": "string",
+    "links": {
+      "self": "/x/{x}?x=x",
+      "next": "/x/{x}?page[offset]=2"
+    },
+    "statusMessage": "Executed successfully",
+    "statusCode": 200,
+    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+    "timeTakenMs": 12
+  },
+  "data": [
+    {
+      "issuerId": "string",
+      "disputeFolderIdentifier": {
+        "disputeFolderReference": "string",
+        "issuerDisputeExternalReference": "string"
+      },
+      "events": [
+        {
+          "type": "string",
+          "message": "string",
+          "external": true,
+          "creationDate": "2025-06-05T13:07:38Z"
+        }
+      ],
+      "postings": [
+        {
+          "postingAmount": {
+            "value": 0,
+            "exponent": 0,
+            "isoCode": "string"
+          },
+          "message": "string",
+          "immediateReimbursement": true,
+          "postingTypeReference": "string",
+          "operationReference": "string",
+          "disputeAdjustmentType": "string",
+          "creationDate": "2025-06-05T13:07:38Z"
+        }
+      ],
+      "documents": [
+        {
+          "data": "string",
+          "type": "string",
+          "label": "string",
+          "fileName": "string",
+          "creationDate": "2025-06-05T13:07:38Z"
+        }
+      ],
+      "messages": [
+        {
+          "type": "string",
+          "status": "string",
+          "creationDate": "2025-06-05T13:07:38Z",
+          "amount": {
+            "value": 0,
+            "exponent": 0,
+            "isoCode": "string"
+          },
+          "reasonCode": "string",
+          "reasonCodeDescription": "string",
+          "reverseFlag": true,
+          "schemeCaseId": "string"
+        }
+      ],
+      "acquirerReferenceData": "string",
+      "transactionType": "string",
+      "transactionTime": "2025-06-05T13:07:38Z",
+      "transactionAmount": {
+        "value": 0,
+        "exponent": 0,
+        "isoCode": "string"
+      },
+      "reconciliationAmount": {
+        "value": 0,
+        "exponent": 0,
+        "isoCode": "string"
+      },
+      "billingAmount": {
+        "value": 0,
+        "exponent": 0,
+        "isoCode": "string"
+      },
+      "billingFees": {
+        "value": 0,
+        "exponent": 0,
+        "isoCode": "string"
+      },
+      "outstandingBalance": {
+        "value": 0,
+        "exponent": 0,
+        "isoCode": "string"
+      },
+      "issuerAccountingBalance": {
+        "value": 0,
+        "exponent": 0,
+        "isoCode": "string"
+      },
+      "statusCode": "string",
+      "reason": "string",
+      "creationDate": "2025-06-05T13:07:38Z",
+      "cardAcceptorName": "string",
+      "cardAcceptorCity": "string",
+      "cardAcceptorCountry": "string",
+      "cardAcceptorIdCode": "string",
+      "cardAcceptorZipCode": "string",
+      "userInCharge": "string",
+      "cardIdentifier": {
+        "cardReference": "string",
+        "issuerCardExternalReference": "string"
+      },
+      "lastMessageType": "string",
+      "lastMessageDate": "2025-06-05T13:07:38Z",
+      "lastMessageStatus": "string",
+      "superFolderReference": "string",
+      "transactionCategory": "string",
+      "transmissionDate": "2025-06-05T13:07:38Z",
+      "clientOpenDate": "2025-06-05T13:07:38Z"
     }
+  ]
+}
 
+Response 400 
+
+{
+  "responseMetadata": {
+    "correlationId": 12,
+    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+    "statusCode": 400,
+    "statusMessage": "Bad request"
+  }
+}
+
+Response 401
+
+{
+  "responseMetadata": {
+    "correlationId": 12,
+    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+    "statusCode": 401,
+    "statusMessage": "Unauthorized"
+  }
+}
+
+Response 403
+
+{
+  "responseMetadata": {
+    "correlationId": 12,
+    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+    "statusCode": 403,
+    "statusMessage": "Forbidden"
+  }
+}
+
+Response 404
+
+{
+  "responseMetadata": {
+    "correlationId": 12,
+    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+    "statusCode": 404,
+    "statusMessage": "Not found"
+  }
+}
+
+Response 500 
+
+{
+  "responseMetadata": {
+    "correlationId": 12,
+    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+    "statusCode": 500,
+    "statusMessage": "Internal server error"
+  }
+}
+
+Response 502
+
+{
+  "responseMetadata": {
+    "correlationId": 12,
+    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+    "statusCode": 502,
+    "statusMessage": "Bad Gateway"
+  }
 }
 
 
- curl -X GET http://localhost:8080/pkppuma/helloModule/v1/dateTime/v1
+--------------------------------
+
+//path Parameters
+issuerId , required, string
+Issuer ID
+
+cardReference
+required
+string
+Card Reference
+
+//query Parameters
+filter
+Array of strings
+Filtered Fields
+
+embed
+Array of strings
+Items Enum: "events" "postings" "documents" "messages"
+Embedded Fields
+
+// header Parameters
+WL-Correlation-ID
+string
+WL-Origin
+string
+
+----------------------------------------------------
+Response Schema: application/json
+responseMetadata
+required
+object
+Response metadata
+
+data
+Array of objects (Dispute)
+Response data
+
+Array 
+issuerId
+string
+Issuer Identifier (unique per platform)
+
+disputeFolderIdentifier
+object
+Dispute Folder Identifier
+
+events
+Array of objects (DisputeEvent)
+Events attached to the dispute folder.Event can be triggered by our system or added by the issuer (purpose can to indicate a communication from/to cardholder)
+
+postings
+Array of objects (DisputePosting)
+Posted operation on the dispute folder, example : Do a refund towards the cardholder account, Do a write-off towards an issuer account (Profit and Loss, Fraud,..), do a Foreign exchange fee, Financial Advice Exchange Rate Difference
+
+documents
+Array of objects (DisputeDocument)
+Documents added to the dispute folder
+
+messages
+Array of objects (DisputeMessage)
+Messages exchanged with the scheme linked to the dispute folder
+
+acquirerReferenceData
+string
+Acquiring Reference Number (ARN) related to the disputed transaction
+
+transactionType
+string
+DEPRECATED
+
+transactionTime
+string <date-time>
+Transaction Date and Time on the Merchant site related to the disputed transaction
+
+transactionAmount
+object
+Transaction Amount (Value/Currency/Currency Exponent) related to the disputed transaction
+
+reconciliationAmount
+object
+Scheme Reconciliation Amount (Value/Currency/Currency Exponent) related to the disputed transaction
+
+billingAmount
+object
+Cardholder Billing Amount (Value/Currency/Currency Exponent) related to the disputed transaction on Cardholder point of view
+
+billingFees
+object
+Cardholder Billing Fees Amount (Value/Currency/Currency Exponent) associated to the disputed transaction on Cardholder point of view
+
+outstandingBalance
+object
+Cardholder Outstanding balance (Value/Currency/Currency Exponent) associated to the disputed transaction
+
+issuerAccountingBalance
+object
+Issuer Accounting Balance (Value/Currency/Currency Exponent) related to the dispute on issuer point of view
+
+statusCode
+string
+Dispute status (open, closed) associated to the Dispute Folder
+
+reason
+string
+Dispute Reason associated to the Dispute Folder
+
+creationDate
+string <date-time>
+Date of the Dispute Folder creation
+
+cardAcceptorName
+string
+Merchant Address Name related to the disputed transaction
+
+cardAcceptorCity
+string
+Merchant Address City related to the disputed transaction
+
+cardAcceptorCountry
+string
+Merchant Address Country Code (num-3) related to the disputed transaction
+
+cardAcceptorIdCode
+string
+Merchant Identifier related to the disputed transaction
+
+cardAcceptorZipCode
+string
+Merchant Address Zip Code related to the disputed transaction
+
+userInCharge
+string
+User in charge of the Dispute Folder
+
+cardIdentifier
+object
+Card Identifier related to the disputed transaction
+
+lastMessageType
+string
+Type of the last Message of the Dispute Folder
+
+lastMessageDate
+string <date-time>
+Date of the last Message of the Dispute Folder
+
+lastMessageStatus
+string
+Status of the last Message of the Dispute Folder
+
+superFolderReference
+string
+Super folder reference if super folder exists
+
+transactionCategory
+string
+Internal Transaction category (SALES, CASH_WITHDRAWAL, etc ..) related to the disputed transaction
+
+transmissionDate
+string <date-time>
+Transmission date from the scheme MCI : PDS 0158 - s5 Central Site Business Date VISA : TCR0 164-167 Central Processing Date (YDDD)
+
+clientOpenDate
+string <date-time>
+Date when the cardholder has raised the Dispute, used to track the receipt of the cardholder dispute
+
+----------------------------
+
+For all negative response codes like 400 , 401 403 etc
+
+400 Bad request
+Response Schema: application/json
+responseMetadata
+required
+object
+Response metadata
