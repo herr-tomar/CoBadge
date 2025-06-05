@@ -1,207 +1,45 @@
-C:\Projekte\workbench\java21-zulu\bin\java.exe -DUMG_ENV_TYPE=NICHT-PROD -Dfi.localhost=127.0.0.1 -Dmanagement.server.port=8088 --add-opens java.base/java.util=ALL-UNNAMED -XX:TieredStopAtLevel=1 -Dspring.output.ansi.enabled=always -Dcom.sun.management.jmxremote -Dspring.jmx.enabled=true -Dspring.liveBeansView.mbeanDomain -Dspring.application.admin.enabled=true "-Dmanagement.endpoints.jmx.exposure.include=*" -javaagent:C:\Werkbank\UW-2023.3.4\intellij\lib\idea_rt.jar=63140:C:\Werkbank\UW-2023.3.4\intellij\bin -Dfile.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8 -classpath C:\Users\j769180\AppData\Local\Temp\classpath1484018994.jar osplus.apl.core.AplCoreRunner
+025-06-05 12:13:07.909  INFO 21592 --- [omcat-handler-0] o.a.c.c.C.[.[localhost].[/pkppuma]      : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2025-06-05 12:13:07.909  INFO 21592 --- [omcat-handler-0] o.s.web.servlet.DispatcherServlet       : Initializing Servlet 'dispatcherServlet'
+2025-06-05 12:13:07.912  INFO 21592 --- [omcat-handler-0] o.s.web.servlet.DispatcherServlet       : Completed initialization in 3 ms
+2025-06-05 12:13:08.364  INFO 21592 --- [omcat-handler-0] o.a.c.d.s.OnlineSessionContextProvider  : Login against https://en02-dev.sfg-mkg-etaps.intern/fisession/keepAlive ends with status 200. RequestId: c57087fd-6ecb-4fea-9e27-498d25cb33ef
+2025-06-05 12:13:41.149  INFO 21592 --- [omcat-handler-2] o.a.c.d.s.OnlineSessionContextProvider  : Login against https://en02-dev.sfg-mkg-etaps.intern/fisession/keepAlive ends with status 200. RequestId: 61620eab-f384-4c4c-b80e-0baa469916e7
 
 
-__________________        _______ ________ ______ 
-___  ____/____  _/        ___    |___  __ \___  / 
-__  /_     __  /  __________  /| |__  /_/ /__  /  
-_  __/    __/ /   _/_____/_  ___ |_  ____/ _  /___
-/_/       /___/           /_/  |_|/_/      /_____/
-© Finanz Informatik GmbH & Co. KG
-=> 251.0.0-M3
-Anwendungs-Name: pkppuma
-Anwendungs-Version: 0.0.1-SNAPSHOT
-Based on SpringBoot 3.4.5
-Based on SpringCloud-Commons 4.2.0
+package osplus.pkppuma.uimodule;
 
+import osplus.apl.core.api.validation.AplValidated;
+import osplus.apl.uui.api.MethodType;
+import osplus.apl.uui.api.UiModule;
+import osplus.apl.uui.api.UiService;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
 
-2025-06-05 11:47:19.909  INFO 21592 --- [           main] osplus.apl.core.AplCoreRunner           : Starting AplCoreRunner v251.0.0-M3 using Java 21.0.3 with PID 21592 (C:\Projekte\.m2\repository\osplus\apl\apl-core-runner\251.0.0-M3\apl-core-runner-251.0.0-M3.jar started by j769180 in C:\DEV\pkppuma-mkp)
-2025-06-05 11:47:19.910  INFO 21592 --- [           main] osplus.apl.core.AplCoreRunner           : No active profile set, falling back to 1 default profile: "default"
-2025-06-05 11:47:21.290  INFO 21592 --- [           main] o.a.core.dyns.servicescan.DynsRegistrar : !!! DynS classpath scanning enabled !!!
-Please refer to apl-dyns-services.txt in APL docs to see how to speed up your application start
-2025-06-05 11:47:21.291  INFO 21592 --- [           main] o.a.core.dyns.servicescan.DynsRegistrar : Pre DynS classpath scanning: 39 ms
-2025-06-05 11:47:21.605  INFO 21592 --- [           main] o.a.core.dyns.servicescan.DynsRegistrar : Post DynS classpath scanning: 354 ms
-2025-06-05 11:47:21.608  INFO 21592 --- [           main] o.a.core.dyns.servicescan.DynsRegistrar : Post DynS Service initialization: 356 ms
-2025-06-05 11:47:22.179  INFO 21592 --- [           main] ptablePropertiesBeanFactoryPostProcessor: Post-processing PropertySource instances
-2025-06-05 11:47:22.181  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Skippin**********Source configurationProperties [class org.springframework.boot.context.properties.source.ConfigurationPropertySourcesPropertySource
-2025-06-05 11:47:22.183  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Skippin**********Source servletConfigInitParams [class org.springframework.core.env.PropertySource$StubPropertySource
-2025-06-05 11:47:22.183  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Skippin**********Source servletContextInitParams [class org.springframework.core.env.PropertySource$StubPropertySource
-2025-06-05 11:47:22.184  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource systemProperties [org.springframework.core.env.PropertiesPropertySource] to EncryptableMapPropertySourceWrapper
-2025-06-05 11:47:22.184  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource systemEnvironment [org.springframework.boot.env.SystemEnvironmentPropertySourceEnvironmentPostProcessor$OriginAwareSystemEnvironmentPropertySource] to EncryptableSystemEnvironmentPropertySourceWrapper
-2025-06-05 11:47:22.184  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource random [org.springframework.boot.env.RandomValuePropertySource] to EncryptablePropertySourceWrapper
-2025-06-05 11:47:22.184  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource Config resource 'class path resource [application.properties]' via location 'optional:classpath:/' [org.springframework.boot.env.OriginTrackedMapPropertySource] to EncryptableMapPropertySourceWrapper
-2025-06-05 11:47:22.184  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource springCloudClientHostInfo [org.springframework.core.env.MapPropertySource] to EncryptableMapPropertySourceWrapper
-2025-06-05 11:47:22.184  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource applicationInfo [org.springframework.boot.ApplicationInfoPropertySource] to EncryptableMapPropertySourceWrapper
-2025-06-05 11:47:22.184  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource class path resource [apl-aaa-command.properties] [org.springframework.core.io.support.ResourcePropertySource] to EncryptableMapPropertySourceWrapper
-2025-06-05 11:47:22.184  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource class path resource [apl-und-client.properties] [org.springframework.core.io.support.ResourcePropertySource] to EncryptableMapPropertySourceWrapper
-2025-06-05 11:47:22.184  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource class path resource [mkp-products.properties] [org.springframework.core.io.support.ResourcePropertySource] to EncryptableMapPropertySourceWrapper
-2025-06-05 11:47:22.184  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource class path resource [apl-fiss-client.properties] [org.springframework.core.io.support.ResourcePropertySource] to EncryptableMapPropertySourceWrapper
-2025-06-05 11:47:22.185  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource class path resource [apl-local-online.properties] [org.springframework.core.io.support.ResourcePropertySource] to EncryptableMapPropertySourceWrapper
-2025-06-05 11:47:22.185  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource class path resource [apl-local.properties] [org.springframework.core.io.support.ResourcePropertySource] to EncryptableMapPropertySourceWrapper
-2025-06-05 11:47:22.185  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource class path resource [apl-grid.properties] [org.springframework.core.env.CompositePropertySource] to EncryptableEnumerablePropertySourceWrapper
-2025-06-05 11:47:22.185  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource class path resource [mkp-build.properties] [org.springframework.core.io.support.ResourcePropertySource] to EncryptableMapPropertySourceWrapper
-2025-06-05 11:47:22.185  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource class path resource [apl-auth-application.properties] [org.springframework.core.io.support.ResourcePropertySource] to EncryptableMapPropertySourceWrapper
-2025-06-05 11:47:22.185  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource class path resource [apl-httpclient.properties] [org.springframework.core.io.support.ResourcePropertySource] to EncryptableMapPropertySourceWrapper
-2025-06-05 11:47:22.185  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource class path resource [apl-administration.properties] [org.springframework.core.io.support.ResourcePropertySource] to EncryptableMapPropertySourceWrapper
-2025-06-05 11:47:22.185  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource class path resource [apl-core.properties] [org.springframework.core.io.support.ResourcePropertySource] to EncryptableMapPropertySourceWrapper
-2025-06-05 11:47:22.185  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource class path resource [apl-core-runner.properties] [org.springframework.core.io.support.ResourcePropertySource] to EncryptableMapPropertySourceWrapper
-2025-06-05 11:47:22.193  INFO 21592 --- [           main] c.u.j.filter.DefaultLazyPropertyFilter  : Property Filter custom Bean not found with name 'encryptablePropertyFilter'. Initializing Default Property Filter
-2025-06-05 11:47:22.204  INFO 21592 --- [           main] c.u.j.r.DefaultLazyPropertyResolver     : Property Resolver custom Bean not found with name 'encryptablePropertyResolver'. Initializing Default Property Resolver
-2025-06-05 11:47:22.206  INFO 21592 --- [           main] c.u.j.d.DefaultLazyPropertyDetector     : Property Detector custom Bean not found with name 'encryptablePropertyDetector'. Initializing Default Property Detector
-2025-06-05 11:47:22.246  INFO 21592 --- [           main] o.s.c.a.ConfigurationClassEnhancer      : @Bean method DynsAutoConfiguration.foServiceBeanFactoryPostProcessor is non-static and returns an object assignable to Spring's BeanFactoryPostProcessor interface. This will result in a failure to process annotations such as @Autowired, @Resource and @PostConstruct within the method's declaring @Configuration class. Add the 'static' modifier to this method to avoid these container lifecycle issues; see @Bean javadoc for complete details.
-2025-06-05 11:47:22.390  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'osplus.apl.core.cache.memory.MemoryCacheRepository' of type [osplus.apl.core.cache.memory.MemoryCacheRepository] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:22.534  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'osplus.apl.core.cache.MemoryCacheIntegration' of type [osplus.apl.core.cache.MemoryCacheIntegration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:22.558  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'osplus.apl.autoconfigure.OnlineDevelopmentAutoConfiguration' of type [osplus.apl.autoconfigure.OnlineDevelopmentAutoConfiguration$$SpringCGLIB$$0] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:22.700  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'org.hibernate.validator.internal.constraintvalidators.bv.NotNullValidator' of type [org.hibernate.validator.internal.constraintvalidators.bv.NotNullValidator] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:22.707  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'org.hibernate.validator.internal.constraintvalidators.bv.PatternValidator' of type [org.hibernate.validator.internal.constraintvalidators.bv.PatternValidator] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:22.711  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'org.hibernate.validator.internal.constraintvalidators.bv.NotNullValidator' of type [org.hibernate.validator.internal.constraintvalidators.bv.NotNullValidator] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:22.711  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'org.hibernate.validator.internal.constraintvalidators.bv.notempty.NotEmptyValidatorForCharSequence' of type [org.hibernate.validator.internal.constraintvalidators.bv.notempty.NotEmptyValidatorForCharSequence] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:22.732  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'osplus.fiss.apl.client.cache.FissGridCacheConfig' of type [osplus.fiss.apl.client.cache.FissGridCacheConfig] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:22.735  INFO 21592 --- [           main] a.a.AplLocalDevelopmentAutoConfiguration: Umgebungsvariable fi.localhost gesetzt = V100WPWMK1XJ46D
-2025-06-05 11:47:22.819  INFO 21592 --- [           main] o.f.c.c.h.api.HazelcastCacheInitializer : Initializing hazelcast cache provider
-2025-06-05 11:47:22.869  INFO 21592 --- [           main] o.f.c.c.h.impl.HazelcastCacheProvider   : Hazelcast client config: ClientConfig{properties={hazelcast.client.internal.skip.member.list.during.reconnection=true}, clusterName=grid-hazelcastimdg-in03, securityConfig=ClientSecurityConfig{identityConfig=null, realmConfigs={}}, networkConfig=ClientNetworkConfig{addressList=[EN02-dev.sfg-mkg-etaps.intern:5701], redoOperation=false, connectionTimeout=5000, socketInterceptorConfig=SocketInterceptorConfig{className='null', enabled=false, implementation=null, properties={}}, socketOptions=SocketOptions{tcpNoDelay=true, keepAlive=true, reuseAddress=true, lingerSeconds=3, bufferSizeInKB=128}, sslConfig=null, awsConfig=AliasedDiscoveryConfig{tag='aws', enabled=false, usePublicIp=false, properties={}}, gcpConfig=AliasedDiscoveryConfig{tag='gcp', enabled=false, usePublicIp=false, properties={}}, azureConfig=AliasedDiscoveryConfig{tag='azure', enabled=false, usePublicIp=false, properties={}}, kubernetesConfig=AliasedDiscoveryConfig{tag='kubernetes', enabled=false, usePublicIp=false, properties={}}, eurekaConfig=AliasedDiscoveryConfig{tag='eureka', enabled=false, usePublicIp=false, properties={}}, cloudConfig=ClientCloudConfig{enabled=false}, discoveryConfig=DiscoveryConfig{discoveryStrategyConfigs=[], discoveryServiceProvider=null, nodeFilter=null, nodeFilterClass='null'}, outboundPortDefinitions=null, outboundPorts=null, clientIcmpPin**********ientIcmpPin**********abled=false, timeoutMilliseconds=1000, intervalMilliseconds=1000, echoFailFastOnStartup=true, ttl=255, maxAttempts=2}, clusterRoutingConfig=ClusterRoutingConfig{routingMode=SINGLE_MEMBER, routingStrategy=PARTITION_GROUPS}}, loadBalancer=null, loadBalancerClassName=null, listenerConfigs=[], instanceName='EN02-apl-pkppuma', configPatternMatcher=com.hazelcast.config.matcher.MatchingPointConfigPatternMatcher@5de14222, nearCacheConfigMap={}, reliableTopicConfigMap={}, queryCacheConfigs={}, serializationConfig=SerializationConfig{portableVersion=0, dataSerializableFactoryClasses={}, dataSerializableFactories={}, portableFactoryClasses={}, portableFactories={}, globalSerializerConfig=null, serializerConfigs=[], checkClassDefErrors=true, classDefinitions=[], byteOrder=BIG_ENDIAN, useNativeByteOrder=false, javaSerializationFilterConfig=null, allowOverrideDefaultSerializers=false}, nativeMemoryConfig=NativeMemoryConfig{enabled=false, size=512 MEGABYTES, allocatorType=POOLED, minBlockSize=16, pageSize=4194304, metadataSpacePercentage=12.5, persistentMemoryConfig=PersistentMemoryConfig{enabled=false, mode=MOUNTED, directoryConfigs=[]}}, proxyFactoryConfigs=[], connectionStrategyConfig=ClientConnectionStrategyConfig{asyncStart=false, reconnectMode=ASYNC, connectionRetryConfig=ConnectionRetryConfig{, initialBackoffMillis=1000, maxBackoffMillis=30000, multiplier=1.05, clusterConnectTimeoutMillis=30000, jitter=0.0}}, userCodeDeploymentConfig=ClientUserCodeDeploymentConfig{enabled=false, classNames=[], jarPaths=[]}, backupAckToClientEnabled=true, flakeIdGeneratorConfigMap={}, labels=[], metricsConfig=ClientMetricsConfig{enabled=true, jmxConfig=MetricsJmxConfig{enabled=true}, collectionFrequencySeconds=5}, instanceTrackingConfig=InstanceTrackingConfig{enabled=false, fileName='null', formatPattern='null'}, sqlConfig=ClientSqlConfig{resubmissionMode=NEVER}, tpcConfig=ClientTpcConfig{enabled=false, connectionCount=1}, cpDirectToLeaderRoutingEnabled=false}
-2025-06-05 11:47:22.870  INFO 21592 --- [           main] o.f.c.c.h.i.s.CompactSerializerUtil     : No compact serializer defined for type class osplus.fi.core.fisession.grid.entities.WebSessionKey, using generic compact serializer
-2025-06-05 11:47:22.878  INFO 21592 --- [           main] o.f.c.c.h.i.s.CompactSerializerUtil     : No compact serializer defined for type class osplus.fi.core.fisession.grid.entities.FiSessionKey, using generic compact serializer
-2025-06-05 11:47:22.879  INFO 21592 --- [           main] o.f.c.c.h.i.s.CompactSerializerUtil     : No compact serializer defined for type class osplus.fi.core.fisession.grid.entities.FiSessionKey, using generic compact serializer
-2025-06-05 11:47:22.880  INFO 21592 --- [           main] o.f.c.c.h.i.s.CompactSerializerUtil     : No compact serializer defined for type class osplus.fi.core.fisession.grid.entities.FiSessionValue, using generic compact serializer
-2025-06-05 11:47:22.881  INFO 21592 --- [           main] o.f.c.c.h.i.s.CompactSerializerUtil     : No compact serializer defined for type class osplus.fi.core.fisession.grid.entities.FiSessionApplicationKey, using generic compact serializer
-2025-06-05 11:47:22.885  INFO 21592 --- [           main] o.f.c.c.h.impl.HazelcastCacheProvider   : hazelcast maps used: [mkp_session_web_session_fi_session_id_mappin**********p_session_fi_session_data_EN02, mkp_session_application_data_EN02, mkp_gridcache_fiss_SESSION_sUserPermission_EN02, mkp_gridcache_fiss_SESSION_permissionFineDefinition_EN02]
-2025-06-05 11:47:22.885  INFO 21592 --- [           main] o.f.c.c.h.impl.HazelcastCacheProvider   : connect hazelcast client ...
-2025-06-05 11:47:23.423  INFO 21592 --- [           main] c.h.c.impl.spi.ClientInvocationService  : EN02-apl-pkppuma [grid-hazelcastimdg-in03] [5.5.5] Running with 2 response threads, dynamic=true
-2025-06-05 11:47:23.497  INFO 21592 --- [           main] com.hazelcast.core.LifecycleService     : EN02-apl-pkppuma [grid-hazelcastimdg-in03] [5.5.5] HazelcastClient 5.5.5 (20250319) is STARTING
-2025-06-05 11:47:23.498  INFO 21592 --- [           main] com.hazelcast.core.LifecycleService     : EN02-apl-pkppuma [grid-hazelcastimdg-in03] [5.5.5] HazelcastClient 5.5.5 (20250319) is STARTED
-2025-06-05 11:47:23.499  INFO 21592 --- [uma.lifecycle-1] o.f.c.c.h.i.status.CacheStatusUpdater   : Hazelcast client state changed to STARTING.
-2025-06-05 11:47:23.499  INFO 21592 --- [uma.lifecycle-1] o.f.c.c.h.i.status.CacheStatusUpdater   : Hazelcast client state changed to STARTED.
-2025-06-05 11:47:23.544  INFO 21592 --- [           main] c.h.c.i.c.ClientConnectionManager       : EN02-apl-pkppuma [grid-hazelcastimdg-in03] [5.5.5] Trying to connect to cluster: grid-hazelcastimdg-in03
-2025-06-05 11:47:23.580  INFO 21592 --- [           main] c.h.c.i.c.ClientConnectionManager       : EN02-apl-pkppuma [grid-hazelcastimdg-in03] [5.5.5] Trying to connect to [EN02-dev.sfg-mkg-etaps.intern]:5701
-2025-06-05 11:47:23.690  INFO 21592 --- [           main] c.h.c.impl.spi.ClientClusterService     : EN02-apl-pkppuma [grid-hazelcastimdg-in03] [5.5.5] Members [3] {
-	Member [10.128.16.10]:5701 - f8c87092-22d3-4001-b574-cdd2a7f8ea71
-	Member [10.128.18.11]:5701 - 7e9be5b3-4ee0-4968-bb61-bf9add9962ae
-	Member [10.130.6.17]:5701 - 90293dcc-66e2-4fe6-b29c-fccb896cf147
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.Map;
+
+@UiModule("helloModule")
+@AplValidated
+public class InitialUiModule {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(InitialUiModule.class);
+
+    @UiService(value = "dateTime", method = MethodType.GET, internalOnly = true, requiresAuthentication = false)
+    public Map<String, Object> getDateTimeInfo() {
+        final Instant instant = Instant.now();
+        final long currentTimeMillis = instant.toEpochMilli();
+        final String dateTimeString = DateTimeUtil.DATE_TIME_FORMATTER.format(instant.atOffset(ZoneOffset.UTC));
+        final ZoneId serverTimezone = ZoneId.systemDefault();
+
+        return Map.of(
+                "dateTime", dateTimeString,
+                "zoneId", serverTimezone,
+                "epoch", currentTimeMillis
+        );
+    }
+
 }
 
-2025-06-05 11:47:23.692  INFO 21592 --- [           main] com.hazelcast.core.LifecycleService     : EN02-apl-pkppuma [grid-hazelcastimdg-in03] [5.5.5] HazelcastClient 5.5.5 (20250319) is CLIENT_CONNECTED
-2025-06-05 11:47:23.693  INFO 21592 --- [uma.lifecycle-1] o.f.c.c.h.i.status.CacheStatusUpdater   : Hazelcast client state changed to CLIENT_CONNECTED.
-2025-06-05 11:47:23.693  INFO 21592 --- [           main] c.h.c.i.c.ClientConnectionManager       : EN02-apl-pkppuma [grid-hazelcastimdg-in03] [5.5.5] Authenticated with server [10.128.18.11]:5701:7e9be5b3-4ee0-4968-bb61-bf9add9962ae, server version: 5.5.5, local address: /16.160.180.99:63166
-2025-06-05 11:47:23.694  INFO 21592 --- [           main] c.h.internal.diagnostics.Diagnostics    : EN02-apl-pkppuma [grid-hazelcastimdg-in03] [5.5.5] Diagnostics disabled. To enable add -Dhazelcast.diagnostics.enabled=true to the JVM arguments.
-2025-06-05 11:47:23.726  INFO 21592 --- [           main] c.h.c.i.s.ClientStatisticsService       : Client statistics is enabled with period 5 seconds.
-2025-06-05 11:47:23.762  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'mkp.proxy-osplus.fi.core.config.MkpProxyProperties' of type [osplus.fi.core.config.MkpProxyProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:24.083  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'sessionIdExtractor' of type [osplus.apl.core.development.session.LocalSessionIdService] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:24.087  INFO 21592 --- [           main] c.u.j.encryptor.DefaultLazyEncryptor    : String Encryptor custom Bean not found with name 'jasyptStringEncryptor'. Initializing Default String Encryptor
-2025-06-05 11:47:24.101  INFO 21592 --- [           main] c.u.j.c.StringEncryptorBuilder          : Encryptor config not found for property jasypt.encryptor.algorithm, using default value: PBEWITHHMACSHA512ANDAES_256
-2025-06-05 11:47:24.101  INFO 21592 --- [           main] c.u.j.c.StringEncryptorBuilder          : Encryptor config not found for property jasypt.encryptor.key-obtention-iterations, using default value: 1000
-2025-06-05 11:47:24.101  INFO 21592 --- [           main] c.u.j.c.StringEncryptorBuilder          : Encryptor config not found for property jasypt.encryptor.pool-size, using default value: 1
-2025-06-05 11:47:24.101  INFO 21592 --- [           main] c.u.j.c.StringEncryptorBuilder          : Encryptor config not found for property jasypt.encryptor.provider-name, using default value: null
-2025-06-05 11:47:24.101  INFO 21592 --- [           main] c.u.j.c.StringEncryptorBuilder          : Encryptor config not found for property jasypt.encryptor.provider-class-name, using default value: null
-2025-06-05 11:47:24.101  INFO 21592 --- [           main] c.u.j.c.StringEncryptorBuilder          : Encryptor config not found for property jasypt.encryptor.salt-generator-classname, using default value: org.jasypt.salt.RandomSaltGenerator
-2025-06-05 11:47:24.102  INFO 21592 --- [           main] c.u.j.c.StringEncryptorBuilder          : Encryptor config not found for property jasypt.encryptor.iv-generator-classname, using default value: org.jasypt.iv.RandomIvGenerator
-2025-06-05 11:47:24.103  INFO 21592 --- [           main] c.u.j.c.StringEncryptorBuilder          : Encryptor config not found for property jasypt.encryptor.string-output-type, using default value: base64
-2025-06-05 11:47:24.296  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'mkp-osplus.fi.core.config.ProductConfigurationProperties' of type [osplus.fi.core.config.ProductConfigurationProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:24.302  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'onlineSessionContextProvider' of type [osplus.apl.core.development.session.OnlineSessionContextProvider] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:24.386  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'fiss.client-osplus.apl.core.properties.FissClientCertificateProperties' of type [osplus.apl.core.properties.FissClientCertificateProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:24.393  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'osplus.apl.core.dyns.serializer.DynsModule' of type [osplus.apl.core.dyns.serializer.DynsModule] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:24.665  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'fiSessionServiceClient' of type [osplus.fi.core.fisession.FiSessionServiceClientImpl] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:24.674  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'fiSessionServiceClientNoGrid' of type [osplus.fi.core.fisession.FiSessionServiceClientNoGridImpl] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:24.685  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'osplus.apl.core.cache.support.AplCacheKeyExtender' of type [osplus.apl.core.cache.support.AplCacheKeyExtender] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:24.688  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'osplus.apl.core.cache.support.AplMemoryCacheBridge' of type [osplus.apl.core.cache.support.AplMemoryCacheBridge] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:24.841  WARN 21592 --- [           main] trationDelegate$BeanPostProcessorChecker: Bean 'osplus.apl.core.authentication.permission.AplPermissionProperties' of type [osplus.apl.core.authentication.permission.AplPermissionProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [healthEndpointGroupsBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
-2025-06-05 11:47:25.331  INFO 21592 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer : Tomcat initialized with port 8080 (http)
-2025-06-05 11:47:25.344  INFO 21592 --- [           main] o.apache.catalina.core.StandardService  : Starting service [Tomcat]
-2025-06-05 11:47:25.344  INFO 21592 --- [           main] o.apache.catalina.core.StandardEngine   : Starting Servlet engine: [Apache Tomcat/10.1.40]
-2025-06-05 11:47:25.374  INFO 21592 --- [           main] o.a.c.c.C.[.[localhost].[/pkppuma]      : Initializing Spring embedded WebApplicationContext
-2025-06-05 11:47:25.374  INFO 21592 --- [           main] w.s.c.ServletWebServerApplicationContext: Root WebApplicationContext: initialization completed in 5312 ms
-2025-06-05 11:47:29.414  WARN 21592 --- [           main] .a.c.c.s.CorsConfigurerCustomizerFactory: Configuring restriction-less CORS Configuration for local development
-2025-06-05 11:47:29.445  WARN 21592 --- [           main] .a.c.c.s.CorsConfigurerCustomizerFactory: Configuring restriction-less CORS Configuration for local development
-2025-06-05 11:47:29.448  INFO 21592 --- [           main] o.a.c.a.AplCoreSecurityConfiguration    : anonymousPathList: [osplus.apl.autoconfigure.AplLocalDevelopmentAutoConfiguration$$Lambda/0x000002269a9ad5a0@6766260e, osplus.apl.uui.service.security.UuiAnonymousPaths@d4fe4d, osplus.apl.autoconfigure.OnlineDevelopmentAutoConfiguration$$Lambda/0x000002269a9c7b08@39911d6a, osplus.apl.autoconfigure.UniversalUiAutoConfiguration$1@2cb9cc85]
-2025-06-05 11:47:29.561  WARN 21592 --- [           main] i.m.core.instrument.MeterRegistry       : This Gauge has been already registered (MeterId{name='utc.timediff', tags=[]}), the registration will be ignored. Note that subsequent logs will be logged at debug level.
-2025-06-05 11:47:29.636  INFO 21592 --- [           main] o.a.configuration.DynsAplConfiguration  : Activate DynsAplConfiguration with Ausfallmenge (EN02)
-20250605 11:47:29 DynSSystemConfiguration: ***###*** Start einer neuen Applikation ***###*** Framework Version 5.Y2  Java-Version: 21.0.3
-2025-06-05 11:47:29.658  INFO 21592 --- [           main] d.s.d.s.DynSSystemConfiguration         : ***###*** Start einer neuen Applikation ***###*** Framework Version 5.Y2  Java-Version: 21.0.3
-2025-06-05 11:47:29.658  INFO 21592 --- [           main] d.s.d.s.DynSSystemConfiguration         : DynSSystemConfigurationInitialisierung... Frameworkversion 5.Y2
-2025-06-05 11:47:29.660  INFO 21592 --- [           main] d.s.d.s.DynSSystemConfiguration         : Die System-Property sun.net.http.retryPost wurde auf false gesetzt, damit langlaufende POST-Requests im Fall eines Verbindungs-Abbruchs nicht erneut gesendet werden. Siehe dazu auch https://docs.oracle.com/javase/8/docs/technotes/guides/net/properties.html sowie https://bugs.java.com/bugdatabase/view_bug.do?bug_id=6382788
-2025-06-05 11:47:29.660  INFO 21592 --- [           main] d.s.d.s.DynSSystemConfiguration         : DynS-Properties werden gelesen aus: C:\Users\j769180\AppData\Local\Temp\dyns9445488668463300245
-20250605 11:47:29 DynSSystemConfiguration: C:\Users\j769180\AppData\Local\Temp\dyns9445488668463300245: Version null / null / null
-20250605 11:47:29 DynSSystemConfiguration: Das Laden der Systemkonfiguration erfolgte mit folgenden Werten:
-*** DynSSystemConfiguration ***
-*** Umgebung ***
-+ UMG_ENV_INTERNET: false
-+ UMG_ENV_TYPE: NICHT-PROD
-*** Schema ***
-+ transaktion: PMS3
-+ programmContainerC: MDC24000
-+ programmContainerJavaFdp: JPGMDY
-+ programmContainerJavaOo: JPGMDY
-+ cics-codepage: IBM273
-*** Defaults ***
-+ evasion-duration: 1800000
-+ evasion-no-switch-time: 0
-+ CICS-heartbeat-timeout: 5000
-+ langlaeufer-warnung: 30000
-+ DatenTransport Java-Strg: DTT_FREE(???)
-+ use-internal-WS-Pool: false
-+ use-jca: false
-+ max-anzahl-bfdp-ws-instanzen: 50
 
-2025-06-05 11:47:30.629  INFO 21592 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer : Tomcat started on port 8080 (http) with context path '/pkppuma'
-2025-06-05 11:47:30.629  INFO 21592 --- [           main] u.j.c.RefreshScopeRefreshedEventListener: Refreshing cached encryptable property sources on ServletWebServerInitializedEvent
-2025-06-05 11:47:30.630  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source systemProperties refreshed
-2025-06-05 11:47:30.630  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source systemEnvironment refreshed
-2025-06-05 11:47:30.630  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source random refreshed
-2025-06-05 11:47:30.630  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source Config resource 'class path resource [application.properties]' via location 'optional:classpath:/' refreshed
-2025-06-05 11:47:30.630  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source springCloudClientHostInfo refreshed
-2025-06-05 11:47:30.630  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source applicationInfo refreshed
-2025-06-05 11:47:30.630  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-aaa-command.properties] refreshed
-2025-06-05 11:47:30.630  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-und-client.properties] refreshed
-2025-06-05 11:47:30.630  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [mkp-products.properties] refreshed
-2025-06-05 11:47:30.630  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-fiss-client.properties] refreshed
-2025-06-05 11:47:30.630  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-local-online.properties] refreshed
-2025-06-05 11:47:30.630  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-local.properties] refreshed
-2025-06-05 11:47:30.630  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-grid.properties] refreshed
-2025-06-05 11:47:30.630  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [mkp-build.properties] refreshed
-2025-06-05 11:47:30.630  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-auth-application.properties] refreshed
-2025-06-05 11:47:30.631  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-httpclient.properties] refreshed
-2025-06-05 11:47:30.631  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-administration.properties] refreshed
-2025-06-05 11:47:30.631  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-core.properties] refreshed
-2025-06-05 11:47:30.631  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-core-runner.properties] refreshed
-2025-06-05 11:47:30.631  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Skippin**********Source configurationProperties [class org.springframework.boot.context.properties.source.ConfigurationPropertySourcesPropertySource
-2025-06-05 11:47:30.631  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Skippin**********Source servletConfigInitParams [class org.springframework.core.env.PropertySource$StubPropertySource
-2025-06-05 11:47:30.631  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource servletContextInitParams [org.springframework.web.context.support.ServletContextPropertySource] to EncryptableEnumerablePropertySourceWrapper
-2025-06-05 11:47:30.755  INFO 21592 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer : Tomcat initialized with port 8088 (http)
-2025-06-05 11:47:30.755  INFO 21592 --- [           main] o.apache.catalina.core.StandardService  : Starting service [Tomcat]
-2025-06-05 11:47:30.755  INFO 21592 --- [           main] o.apache.catalina.core.StandardEngine   : Starting Servlet engine: [Apache Tomcat/10.1.40]
-2025-06-05 11:47:30.763  INFO 21592 --- [           main] o.a.c.c.C.[Tomcat-1].[localhost].[/]    : Initializing Spring embedded WebApplicationContext
-2025-06-05 11:47:30.763  INFO 21592 --- [           main] w.s.c.ServletWebServerApplicationContext: Root WebApplicationContext: initialization completed in 124 ms
-2025-06-05 11:47:30.780  INFO 21592 --- [           main] o.s.b.a.e.web.EndpointLinksResolver     : Exposing 15 endpoints beneath base path '/management'
-2025-06-05 11:47:31.358  INFO 21592 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer : Tomcat started on port 8088 (http) with context path '/'
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] u.j.c.RefreshScopeRefreshedEventListener: Refreshing cached encryptable property sources on ServletWebServerInitializedEvent
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source servletContextInitParams refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source systemProperties refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source systemEnvironment refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source random refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source Config resource 'class path resource [application.properties]' via location 'optional:classpath:/' refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source springCloudClientHostInfo refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source applicationInfo refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-aaa-command.properties] refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-und-client.properties] refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [mkp-products.properties] refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-fiss-client.properties] refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-local-online.properties] refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-local.properties] refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-grid.properties] refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [mkp-build.properties] refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-auth-application.properties] refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-httpclient.properties] refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-administration.properties] refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-core.properties] refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-core-runner.properties] refreshed
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource server.ports [org.springframework.core.env.MapPropertySource] to EncryptableMapPropertySourceWrapper
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Skippin**********Source configurationProperties [class org.springframework.boot.context.properties.source.ConfigurationPropertySourcesPropertySource
-2025-06-05 11:47:31.359  INFO 21592 --- [           main] c.u.j.EncryptablePropertySourceConverter: Skippin**********Source servletConfigInitParams [class org.springframework.core.env.PropertySource$StubPropertySource
-2025-06-05 11:47:31.377  INFO 21592 --- [           main] osplus.apl.core.AplCoreRunner           : Started AplCoreRunner in 11.987 seconds (process running for 12.799)
-2025-06-05 11:47:33.702  INFO 21592 --- [puma.internal-2] c.h.c.util.ClientConnectivityLogger     : EN02-apl-pkppuma [grid-hazelcastimdg-in03] [5.5.5] 
-
-Client Connectivity [3] {
-	Member [10.128.16.10]:5701 - f8c87092-22d3-4001-b574-cdd2a7f8ea71 - disconnected
-	Member [10.128.18.11]:5701 - 7e9be5b3-4ee0-4968-bb61-bf9add9962ae - connected
-	Member [10.130.6.17]:5701 - 90293dcc-66e2-4fe6-b29c-fccb896cf147 - disconnected
-}
-
+ curl -X GET http://localhost:8080/pkppuma/helloModule/v1/dateTime/v1
