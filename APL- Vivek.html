@@ -1,428 +1,189 @@
-
-
- 
-
-Die Überschriften auf dieser Seite entsprechen den Überschriften des Word-Templates für Fachspezifikationen und im ersten Abschnitt Fachlich angelehnt an die Beschreibung eines DynS-Service im DynS-Handbuch.
-
-Das Inhaltsverzeichnis an dieser Stelle dient nur dem Überblick über die Wiki-Seite, es wird beim PDF-Export nicht berücksichtigt.
-
-
-Fachlich
-Fachliche Beschreibung
-
-Ziel des DynS-Service ist es, unter Angabe einer physischen Karte und eines Token die Daten der zugehörigen digitale Karte zu bestimmen, d.h. in diesem Sinne den Token in eine digitale Karte „umzuwandeln“.
-
-Zur Eingabe 
-
-    Kartenmerkmale BLZ, Kontonummer, Folgenummer, Freizügigkeitsschlüssel und Verfalldatum ("5 Freunde") oder Karte-ID einer physischen Karte
-    digitalen PAN (Token)
-
-liefert der DynS-Service
-
-    Kartenmerkmale BLZ, Kontonummer, Folgenummer, Freizügigkeitsschlüssel und Verfalldatum ("5 Freunde") 
-    Kartenart,
-    Karte-ID und Objekt-Key
-
-einer digitalen Karte.
-
-Zusätzlich prüft der Service, ob die digitale Karte gesperrt ist und gibt ein entsprechendes Merkmal aus. 
-
-Die Funktion liest die Tabellen KARTE_KSB zu physischer und digitaler Karte und KARTE_DATEN_KSB zur digitalen Karte. 
-
-Felder und deren Verwendung	Erläuterungen und ggf. Beschreibung zum Datenelement (Rochade)
-KA: KARTE_KSB zur physischen Karte
-KA.KONTONR = MKK01850-IN-S11.KONTONR
-KA.BLZ = MKK01850-IN-S11.BLZ
-KA.VERFALL_DATUM = MKK01850-IN-S11.VERFALL-DATUM
-KA.KARTE_FOLGE_NR = MKK01850-IN-S11.KARTE-FOLGE-NR
-KA.FREIZGK_SCHL = '1'	
-
-Bedingung an physische Karte
-
-Kartenmerkmale entsprechen der Eingabe, FREIZGK_SCHL = 1
-KA.KARTE_ART = 'V-EC-KARTE'	
-
-Bedingung an physische Karte
-KA.LOESCH_DATUM   = '01.01.0001' oder
-KA.LOESCH_DATUM   > aktuelles Datum         	
-
-Bedingung an physische Karte
-KA.BESTELL_DATUM  > '01.01.0001'
-KA.KARTE_NR > 0
-KA.DKRT_KRKT_NR   > 0	
-
-Bedingung an physische Karte
-KA.DEBIT_KARTE_ZHSM   = 'G'	
-
-Bedingung an physische Karte
-
-DEBIT_KARTE_ZHSM   = 'G': COBADGE ZHSM
-
-DEBIT_KARTE_ZHSM ist der Schlüssel einer Zentralisierungsstelle für Zahlungsströme und  Autorisierungsnachrichten für Debitkartenverfügungen.
-
-Zulässige Werte (SVZ EMV) sind:
-M: Maestro
-V: V PAY
-G: Girocard
-
-KA.DKRT_KRKT_NTZG_MM IN ('H', 'P')
-	
-
-Bedingung an physische Karte
-
-DKRT_KRKT_NTZG_MM IN ('H'): VID
-DKRT_KRKT_NTZG_MM IN ('P'): DMC
-
-DKRT_KRKT_NTZG_MM ist ein Merkmal zur Nutzung einer Debitkarte mit zusätzlichem Zahlungssystem für die Sparkassen-Card (V-EC-KARTE).
-
-Ausprägungen (SVZ DMC):
-N: ohne zusätzliches Zahlungssystem
-P: physische DMC
-H: physische VID
-
-DIG.DKRT_KRKT_NR   = MKK01850-IN-S11.DKRT-KRKT-NR
-	
-
-Bedingung an digitale Karte
-
-Digitale PAN entspricht PAN aus Eingabe
-
-DIG.VERFALL_DATUM >= CURRENT DATE
-DIG.BESTELL_DATUM  > '01.01.0001'
-(DIG.LOESCH_DATUM   = '01.01.0001' oder 
-                    DIG.LOESCH_DATUM   > CURRENT DATE)
-	
-
-Bedingung an digitale Karte
-
-Karte nicht verfallen, bestellt und nicht gelöscht
-
-DIG.FREIZGK_SCHL   = '1'
-	
-
-Bedingung an digitale Karte
-
-FREIZGK_SCHL = 1
-
-DIG.DCRD_QTTG_STAT = 'E'
-	
-
-Bedingung an digitale Karte
-
-Status der Quittung des HCE-Servers zu einer digitalen Karte:
-Ausgabe der Quittung auf Endgerät erfolgt
-
-Grundsätzlich zulässige Werte für DCRD_QTTG_STAT:
-B - Bestellung erfolgt
-A - Ausgabe der Quittung auf Endgerät anstehend
-E - Ausgabe der Quittung auf Endgerät erfolgt
-N - Ausgabe der Quittung auf Endgerät nicht möglich.
-
-DIG: KARTE_KSB zur digitalen Karte 
-DIG.KARTE_ID_HAUPT = KA.KARTE_ID	
-
-Verknüpfung digitale Karte in KARTE_KSB zur physischen Karte 
-
-KD: KARTE_DATEN_KSB zur digitalen Karte
-
-KD.KARTE_ID = DIG.KARTE_ID
-KD.GUELTIG_AB <= CURRENT TIMESTAMP
-KD.GUELTIG_BIS >= CURRENT TIMESTAMP
-	
-
-Verknüpfung digitale Karte in KARTE_KSB zum aktuell gültigen Datensatz in KARTE_DATEN_KSB
-
-
-Aufrufvarianten
-
-Für den Service existiert eine Aufrufvarianten mit Eingabe der Kartenmerkmale Bankleitzahl, Kontonummer, Kartefolgenummer, Verfalldatum und Freizügigkeitsschlüssel ("5 Freunde") zur Ermittlung der Daten und eine weitere Aufrufvariante mit Eingabe der Karten-ID. 
-Vorbedingungen
-
-Keine
-Nachbedingungen
-
-Keine
-Eingabeparameter und Aufrufvarianten
-
-Der Service bietet zwei unterschiedliche Aufrufvarianten. 
-Aufrufvariante 1: Service-Operation CoBadgeDCRDErmittelnUeberKarteID
-
-Die Funktion wird zu derjenigen Karte ausgeführt, die durch die angegebene Karten-ID eindeutig identifiziert werden kann. 
-
-Feld	Datentyp	Pflicht	Default	Werteset	Notizen und sonstigen
-
-CoBadgeDCRDErmittelnUeberKarteIDEingabe
-KARTE_ID	
-
-ID-Timestamp
-	
-
-Ja
-	
-
-
-	
-
-
-	
-
-Künstlicher Schlüssel (gedrehter Timestamp) zur Identifizierung einer Karte.
-DKRT_KRKT_NR	
-
-char(16)
-	
-
-Ja
-	
-
-
-	
-
-
-	
-
-Primary Account Number (PAN), eindeutige Kartennummer der digitalen Karte, die ermittelt werden soll
-Aufrufvariante 2: Service-Operation CoBadgeDCRDErmittelnUeberKartenmerkmale
-
-Die Funktion wird zu derjenigen Karte ausgeführt, die durch die angegebenen Kartenmerkmale ("5 Freunde") eindeutig identifiziert werden kann. 
-
-Feld	Datentyp	Pflicht	Default	Werteset	Notizen und sonstigen
-CoBadgeDCRDErmittelnUeberKartenmerkmaleEingabe
-BLZ	Integer	Ja	
-	
-	Bankleitzahl zur Identifizierung der Karte 
-KONTONR	Long	Ja	
-	
-	Kontonr. zur Identifizierung der Karte 
-VERFALL_DATUM	Date	Ja	
-	
-	Verfalldatum zur Identifizierung der Karte 
-KARTE_FOLGE_NR	Integer	Ja	
-	
-	Karte-Folge-Nr. zur Identifizierung der Karte 
-FREIZGK_SCHL	String(1)	Ja	
-	
-	Freizügigkeitsschlüssel zur Identifizierung der Karte 
-DKRT_KRKT_NR	char(16)	ja	
-	
-	Primary Account Number (PAN), eindeutige Kartennummer der digitalen Karte, die ermittelt werden soll
-Produktiveinsatz (Plan)
-
-Eingesetzt mit Release	OSPlus 25.0
-Produktiv ab	OSPlus 25.0
-Weitere Angaben
-
-Schnittstellenart	Objektorientiert
-Benutzte Datentypen	Modell-Datentypen
-Zugriffsart	lesend
-Ergebniskardinalität	1
-Komplexität der Funktion	2
-Leistungsnummer	180302: Komplexer einzeilig lesender DynS-Service
-Bereitstellungszeit	ohne Ausnahme
-Ausgabeparameter (SOLL)
-
-Name des Ausgabefachobjekts: CoBadgeDCRDErmittelnAusgabe
-
-Beschreibung des Ausgabefachobjekts: Ausgabefachobjekt zum DynS-Service COBADGE_DCRD_ERMITTELN
-
-Feldbezeichnung (technisch)
-	
-
-Datentyp
-	
-
-Bezeichnung (fachlich)
-	
-
-Definition / Beschreibung
-CoBadgeDCRDErmittelnAusgabe
-
-	KONTONR    	long	Kontonummer	Bei der Kontonummer handelt es sich um das Identifikationsmerkmal des Kontos.
-
-	BLZ	long	Bankleitzahl	Jedes inländische Institut ist eindeutig durch die Bankleitzahl
-identifiziert.                          
-
-	KARTE_FOLGE_NR	int	Kartenfolgenummer	Interne Folge-Nr. zur Unterscheidung mehrerer Karten pro Konto
-
-	VERFALL_DATUM	
-	Verfalldatum	Verfalldatum der Karte
-
-	FREIZGK_SCHL	char(10)	Freizügigkeitsschlüssel	Der Freizügigkeitsschlüssel ist das Kennzeichen für die Kartenart einer Karte.               
-
-	KARTE_ART	char(12)	Kartenart der digitalen Karte	
-
-	KARTE_ID	char(26)	Timestamp	Karte-ID der digitalen Karte
-
-	OBJEKT_KEY	char(26)	Timestamp	Objekt-Key der digitalen Karte
-
-	MDES_SPERRE_MM	char(01)	J: Sperre Ja
-N: Sperre Nein	Merkmal, ob digitale Karte gesperrt ist
-Detailablauf (SOLL)
-Schritt 1: Vorlauf und Initialisierung (SOLL)
-
-Für beide Aufrufvarianten wird geprüft, ob DKRT_KRKT_NR nicht leer und numerisch ist. 
-
-Für die Aufrufvariante 2 (Aufruf über Kartenmerkmale) werden die Eingabeparameter wie folgt geprüft. 
-
-Falls BLZ nicht numerisch or BLZ = 0
-   or KONTONR nicht numerisch or KONTONR = 0
-   or KARTE_FOLGE_NR nicht numerisch
-   or VERFALL_DATUM ist leer
-   or VERFALLDATUM ist '01.01.0001'
-   or VERFALLDATUM ist '31.12.9999'    
-   or FREIZGK_SCHL ist leer
-   or FREIZGK_SCHL ist nicht '1'
-Dann ist das ein entsprechender Eingabefehler. 
-
-Falls eine Bedingung nicht erfüllt ist, ist das ein Eingabefehler und die Funktion wird nicht ausgeführt.
-Schritt 2: Datenbankzugriff (SOLL)
-
-In der Aufrufvariante 1 wird über Karte-ID eindeutig ein oder kein Datensatz ermittelt. 
-
-EXEC SQL
-   SELECT DIG.BLZ
-        , DIG.KONTONR
-        , DIG.FREIZGK_SCHL
-        , DIG.VERFALL_DATUM
-        , DIG.KARTE_FOLGE_NR
-        , DIG.KARTE_ART
-        , DIG.KARTE_ID
-        , DIG.OBJEKT_KEY
-        , CASE WHEN KD.DCRD_SPER_GRND = ''
-               THEN 'N' ELSE 'J'
-          END AS MDES_SPERRE
- 
-   FROM   KARTE_KSB KA -- PHYS  SPARKASSEN-CARD MIT DMC/VID
- 
-   JOIN   KARTE_KSB DIG
-   ON     DIG.KARTE_ID_HAUPT = KA.KARTE_ID
- 
-   JOIN   KARTE_DATEN_KSB KD
-   ON     KD.KARTE_ID       = DIG.KARTE_ID
-   AND    KD.GUELTIG_AB    <= CURRENT TIMESTAMP
-   AND    KD.GUELTIG_BIS   >= CURRENT TIMESTAMP
- 
-   WHERE  KA.KARTE_ID       = :DigitaleKarteUeberKarteIDEingabe.KARTE_ID
-   AND    KA.FREIZGK_SCHL   = '1'
-   AND    KA.KARTE_ART      = 'V-EC-KARTE'
-   AND   (KA.LOESCH_DATUM   = '01.01.0001'
-       OR KA.LOESCH_DATUM   > CURRENT DATE)
-   AND    KA.BESTELL_DATUM  > '01.01.0001'
-   AND    KA.KARTE_NR       > 0
-   AND    KA.DKRT_KRKT_NR   > 0             -- COBADGE KNR
-   AND    KA.DEBIT_KARTE_ZHSM   = 'G'       -- COBADGE ZHSM
-   AND    KA.DKRT_KRKT_NTZG_MM IN ('D','H'  -- VID
-                                  ,'P')     -- DMC
-   AND    DIG.DKRT_KRKT_NR   = :DigitaleKarteUeberKarteIDEingabe.DKRT-KRKT-NR
-   AND    DIG.VERFALL_DATUM >= CURRENT DATE
-   AND    DIG.FREIZGK_SCHL   = '1'
-   AND    DIG.DCRD_QTTG_STAT = 'E'
-   AND    DIG.BESTELL_DATUM  > '01.01.0001'
-   AND   (DIG.LOESCH_DATUM   = '01.01.0001'
-       OR DIG.LOESCH_DATUM   > CURRENT DATE)
- 
-END-EXEC
-
-In der Aufrufvariante 2 wird über die Kartenmerkmale ("5 Freunde")  ein oder kein Datensatz ermittelt. In selten, historisch bedingten Datenkonstellationen liefern die verwendeten Bedingungen mehr als einen Datensatz. Aus diesem Grund erfolgt der Datenzugriff über FETCH FIRST 1 ROW ONLY,
-
-EXEC SQL
-   SELECT DIG.BLZ
-        , DIG.KONTONR
-        , DIG.FREIZGK_SCHL
-        , DIG.VERFALL_DATUM
-        , DIG.KARTE_FOLGE_NR
-        , DIG.KARTE_ART
-        , DIG.KARTE_ID
-        , DIG.OBJEKT_KEY
-        , CASE WHEN KD.DCRD_SPER_GRND = ''
-               THEN 'N' ELSE 'J'
-          END AS MDES_SPERRE
- 
-   FROM   KARTE_KSB KA -- PHYS  SPARKASSEN-CARD MIT DMC/VID
- 
-   JOIN   KARTE_KSB DIG
-   ON     DIG.KARTE_ID_HAUPT = KA.KARTE_ID
- 
-   JOIN   KARTE_DATEN_KSB KD
-   ON     KD.KARTE_ID       = DIG.KARTE_ID
-   AND    KD.GUELTIG_AB    <= CURRENT TIMESTAMP
-   AND    KD.GUELTIG_BIS   >= CURRENT TIMESTAMP
- 
-   WHERE  KA.KONTONR        = :CoBadgeDCRDErmittelnUeberKartenmerkmaleEingabe.KONTONR
-   AND    KA.BLZ            = :CoBadgeDCRDErmittelnUeberKartenmerkmaleEingabe.BLZ
-   AND    KA.VERFALL_DATUM  = :CoBadgeDCRDErmittelnUeberKartenmerkmaleEingabe.VERFALL-DATUM
-   AND    KA.FREIZGK_SCHL   = '1'
-   AND    KA.KARTE_FOLGE_NR = :CoBadgeDCRDErmittelnUeberKartenmerkmaleEingabe.KARTE-FOLGE-NR
-   AND    KA.KARTE_ART      = 'V-EC-KARTE'
-   AND   (KA.LOESCH_DATUM   = '01.01.0001'
-       OR KA.LOESCH_DATUM   > CURRENT DATE)
-   AND    KA.BESTELL_DATUM  > '01.01.0001'
-   AND    KA.KARTE_NR       > 0
-   AND    KA.DKRT_KRKT_NR   > 0             -- COBADGE KNR
-   AND    KA.DEBIT_KARTE_ZHSM   = 'G'       -- COBADGE ZHSM
-   AND    KA.DKRT_KRKT_NTZG_MM IN ('D','H'  -- VID
-                                  ,'P')     -- DMC
-   AND    DIG.DKRT_KRKT_NR   = :CoBadgeDCRDErmittelnUeberKartenmerkmaleEingabe.DKRT-KRKT-NR
-   AND    DIG.VERFALL_DATUM >= CURRENT DATE
-   AND    DIG.FREIZGK_SCHL   = '1'
-   AND    DIG.DCRD_QTTG_STAT = 'E'
-   AND    DIG.BESTELL_DATUM  > '01.01.0001'
-   AND   (DIG.LOESCH_DATUM   = '01.01.0001'
-       OR DIG.LOESCH_DATUM   > CURRENT DATE)    
-   FETCH FIRST 1 ROW ONLY  
-
-END-EXEC
-
-Fehlermeldungen (Returncodeliste - SOLL)
-Returncode	Meldungsklasse	Meldungstext
-20080	0	Der Prozess wurde erfolgreich ausgeführt.
-20548	2	Fehlender Parameter: (&1.)
-20020	4	Keine Daten vorhanden
-27291	8	Der Wert (&1.) im Feld (&2.) ist fuer diesen Prozess nicht zulaessig.
-30250	8	Datenbankfehler (&1.)
-Nutzungsmessung
-
-Für die vorliegende Fachliche Spezifikation ist das Thema Nutzungsmessung nicht relevant.
-Nicht-funktionale Anforderungen
-
-Für den neu zu entwickelnden DynS-Service ist höchste Performanz und hohe Verfügbarkeit sicherzustellen. 
-
-Die Performanz soll über entsprechende Lasttests nachgewiesen werden.
-Technische Realisierungshinweise
-Höchstverfügbarkeit
-
-Für den zu entwickelnde DynS-Service ist eine Höchstverfügbarkeit zu gewährleisten.
-
-Mit diesem Hintergrund erfolgt die Entwicklung in der zu diesem Zweck eingerichteten Implementierungseinheit kmsaut-ospe.
-Implementierungseinheit
-Name	kmsaut-ospe
-
-Anforderung zum Release
-	25.0
-
-Definition
-	Kapselt autorisierungsrelevante Services im Kartenumfeld
-
-Beschreibung
-	
-
-In der Implementierungseinheit werden lesende und schreibende Services zur Unterstützung bei der Karten- und Kontoautorisierung implementiert.
-
-Diese sollen mit dem DynS-Kennzeichen „höchstverfügbar“ laufen.
-
-Gehört zu Anwendungsteilsystem
-	
-
-Debitkarte OSPE
-
-Servicegruppen-JAR
-	
-
-JKA20000
-
-Prozessgruppe(n)
-	
-
-KARTE
-
- 
+/issuers/{issuerId}/disputes/{disputeFolderReference}
+
+Get the dispute information of the folder
+The API returns the dispute folder information that matches the dispute folder identifier provided in input.
+
+This enables to see the content of the dispute information :
+
+General dispute folder information including the dispute reason, the status
+Cardholder information including the card status and billing amount
+The issuer balance
+The transaction details including the reconciliation amount, the transaction type and merchant information
+The response can also be enriched (if specified as embed fields in input) with additional data relative to the events added, the postings performed, the documents attached, and the messages sent or received from the scheme. That corresponds to dispute cycle history.
+
+Authorizations:
+basic
+path Parameters
+issuerId
+required
+string
+Issuer ID
+
+disputeFolderReference
+required
+string
+Dispute Folder Reference
+
+query Parameters
+filter
+Array of strings
+Filtered Fields
+
+embed
+Array of strings
+Items Enum: "events" "postings" "documents" "messages"
+Embedded Fields
+
+header Parameters
+WL-Correlation-ID
+string
+WL-Origin
+string
+Responses
+
+200 OK
+Response Schema: application/json
+responseMetadata
+required
+object
+Response metadata
+
+data
+object
+Response data
+
+400 Bad request
+Response Schema: application/json
+responseMetadata
+required
+object
+Response metadata
+
+401 Unauthorized
+403 Forbidden
+404 Not found
+500 Internal server error
+502 Bad gateway
+
+
+{
+  "responseMetadata": {
+    "correlationId": "string",
+    "links": {
+      "self": "/x/{x}?x=x",
+      "next": "/x/{x}?page[offset]=2"
+    },
+    "statusMessage": "Executed successfully",
+    "statusCode": 200,
+    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+    "timeTakenMs": 12
+  },
+  "data": {
+    "issuerId": "string",
+    "disputeFolderIdentifier": {
+      "disputeFolderReference": "string",
+      "issuerDisputeExternalReference": "string"
+    },
+    "events": [
+      {
+        "type": "string",
+        "message": "string",
+        "external": true,
+        "creationDate": "2025-06-05T13:07:38Z"
+      }
+    ],
+    "postings": [
+      {
+        "postingAmount": {
+          "value": 0,
+          "exponent": 0,
+          "isoCode": "string"
+        },
+        "message": "string",
+        "immediateReimbursement": true,
+        "postingTypeReference": "string",
+        "operationReference": "string",
+        "disputeAdjustmentType": "string",
+        "creationDate": "2025-06-05T13:07:38Z"
+      }
+    ],
+    "documents": [
+      {
+        "data": "string",
+        "type": "string",
+        "label": "string",
+        "fileName": "string",
+        "creationDate": "2025-06-05T13:07:38Z"
+      }
+    ],
+    "messages": [
+      {
+        "type": "string",
+        "status": "string",
+        "creationDate": "2025-06-05T13:07:38Z",
+        "amount": {
+          "value": 0,
+          "exponent": 0,
+          "isoCode": "string"
+        },
+        "reasonCode": "string",
+        "reasonCodeDescription": "string",
+        "reverseFlag": true,
+        "schemeCaseId": "string"
+      }
+    ],
+    "acquirerReferenceData": "string",
+    "transactionType": "string",
+    "transactionTime": "2025-06-05T13:07:38Z",
+    "transactionAmount": {
+      "value": 0,
+      "exponent": 0,
+      "isoCode": "string"
+    },
+    "reconciliationAmount": {
+      "value": 0,
+      "exponent": 0,
+      "isoCode": "string"
+    },
+    "billingAmount": {
+      "value": 0,
+      "exponent": 0,
+      "isoCode": "string"
+    },
+    "billingFees": {
+      "value": 0,
+      "exponent": 0,
+      "isoCode": "string"
+    },
+    "outstandingBalance": {
+      "value": 0,
+      "exponent": 0,
+      "isoCode": "string"
+    },
+    "issuerAccountingBalance": {
+      "value": 0,
+      "exponent": 0,
+      "isoCode": "string"
+    },
+    "statusCode": "string",
+    "reason": "string",
+    "creationDate": "2025-06-05T13:07:38Z",
+    "cardAcceptorName": "string",
+    "cardAcceptorCity": "string",
+    "cardAcceptorCountry": "string",
+    "cardAcceptorIdCode": "string",
+    "cardAcceptorZipCode": "string",
+    "userInCharge": "string",
+    "cardIdentifier": {
+      "cardReference": "string",
+      "issuerCardExternalReference": "string"
+    },
+    "lastMessageType": "string",
+    "lastMessageDate": "2025-06-05T13:07:38Z",
+    "lastMessageStatus": "string",
+    "superFolderReference": "string",
+    "transactionCategory": "string",
+    "transmissionDate": "2025-06-05T13:07:38Z",
+    "clientOpenDate": "2025-06-05T13:07:38Z"
+  }
+}
