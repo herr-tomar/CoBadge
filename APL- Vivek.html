@@ -11,16 +11,12 @@ import osplus.apl.core.api.AplComponent;
 import osplus.fi.core.logging.api.Logger;
 import osplus.fi.core.logging.api.LoggerFactory;
 import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
-import osplus.pkptuna.hazelcast.configprops.DisputeLookupQueueProps;
 import osplus.pkptuna.hazelcast.configprops.DisputeLookupReliableTopicProps;
 import osplus.pkptuna.hazelcast.protobuf.SimpleDeserializer;
 import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
-import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufSerializer;
-import osplus.pkptuna.hazelcast.pubsub.CustomHazelcastQueuePublisher;
 
-import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
 @AplComponent
 public class DisputeLookupRouter implements MessageListener<byte[]> {
@@ -29,78 +25,57 @@ public class DisputeLookupRouter implements MessageListener<byte[]> {
 
     private final HazelcastInstance hazelcastInstance;
     private final SimpleDeserializer<DisputeLookupRequestWrapperDto> deserializer;
-    private final CustomHazelcastQueuePublisher publisher;
-    private final List<Integer> partitionIndices;
     private final String topicName;
-    private final String queueBase;
+
+    // Constants for map names
+    private static final String REQUEST_MAP_NAME = "dispute-lookup-request-map";
+    private static final String CLAIM_MAP_NAME = "router-claim-map";
 
     public DisputeLookupRouter(HazelcastInstance hazelcastInstance,
-                               DisputeLookupReliableTopicProps topicProps,
-                               DisputeLookupQueueProps queueProps) {
+                               DisputeLookupReliableTopicProps topicProps) {
 
         this.hazelcastInstance = hazelcastInstance;
         this.topicName = topicProps.request();
-        this.queueBase = queueProps.base();
-        this.partitionIndices = queueProps.partitions();
         this.deserializer = new ProtobufDeserializer<>(DisputeLookupRequestWrapperDto.parser());
-
-        // Use your custom publisher
-        this.publisher = new CustomHazelcastQueuePublisher(
-                hazelcastInstance,
-                new ProtobufSerializer<>()
-        );
     }
 
     @PostConstruct
     public void start() {
-        LOGGER.info("Topic Name: " + topicName);
+        LOGGER.info("Topic Name: {}", topicName);
         ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
         topic.addMessageListener(this);
         LOGGER.info("DisputeRouter started. Listening on DisputeRequestReliableTopic...");
     }
 
-    @PostConstruct
-    public void logConfig() {
-        LOGGER.info("DisputeLookupQueueProps: base={}, partitions={}", queueBase, partitionIndices);
-    }
-
     @Override
     public void onMessage(Message<byte[]> message) {
         try {
-            DisputeLookupRequestWrapperDto requestWrapper = deserializer.deserialize(message.getMessageObject());
+            DisputeLookupRequestWrapperDto requestWrapper =
+                    deserializer.deserialize(message.getMessageObject());
 
             String correlationId = requestWrapper.getCorrelationId();
             String lockKey = "route-lock-" + correlationId;
 
-            IMap<String, String> routerMap = hazelcastInstance.getMap("router-claim-map");
-            String uniqueId = UUID.randomUUID().toString();
-
-            String existing = routerMap.putIfAbsent(lockKey, uniqueId);
+            // Claim lock to prevent duplicate routing
+            IMap<String, String> claimMap = hazelcastInstance.getMap(CLAIM_MAP_NAME);
+            String lockToken = UUID.randomUUID().toString();
+            String existing = claimMap.putIfAbsent(lockKey, lockToken);
 
             if (existing != null) {
-                LOGGER.info("Skipped duplicate routing for correlationId={}" + correlationId);
+                LOGGER.info("Duplicate correlationId detected, skipping: {}", correlationId);
                 return;
             }
 
-            if(partitionIndices == null || partitionIndices.isEmpty()) {
-                LOGGER.error("No partition indices configured. Routing aborted");
-                return;
-            }
+            // Store request in IMap with TTL (e.g., 5 minutes)
+            IMap<String, DisputeLookupRequestWrapperDto> requestMap = hazelcastInstance.getMap(REQUEST_MAP_NAME);
+            requestMap.put(correlationId, requestWrapper, 5, TimeUnit.MINUTES);
 
-            int index = ThreadLocalRandom.current().nextInt(partitionIndices.size());
-            int selectedPartition = partitionIndices.get(index);
-            String configKey = queueBase + selectedPartition;
-
-            publisher.sendMessage(configKey, "DISPUTE_ROUTER", requestWrapper);
-
-            LOGGER.info("Routed message with correlationId=" + correlationId + " to " + configKey);
-
+            LOGGER.info("Stored dispute request with correlationId={} in map '{}'", correlationId, REQUEST_MAP_NAME);
 
         } catch (InvalidProtocolBufferException e) {
-            LOGGER.error("Failed to deserialize message: " + e.getMessage());
+            LOGGER.error("Deserialization error in DisputeRouter: {}", e.getMessage(), e);
         } catch (Exception e) {
-            LOGGER.error("Routing failure: " + e.getMessage());
+            LOGGER.error("Error in DisputeRouter: {}", e.getMessage(), e);
         }
     }
-
 }
