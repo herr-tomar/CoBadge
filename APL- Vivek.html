@@ -1,101 +1,85 @@
-package osplus.pkptuna.hazelcast.router;
+package osplus.pkptuna.hazelcast.pubsub;
 
-import com.google.protobuf.InvalidProtocolBufferException;
+import com.hazelcast.collection.IQueue;
 import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.map.IMap;
-import com.hazelcast.topic.ITopic;
-import com.hazelcast.topic.Message;
-import com.hazelcast.topic.MessageListener;
 import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
 import osplus.apl.core.api.AplComponent;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
 import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseWrapperDto;
+import osplus.pkptuna.dispute.service.DisputeService;
 import osplus.pkptuna.hazelcast.configprops.DisputeLookupQueueProps;
-import osplus.pkptuna.hazelcast.configprops.DisputeLookupReliableTopicProps;
 import osplus.pkptuna.hazelcast.protobuf.SimpleDeserializer;
 import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
 import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufSerializer;
-import osplus.pkptuna.hazelcast.pubsub.CustomHazelcastQueuePublisher;
 
 import java.util.List;
-import java.util.UUID;
 
 @AplComponent
-public class DisputeLookupRouter implements MessageListener<byte[]> {
+public class DisputeLookupQueueConsumer {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeLookupRouter.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeLookupQueueConsumer.class);
 
     private final HazelcastInstance hazelcastInstance;
-    private final SimpleDeserializer<DisputeLookupRequestWrapperDto> deserializer;
-    private final CustomHazelcastQueuePublisher publisher;
+    private final DisputeService disputeService;
     private final List<Integer> partitionIndices;
-    private final String topicName;
-    private final String queueBase;
+    private final String baseQueueName;
+    private final CustomHazelcastReliableTopicPublisher<DisputeLookupResponseWrapperDto> responsePublisher;
+    private final SimpleDeserializer<DisputeLookupRequestWrapperDto> deserializer;
 
-    public DisputeLookupRouter(HazelcastInstance hazelcastInstance,
-                               DisputeLookupReliableTopicProps topicProps,
-                               DisputeLookupQueueProps queueProps) {
-
+    public DisputeLookupQueueConsumer(
+            HazelcastInstance hazelcastInstance,
+            DisputeService disputeService,
+            DisputeLookupQueueProps queueProps
+    ) {
         this.hazelcastInstance = hazelcastInstance;
-        this.topicName = topicProps.request();
-        this.queueBase = queueProps.base();
-        this.partitionIndices = queueProps.partitions();
+        this.disputeService = disputeService;
+        this.partitionIndices = queueProps.partitions(); // List of queue partitions
+        this.baseQueueName = queueProps.base();
         this.deserializer = new ProtobufDeserializer<>(DisputeLookupRequestWrapperDto.parser());
-
-        // Use your custom publisher
-        this.publisher = new CustomHazelcastQueuePublisher(
+        this.responsePublisher = new CustomHazelcastReliableTopicPublisher<>(
                 hazelcastInstance,
-                new ProtobufSerializer<>()
+                new ProtobufSerializer<DisputeLookupResponseWrapperDto>()
         );
     }
 
     @PostConstruct
-    public void start() {
-        LOGGER.info("Topic Name: " + topicName);
-        ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
-        topic.addMessageListener(this);
-        LOGGER.info("DisputeRouter started. Listening on DisputeRequestReliableTopic...");
+    public void startConsumers() {
+        partitionIndices.forEach(this::startAsyncConsumer);
     }
 
-    @Override
-    public void onMessage(Message<byte[]> message) {
+    @Async("queueExecutor")
+    public void startAsyncConsumer(Integer partition) {
+        String queueName = baseQueueName + partition;
+        LOGGER.info("Started async consumer for queue: {}", queueName);
+        runInternal(queueName);
+    }
+
+    private void runInternal(String queueName) {
         try {
-            DisputeLookupRequestWrapperDto requestWrapper = deserializer.deserialize(message.getMessageObject());
+            IQueue<byte[]> queue = hazelcastInstance.getQueue(queueName);
+            while (true) {
+                byte[] message = queue.take();
+                DisputeLookupRequestWrapperDto request = deserializer.deserialize(message);
 
-            String correlationId = requestWrapper.getCorrelationId();
-            String issuerId = requestWrapper.getIssuerId();
-            String lockKey = "route-lock-" + correlationId;
+                DisputeLookupResponseDto result = disputeService.lookupDisputeFolder(
+                        request.getIssuerId(),
+                        request.getCardReference()
+                );
 
-            IMap<String, String> routerMap = hazelcastInstance.getMap("router-claim-map");
-            String uniqueId = UUID.randomUUID().toString();
+                DisputeLookupResponseWrapperDto response = DisputeLookupResponseWrapperDto.newBuilder()
+                        .setCorrelationId(request.getCorrelationId())
+                        .setResponse(result)
+                        .build();
 
-            String existing = routerMap.putIfAbsent(lockKey, uniqueId);
-
-            if (existing != null) {
-                LOGGER.info("Skipped duplicate routing for correlationId={}" + correlationId);
-                return;
+                responsePublisher.sendMessage("DisputeResponseReliableTopic", "DISPUTE_WORKER", response);
+                LOGGER.info("Responded to correlationId: {}", request.getCorrelationId());
             }
-
-            if(partitionIndices == null || partitionIndices.isEmpty()) {
-                LOGGER.error("No partition indices configured. Routing aborted");
-                return;
-            }
-            int index = Math.abs(issuerId.hashCode()) % partitionIndices.size();
-            int partition = partitionIndices.get(index);
-
-            String configKey = queueBase + partition;
-
-            publisher.sendMessage(configKey, "DISPUTE_ROUTER", requestWrapper);
-
-            LOGGER.info("Routed message with correlationId=" + correlationId + " to " + configKey);
-
-
-        } catch (InvalidProtocolBufferException e) {
-            LOGGER.error("Failed to deserialize message: " + e.getMessage());
         } catch (Exception e) {
-            LOGGER.error("Routing failure: " + e.getMessage());
+            LOGGER.error("Error in DisputeLookupQueueConsumer [{}]: {}", queueName, e.getMessage(), e);
         }
     }
-
 }
