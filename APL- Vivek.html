@@ -1,13 +1,13 @@
-hazel:
-  cluster:
-    address: hc-hazelcast.grafana.svc.cluster.local:5701
-  queue:
-    dispute:
-      lookup:
-        base: dispute-lookup-queue-
-        partitions: [0,1,2,3]
-  reltopic:
-    dispute:
-      lookup:
-        request: DisputeLookupRequestReliableTopic
-        response: DisputeLookupResponseReliableTopic
+package osplus.pkptuna.hazelcast.configprops;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
+import osplus.apl.core.api.validation.NotBlank;
+
+import java.util.List;
+
+@Validated
+@ConfigurationProperties(prefix="hazel.queue.dispute.lookup")
+public record DisputeLookupQueueProps (@NotBlank String base,@NotBlank List<Integer> partitions) {
+}
+
