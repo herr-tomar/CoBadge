@@ -1,81 +1,79 @@
-package osplus.pkptuna.hazelcast.router;
+package osplus.pkptuna.hazelcast.pubsub;
 
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
-import com.hazelcast.topic.ITopic;
-import com.hazelcast.topic.Message;
-import com.hazelcast.topic.MessageListener;
 import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
 import osplus.apl.core.api.AplComponent;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
 import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
-import osplus.pkptuna.hazelcast.configprops.DisputeLookupReliableTopicProps;
-import osplus.pkptuna.hazelcast.protobuf.SimpleDeserializer;
-import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseWrapperDto;
+import osplus.pkptuna.dispute.service.DisputeService;
+import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufSerializer;
 
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
+import java.util.Map;
 
 @AplComponent
-public class DisputeLookupRouter implements MessageListener<byte[]> {
+@EnableScheduling
+public class DisputeLookupMapConsumer {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeLookupRouter.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeLookupMapConsumer.class);
+
+    private static final String REQUEST_MAP_NAME = "dispute-lookup-request-map";
 
     private final HazelcastInstance hazelcastInstance;
-    private final SimpleDeserializer<DisputeLookupRequestWrapperDto> deserializer;
-    private final String topicName;
+    private final DisputeService disputeService;
+    private final CustomHazelcastReliableTopicPublisher<DisputeLookupResponseWrapperDto> responsePublisher;
 
-    // Constants for map names
-    private static final String REQUEST_MAP_NAME = "dispute-lookup-request-map";
-    private static final String CLAIM_MAP_NAME = "router-claim-map";
-
-    public DisputeLookupRouter(HazelcastInstance hazelcastInstance,
-                               DisputeLookupReliableTopicProps topicProps) {
-
+    public DisputeLookupMapConsumer(HazelcastInstance hazelcastInstance,
+                                    DisputeService disputeService) {
         this.hazelcastInstance = hazelcastInstance;
-        this.topicName = topicProps.request();
-        this.deserializer = new ProtobufDeserializer<>(DisputeLookupRequestWrapperDto.parser());
+        this.disputeService = disputeService;
+        this.responsePublisher = new CustomHazelcastReliableTopicPublisher<>(
+                hazelcastInstance,
+                new ProtobufSerializer<>()
+        );
     }
 
     @PostConstruct
-    public void start() {
-        LOGGER.info("Topic Name: {}", topicName);
-        ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
-        topic.addMessageListener(this);
-        LOGGER.info("DisputeRouter started. Listening on DisputeRequestReliableTopic...");
+    public void logStartup() {
+        LOGGER.info("DisputeLookupMapConsumer initialized. Polling IMap for new requests.");
     }
 
-    @Override
-    public void onMessage(Message<byte[]> message) {
-        try {
-            DisputeLookupRequestWrapperDto requestWrapper =
-                    deserializer.deserialize(message.getMessageObject());
+    @Scheduled(fixedRate = 1000) // every second
+    public void pollMapForRequests() {
+        IMap<String, DisputeLookupRequestWrapperDto> requestMap =
+                hazelcastInstance.getMap(REQUEST_MAP_NAME);
 
-            String correlationId = requestWrapper.getCorrelationId();
-            String lockKey = "route-lock-" + correlationId;
+        for (Map.Entry<String, DisputeLookupRequestWrapperDto> entry : requestMap.entrySet()) {
+            String correlationId = entry.getKey();
+            DisputeLookupRequestWrapperDto request = entry.getValue();
 
-            // Claim lock to prevent duplicate routing
-            IMap<String, String> claimMap = hazelcastInstance.getMap(CLAIM_MAP_NAME);
-            String lockToken = UUID.randomUUID().toString();
-            String existing = claimMap.putIfAbsent(lockKey, lockToken);
+            try {
+                LOGGER.info("Processing dispute request with correlationId={}", correlationId);
 
-            if (existing != null) {
-                LOGGER.info("Duplicate correlationId detected, skipping: {}", correlationId);
-                return;
+                DisputeLookupResponseDto result = disputeService.lookupDisputeFolder(
+                        request.getIssuerId(),
+                        request.getCardReference()
+                );
+
+                DisputeLookupResponseWrapperDto response = DisputeLookupResponseWrapperDto.newBuilder()
+                        .setCorrelationId(correlationId)
+                        .setResponse(result)
+                        .build();
+
+                responsePublisher.sendMessage("DisputeLookupResponseReliableTopic", "DISPUTE_MAP_WORKER", response);
+
+                requestMap.remove(correlationId); // cleanup after processing
+                LOGGER.info("Processed and removed entry with correlationId={}", correlationId);
+
+            } catch (Exception e) {
+                LOGGER.error("Error processing entry with correlationId={}: {}", correlationId, e.getMessage(), e);
             }
-
-            // Store request in IMap with TTL (e.g., 5 minutes)
-            IMap<String, DisputeLookupRequestWrapperDto> requestMap = hazelcastInstance.getMap(REQUEST_MAP_NAME);
-            requestMap.put(correlationId, requestWrapper, 5, TimeUnit.MINUTES);
-
-            LOGGER.info("Stored dispute request with correlationId={} in map '{}'", correlationId, REQUEST_MAP_NAME);
-
-        } catch (InvalidProtocolBufferException e) {
-            LOGGER.error("Deserialization error in DisputeRouter: {}", e.getMessage(), e);
-        } catch (Exception e) {
-            LOGGER.error("Error in DisputeRouter: {}", e.getMessage(), e);
         }
     }
 }
