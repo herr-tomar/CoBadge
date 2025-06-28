@@ -2,32 +2,32 @@ package osplus.pkptuna.hazelcast.pubsub;
 
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
+import com.hazelcast.map.listener.EntryAddedListener;
+import com.hazelcast.map.listener.MapListener;
+import com.hazelcast.map.listener.EntryUpdatedListener;
+import com.hazelcast.map.listener.EntryEvictedListener;
+import com.hazelcast.map.listener.EntryRemovedListener;
+import com.hazelcast.map.listener.EntryExpiredListener;
+import com.hazelcast.map.listener.EntryEvent;
 import jakarta.annotation.PostConstruct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.scheduling.annotation.Scheduled;
 import osplus.apl.core.api.AplComponent;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
 import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
 import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
 import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseWrapperDto;
 import osplus.pkptuna.dispute.service.DisputeService;
 import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufSerializer;
 
-import java.util.Map;
-
 @AplComponent
-@EnableScheduling
 public class DisputeLookupMapConsumer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DisputeLookupMapConsumer.class);
 
-    private static final String REQUEST_MAP_NAME = "dispute-lookup-request-map";
-
     private final HazelcastInstance hazelcastInstance;
     private final DisputeService disputeService;
     private final CustomHazelcastReliableTopicPublisher<DisputeLookupResponseWrapperDto> responsePublisher;
+    private static final String MAP_NAME = "dispute-request-map";
 
     public DisputeLookupMapConsumer(HazelcastInstance hazelcastInstance,
                                     DisputeService disputeService) {
@@ -40,40 +40,39 @@ public class DisputeLookupMapConsumer {
     }
 
     @PostConstruct
-    public void logStartup() {
-        LOGGER.info("DisputeLookupMapConsumer initialized. Polling IMap for new requests.");
+    public void listen() {
+        IMap<String, DisputeLookupRequestWrapperDto> map = hazelcastInstance.getMap(MAP_NAME);
+        MapListener listener = new EntryAddedListener<>() {
+            @Override
+            public void entryAdded(EntryEvent<String, DisputeLookupRequestWrapperDto> event) {
+                processRequest(event.getKey(), event.getValue());
+            }
+        };
+        map.addEntryListener(listener, true);
+        LOGGER.info("DisputeLookupMapConsumer registered listener on map: {}", MAP_NAME);
     }
 
-    @Scheduled(fixedRate = 1000) // every second
-    public void pollMapForRequests() {
-        IMap<String, DisputeLookupRequestWrapperDto> requestMap =
-                hazelcastInstance.getMap(REQUEST_MAP_NAME);
+    private void processRequest(String key, DisputeLookupRequestWrapperDto request) {
+        try {
+            LOGGER.info("Processing request with correlationId: {}", request.getCorrelationId());
 
-        for (Map.Entry<String, DisputeLookupRequestWrapperDto> entry : requestMap.entrySet()) {
-            String correlationId = entry.getKey();
-            DisputeLookupRequestWrapperDto request = entry.getValue();
+            DisputeLookupResponseDto result = disputeService.lookupDisputeFolder(
+                    request.getIssuerId(), request.getCardReference()
+            );
 
-            try {
-                LOGGER.info("Processing dispute request with correlationId={}", correlationId);
+            DisputeLookupResponseWrapperDto response = DisputeLookupResponseWrapperDto.newBuilder()
+                    .setCorrelationId(request.getCorrelationId())
+                    .setResponse(result)
+                    .build();
 
-                DisputeLookupResponseDto result = disputeService.lookupDisputeFolder(
-                        request.getIssuerId(),
-                        request.getCardReference()
-                );
+            responsePublisher.sendMessage("DisputeLookupResponseReliableTopic", "DISPUTE_WORKER", response);
 
-                DisputeLookupResponseWrapperDto response = DisputeLookupResponseWrapperDto.newBuilder()
-                        .setCorrelationId(correlationId)
-                        .setResponse(result)
-                        .build();
+            // Optional: remove from map after processing
+            hazelcastInstance.getMap(MAP_NAME).remove(key);
 
-                responsePublisher.sendMessage("DisputeLookupResponseReliableTopic", "DISPUTE_MAP_WORKER", response);
-
-                requestMap.remove(correlationId); // cleanup after processing
-                LOGGER.info("Processed and removed entry with correlationId={}", correlationId);
-
-            } catch (Exception e) {
-                LOGGER.error("Error processing entry with correlationId={}: {}", correlationId, e.getMessage(), e);
-            }
+            LOGGER.info("Processed and responded for correlationId: {}", request.getCorrelationId());
+        } catch (Exception e) {
+            LOGGER.error("Failed to process request: {}", e.getMessage(), e);
         }
     }
 }
