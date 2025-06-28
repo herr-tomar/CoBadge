@@ -1,189 +1,101 @@
-/issuers/{issuerId}/disputes/{disputeFolderReference}
+package osplus.pkptuna.hazelcast.router;
 
-Get the dispute information of the folder
-The API returns the dispute folder information that matches the dispute folder identifier provided in input.
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.topic.ITopic;
+import com.hazelcast.topic.Message;
+import com.hazelcast.topic.MessageListener;
+import jakarta.annotation.PostConstruct;
+import osplus.apl.core.api.AplComponent;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
+import osplus.pkptuna.hazelcast.configprops.DisputeLookupQueueProps;
+import osplus.pkptuna.hazelcast.configprops.DisputeLookupReliableTopicProps;
+import osplus.pkptuna.hazelcast.protobuf.SimpleDeserializer;
+import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
+import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufSerializer;
+import osplus.pkptuna.hazelcast.pubsub.CustomHazelcastQueuePublisher;
 
-This enables to see the content of the dispute information :
+import java.util.List;
+import java.util.UUID;
 
-General dispute folder information including the dispute reason, the status
-Cardholder information including the card status and billing amount
-The issuer balance
-The transaction details including the reconciliation amount, the transaction type and merchant information
-The response can also be enriched (if specified as embed fields in input) with additional data relative to the events added, the postings performed, the documents attached, and the messages sent or received from the scheme. That corresponds to dispute cycle history.
+@AplComponent
+public class DisputeLookupRouter implements MessageListener<byte[]> {
 
-Authorizations:
-basic
-path Parameters
-issuerId
-required
-string
-Issuer ID
+    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeLookupRouter.class);
 
-disputeFolderReference
-required
-string
-Dispute Folder Reference
+    private final HazelcastInstance hazelcastInstance;
+    private final SimpleDeserializer<DisputeLookupRequestWrapperDto> deserializer;
+    private final CustomHazelcastQueuePublisher publisher;
+    private final List<Integer> partitionIndices;
+    private final String topicName;
+    private final String queueBase;
 
-query Parameters
-filter
-Array of strings
-Filtered Fields
+    public DisputeLookupRouter(HazelcastInstance hazelcastInstance,
+                               DisputeLookupReliableTopicProps topicProps,
+                               DisputeLookupQueueProps queueProps) {
 
-embed
-Array of strings
-Items Enum: "events" "postings" "documents" "messages"
-Embedded Fields
+        this.hazelcastInstance = hazelcastInstance;
+        this.topicName = topicProps.request();
+        this.queueBase = queueProps.base();
+        this.partitionIndices = queueProps.partitions();
+        this.deserializer = new ProtobufDeserializer<>(DisputeLookupRequestWrapperDto.parser());
 
-header Parameters
-WL-Correlation-ID
-string
-WL-Origin
-string
-Responses
+        // Use your custom publisher
+        this.publisher = new CustomHazelcastQueuePublisher(
+                hazelcastInstance,
+                new ProtobufSerializer<>()
+        );
+    }
 
-200 OK
-Response Schema: application/json
-responseMetadata
-required
-object
-Response metadata
+    @PostConstruct
+    public void start() {
+        LOGGER.info("Topic Name: " + topicName);
+        ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
+        topic.addMessageListener(this);
+        LOGGER.info("DisputeRouter started. Listening on DisputeRequestReliableTopic...");
+    }
 
-data
-object
-Response data
+    @Override
+    public void onMessage(Message<byte[]> message) {
+        try {
+            DisputeLookupRequestWrapperDto requestWrapper = deserializer.deserialize(message.getMessageObject());
 
-400 Bad request
-Response Schema: application/json
-responseMetadata
-required
-object
-Response metadata
+            String correlationId = requestWrapper.getCorrelationId();
+            String issuerId = requestWrapper.getIssuerId();
+            String lockKey = "route-lock-" + correlationId;
 
-401 Unauthorized
-403 Forbidden
-404 Not found
-500 Internal server error
-502 Bad gateway
+            IMap<String, String> routerMap = hazelcastInstance.getMap("router-claim-map");
+            String uniqueId = UUID.randomUUID().toString();
+
+            String existing = routerMap.putIfAbsent(lockKey, uniqueId);
+
+            if (existing != null) {
+                LOGGER.info("Skipped duplicate routing for correlationId={}" + correlationId);
+                return;
+            }
+
+            if(partitionIndices == null || partitionIndices.isEmpty()) {
+                LOGGER.error("No partition indices configured. Routing aborted");
+                return;
+            }
+            int index = Math.abs(issuerId.hashCode()) % partitionIndices.size();
+            int partition = partitionIndices.get(index);
+
+            String configKey = queueBase + partition;
+
+            publisher.sendMessage(configKey, "DISPUTE_ROUTER", requestWrapper);
+
+            LOGGER.info("Routed message with correlationId=" + correlationId + " to " + configKey);
 
 
-{
-  "responseMetadata": {
-    "correlationId": "string",
-    "links": {
-      "self": "/x/{x}?x=x",
-      "next": "/x/{x}?page[offset]=2"
-    },
-    "statusMessage": "Executed successfully",
-    "statusCode": 200,
-    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
-    "timeTakenMs": 12
-  },
-  "data": {
-    "issuerId": "string",
-    "disputeFolderIdentifier": {
-      "disputeFolderReference": "string",
-      "issuerDisputeExternalReference": "string"
-    },
-    "events": [
-      {
-        "type": "string",
-        "message": "string",
-        "external": true,
-        "creationDate": "2025-06-05T13:07:38Z"
-      }
-    ],
-    "postings": [
-      {
-        "postingAmount": {
-          "value": 0,
-          "exponent": 0,
-          "isoCode": "string"
-        },
-        "message": "string",
-        "immediateReimbursement": true,
-        "postingTypeReference": "string",
-        "operationReference": "string",
-        "disputeAdjustmentType": "string",
-        "creationDate": "2025-06-05T13:07:38Z"
-      }
-    ],
-    "documents": [
-      {
-        "data": "string",
-        "type": "string",
-        "label": "string",
-        "fileName": "string",
-        "creationDate": "2025-06-05T13:07:38Z"
-      }
-    ],
-    "messages": [
-      {
-        "type": "string",
-        "status": "string",
-        "creationDate": "2025-06-05T13:07:38Z",
-        "amount": {
-          "value": 0,
-          "exponent": 0,
-          "isoCode": "string"
-        },
-        "reasonCode": "string",
-        "reasonCodeDescription": "string",
-        "reverseFlag": true,
-        "schemeCaseId": "string"
-      }
-    ],
-    "acquirerReferenceData": "string",
-    "transactionType": "string",
-    "transactionTime": "2025-06-05T13:07:38Z",
-    "transactionAmount": {
-      "value": 0,
-      "exponent": 0,
-      "isoCode": "string"
-    },
-    "reconciliationAmount": {
-      "value": 0,
-      "exponent": 0,
-      "isoCode": "string"
-    },
-    "billingAmount": {
-      "value": 0,
-      "exponent": 0,
-      "isoCode": "string"
-    },
-    "billingFees": {
-      "value": 0,
-      "exponent": 0,
-      "isoCode": "string"
-    },
-    "outstandingBalance": {
-      "value": 0,
-      "exponent": 0,
-      "isoCode": "string"
-    },
-    "issuerAccountingBalance": {
-      "value": 0,
-      "exponent": 0,
-      "isoCode": "string"
-    },
-    "statusCode": "string",
-    "reason": "string",
-    "creationDate": "2025-06-05T13:07:38Z",
-    "cardAcceptorName": "string",
-    "cardAcceptorCity": "string",
-    "cardAcceptorCountry": "string",
-    "cardAcceptorIdCode": "string",
-    "cardAcceptorZipCode": "string",
-    "userInCharge": "string",
-    "cardIdentifier": {
-      "cardReference": "string",
-      "issuerCardExternalReference": "string"
-    },
-    "lastMessageType": "string",
-    "lastMessageDate": "2025-06-05T13:07:38Z",
-    "lastMessageStatus": "string",
-    "superFolderReference": "string",
-    "transactionCategory": "string",
-    "transmissionDate": "2025-06-05T13:07:38Z",
-    "clientOpenDate": "2025-06-05T13:07:38Z"
-  }
+        } catch (InvalidProtocolBufferException e) {
+            LOGGER.error("Failed to deserialize message: " + e.getMessage());
+        } catch (Exception e) {
+            LOGGER.error("Routing failure: " + e.getMessage());
+        }
+    }
+
 }
