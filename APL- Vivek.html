@@ -3,17 +3,15 @@ public String publishDisputeRequest(
         @ServiceParam("issuerId") String issuerId,
         @ServiceParam("cardReference") String cardReference) {
 
-    LOGGER.info("📤 Publishing dispute request to reliable topic for issuerId={} and cardRef={}", issuerId, cardReference);
-
     try {
+        String correlationId = UUID.randomUUID().toString();
+
         DisputeLookupRequestDto payload = DisputeLookupRequestDto.newBuilder()
                 .setRequestChannel("APL-UI")
                 .setMessageType("DISPUTE_LOOKUP")
                 .setRequestedBy("UI-MANUAL-TEST")
                 .setBusinessContext("test")
                 .build();
-
-        String correlationId = UUID.randomUUID().toString();
 
         DisputeLookupRequestWrapperDto wrapper = DisputeLookupRequestWrapperDto.newBuilder()
                 .setCorrelationId(correlationId)
@@ -22,39 +20,20 @@ public String publishDisputeRequest(
                 .setPayload(payload)
                 .build();
 
-        // 1. Publish request
         ITopic<byte[]> topic = hazelcastInstance.getReliableTopic("DisputeLookupRequestReliableTopic");
         topic.publish(wrapper.toByteArray());
 
-        // 2. Wait for response with timeout
-        IMap<String, byte[]> responseMap = hazelcastInstance.getMap("dispute-response-map");
+        // Register correlation ID and await response
+        DisputeResponseTracker.register(correlationId);
+        CompletableFuture<DisputeLookupResponseDto> future = DisputeResponseTracker.await(correlationId);
 
-        byte[] responseBytes = responseMap.get(correlationId);
-
-        long startTime = System.currentTimeMillis();
-        long timeoutMillis = 5000;
-
-        while (responseBytes == null && (System.currentTimeMillis() - startTime) < timeoutMillis) {
-            Thread.sleep(100); // poll every 100ms
-            responseBytes = responseMap.get(correlationId);
-        }
-
-        if (responseBytes == null) {
-            return "{ \"status\": \"timeout\", \"message\": \"No response within 5 seconds\" }";
-        }
-
-        DisputeLookupResponseWrapperDto responseWrapper =
-                DisputeLookupResponseWrapperDto.parser().parseFrom(responseBytes);
-
-        DisputeLookupResponseDto response = responseWrapper.getResponse();
-
-        // Clean up after retrieval
-        responseMap.remove(correlationId);
-
+        DisputeLookupResponseDto response = future.get(5, TimeUnit.SECONDS); // Wait max 5s
         return ProtobufJsonUtil.printProtoToJson(response);
 
+    } catch (TimeoutException te) {
+        return "{ \"status\": \"timeout\", \"message\": \"No response in 5 seconds\" }";
     } catch (Exception e) {
-        LOGGER.error("❌ Failed to publish or retrieve response", e);
+        LOGGER.error("Failed to process publishDisputeRequest", e);
         return "{ \"status\": \"error\", \"message\": \"" + e.getMessage() + "\" }";
     }
 }
