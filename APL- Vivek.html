@@ -1,39 +1,18 @@
-@UiService(value = "publishDisputeRequest", method = MethodType.GET, requiresAuthentication = false)
-public String publishDisputeRequest(
-        @ServiceParam("issuerId") String issuerId,
-        @ServiceParam("cardReference") String cardReference) {
+@PostConstruct
+public void initResponseListener() {
+    ITopic<byte[]> responseTopic = hazelcastInstance.getReliableTopic("DisputeLookupResponseReliableTopic");
 
-    try {
-        String correlationId = UUID.randomUUID().toString();
+    responseTopic.addMessageListener(message -> {
+        try {
+            byte[] messageBytes = message.getMessageObject();
+            DisputeLookupResponseWrapperDto wrapper = DisputeLookupResponseWrapperDto.parser().parseFrom(messageBytes);
+            String correlationId = wrapper.getCorrelationId();
+            DisputeLookupResponseTracker.complete(correlationId, wrapper.getResponse());
 
-        DisputeLookupRequestDto payload = DisputeLookupRequestDto.newBuilder()
-                .setRequestChannel("APL-UI")
-                .setMessageType("DISPUTE_LOOKUP")
-                .setRequestedBy("UI-MANUAL-TEST")
-                .setBusinessContext("test")
-                .build();
+        } catch (Exception e) {
+            LOGGER.error("Failed to process response from topic", e);
+        }
+    });
 
-        DisputeLookupRequestWrapperDto wrapper = DisputeLookupRequestWrapperDto.newBuilder()
-                .setCorrelationId(correlationId)
-                .setIssuerId(issuerId)
-                .setCardReference(cardReference)
-                .setPayload(payload)
-                .build();
-
-        ITopic<byte[]> topic = hazelcastInstance.getReliableTopic("DisputeLookupRequestReliableTopic");
-        topic.publish(wrapper.toByteArray());
-
-        // Register correlation ID and await response
-        DisputeResponseTracker.register(correlationId);
-        CompletableFuture<DisputeLookupResponseDto> future = DisputeResponseTracker.await(correlationId);
-
-        DisputeLookupResponseDto response = future.get(5, TimeUnit.SECONDS); // Wait max 5s
-        return ProtobufJsonUtil.printProtoToJson(response);
-
-    } catch (TimeoutException te) {
-        return "{ \"status\": \"timeout\", \"message\": \"No response in 5 seconds\" }";
-    } catch (Exception e) {
-        LOGGER.error("Failed to process publishDisputeRequest", e);
-        return "{ \"status\": \"error\", \"message\": \"" + e.getMessage() + "\" }";
-    }
+    LOGGER.info("✅ Dispute response listener initialized.");
 }
