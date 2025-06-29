@@ -3,11 +3,6 @@ package osplus.pkptuna.hazelcast.pubsub;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
 import com.hazelcast.map.listener.EntryAddedListener;
-import com.hazelcast.map.listener.MapListener;
-import com.hazelcast.map.listener.EntryUpdatedListener;
-import com.hazelcast.map.listener.EntryEvictedListener;
-import com.hazelcast.map.listener.EntryRemovedListener;
-import com.hazelcast.map.listener.EntryExpiredListener;
 import com.hazelcast.map.listener.EntryEvent;
 import jakarta.annotation.PostConstruct;
 import osplus.apl.core.api.AplComponent;
@@ -23,11 +18,11 @@ import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufSerializer;
 public class DisputeLookupMapConsumer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DisputeLookupMapConsumer.class);
+    private static final String MAP_NAME = "dispute-request-map";
 
     private final HazelcastInstance hazelcastInstance;
     private final DisputeService disputeService;
     private final CustomHazelcastReliableTopicPublisher<DisputeLookupResponseWrapperDto> responsePublisher;
-    private static final String MAP_NAME = "dispute-request-map";
 
     public DisputeLookupMapConsumer(HazelcastInstance hazelcastInstance,
                                     DisputeService disputeService) {
@@ -40,39 +35,36 @@ public class DisputeLookupMapConsumer {
     }
 
     @PostConstruct
-    public void listen() {
+    public void registerListener() {
         IMap<String, DisputeLookupRequestWrapperDto> map = hazelcastInstance.getMap(MAP_NAME);
-        MapListener listener = new EntryAddedListener<>() {
-            @Override
-            public void entryAdded(EntryEvent<String, DisputeLookupRequestWrapperDto> event) {
-                processRequest(event.getKey(), event.getValue());
-            }
-        };
-        map.addEntryListener(listener, true);
-        LOGGER.info("DisputeLookupMapConsumer registered listener on map: {}", MAP_NAME);
+        map.addEntryListener((EntryAddedListener<String, DisputeLookupRequestWrapperDto>) this::onEntryAdded, true);
+        LOGGER.info("Registered EntryAddedListener on map '{}'", MAP_NAME);
     }
 
-    private void processRequest(String key, DisputeLookupRequestWrapperDto request) {
-        try {
-            LOGGER.info("Processing request with correlationId: {}", request.getCorrelationId());
+    private void onEntryAdded(EntryEvent<String, DisputeLookupRequestWrapperDto> event) {
+        String key = event.getKey();
+        DisputeLookupRequestWrapperDto request = event.getValue();
 
-            DisputeLookupResponseDto result = disputeService.lookupDisputeFolder(
+        try {
+            LOGGER.info("Processing map entry with correlationId: {}", request.getCorrelationId());
+
+            DisputeLookupResponseDto responseDto = disputeService.lookupDisputeFolder(
                     request.getIssuerId(), request.getCardReference()
             );
 
             DisputeLookupResponseWrapperDto response = DisputeLookupResponseWrapperDto.newBuilder()
                     .setCorrelationId(request.getCorrelationId())
-                    .setResponse(result)
+                    .setResponse(responseDto)
                     .build();
 
-            responsePublisher.sendMessage("DisputeLookupResponseReliableTopic", "DISPUTE_WORKER", response);
+            responsePublisher.sendMessage("DisputeLookupResponseReliableTopic", "DISPUTE_MAP_WORKER", response);
 
-            // Optional: remove from map after processing
+            // Optionally clean up the map entry after processing
             hazelcastInstance.getMap(MAP_NAME).remove(key);
 
-            LOGGER.info("Processed and responded for correlationId: {}", request.getCorrelationId());
+            LOGGER.info("Successfully processed and responded for correlationId: {}", request.getCorrelationId());
         } catch (Exception e) {
-            LOGGER.error("Failed to process request: {}", e.getMessage(), e);
+            LOGGER.error("Error while processing map entry: {}", e.getMessage(), e);
         }
     }
 }
