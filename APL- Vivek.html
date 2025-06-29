@@ -1,93 +1,131 @@
-package osplus.pkptuna.hazelcast.pubsub;
+package osplus.pkptuna.uimodule;
 
 import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.map.IMap;
-import jakarta.annotation.PostConstruct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.scheduling.annotation.Scheduled;
-import osplus.apl.core.api.AplComponent;
+import com.hazelcast.topic.ITopic;
+import osplus.apl.uui.api.MethodType;
+import osplus.apl.uui.api.ServiceParam;
+import osplus.apl.uui.api.UiModule;
+import osplus.apl.uui.api.UiService;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestDto;
 import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
 import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseWrapperDto;
+import osplus.pkptuna.dispute.model.DisputeResponseDto;
+import osplus.pkptuna.dispute.service.DisputeDetailService;
 import osplus.pkptuna.dispute.service.DisputeService;
-import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufSerializer;
+import osplus.pkptuna.dispute.util.ProtobufJsonUtil;
 
-import java.util.Map;
+import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
 
-@AplComponent
-@EnableScheduling
-public class DisputeLookupMapConsumer {
+/**
+ * APL UI module to expose dispute lookup and detail functionality via APL runtime.
+ */
+@UiModule("disputeUiModule")
+public class DisputeUiModule {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeLookupMapConsumer.class);
-    private static final String REQUEST_MAP_NAME = "dispute-lookup-request-map";
+    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeUiModule.class);
 
-    private final HazelcastInstance hazelcastInstance;
     private final DisputeService disputeService;
-    private final CustomHazelcastReliableTopicPublisher<DisputeLookupResponseWrapperDto> responsePublisher;
+    private final DisputeDetailService disputeDetailService;
+    private final HazelcastInstance hazelcastInstance;
 
-    public DisputeLookupMapConsumer(HazelcastInstance hazelcastInstance,
-                                    DisputeService disputeService) {
-        this.hazelcastInstance = hazelcastInstance;
+    /**
+     * Constructor with required service injection.
+     *
+     * @param disputeService the service used to look up disputes
+     * @param disputeDetailService the service used to retrieve detailed dispute information
+     */
+    public DisputeUiModule(HazelcastInstance hazelcastInstance, DisputeService disputeService, DisputeDetailService disputeDetailService) {
         this.disputeService = disputeService;
-        this.responsePublisher = new CustomHazelcastReliableTopicPublisher<>(
-                hazelcastInstance,
-                new ProtobufSerializer<>()
-        );
+        this.disputeDetailService = disputeDetailService;
+        this.hazelcastInstance = hazelcastInstance;
     }
 
-    @PostConstruct
-    public void logStartup() {
-        LOGGER.info("✅ DisputeLookupMapConsumer initialized. Polling IMap: '{}'", REQUEST_MAP_NAME);
+    /**
+     * UI Service to check if a dispute folder exists and retrieve its reference.
+     *
+     * @param issuerId Issuer ID
+     * @param cardReference Card reference
+     * @return JSON string containing DisputeLookupResponseDto
+     */
+    @UiService(value = "disputeLookup", method = MethodType.GET, requiresAuthentication = false)
+    public String lookupDisputeFolder(
+            @ServiceParam("issuerId") String issuerId,
+            @ServiceParam("cardReference") String cardReference) {
+
+        LOGGER.info("Received lookupDisputeFolder request for issuerId={} and cardReference={}", issuerId, cardReference);
+
+        DisputeLookupResponseDto dto = disputeService.lookupDisputeFolder(issuerId, cardReference);
+
+        return ProtobufJsonUtil.printProtoToJson(dto);
     }
 
-    @Scheduled(fixedRate = 1000)
-    public void pollMapForRequests() {
-        IMap<String, DisputeLookupRequestWrapperDto> requestMap =
-                hazelcastInstance.getMap(REQUEST_MAP_NAME);
 
-        int processedCount = 0;
+    /**
+     * UI Service to get detailed information about a specific dispute folder.
+     *
+     * @param issuerId Issuer ID
+     * @param disputeFolderReference Dispute folder reference
+     * @param embed Comma-separated embed options (e.g., "events,documents")
+     * @return JSON string with complete folder details
+     */
+    @UiService(value = "disputeFolderDetails", method = MethodType.GET, requiresAuthentication = false)
+    public String getDisputeFolderDetails(
+            @ServiceParam("issuerId") String issuerId,
+            @ServiceParam("disputeFolderReference") String disputeFolderReference,
+            @ServiceParam(value = "embed") String embed) {
 
-        for (Map.Entry<String, DisputeLookupRequestWrapperDto> entry : requestMap.entrySet()) {
-            String correlationId = entry.getKey();
-            DisputeLookupRequestWrapperDto request = entry.getValue();
+        LOGGER.info("Fetching dispute folder details for issuerId={} and folderRef={} with embed={}",
+                issuerId, disputeFolderReference, embed);
 
-            try {
-                // Attempt to atomically remove the entry using value match
-                boolean removed = requestMap.remove(correlationId, request);
-                if (!removed) {
-                    continue; // already processed by someone else
-                }
+        List<String> embedList = (embed != null && !embed.isEmpty())
+                ? Arrays.asList(embed.split(","))
+                : null;
 
-                LOGGER.debug("➡️ Processing dispute request with correlationId={}", correlationId);
+        DisputeResponseDto dto = disputeDetailService.getDisputeFolderDetails(issuerId, disputeFolderReference, embedList);
 
-                DisputeLookupResponseDto result = disputeService.lookupDisputeFolder(
-                        request.getIssuerId(),
-                        request.getCardReference()
-                );
+        return ProtobufJsonUtil.printProtoToJson(dto);
+    }
 
-                DisputeLookupResponseWrapperDto response = DisputeLookupResponseWrapperDto.newBuilder()
-                        .setCorrelationId(correlationId)
-                        .setResponse(result)
-                        .build();
+    // Test Code
 
-                responsePublisher.sendMessage(
-                        "DisputeLookupResponseReliableTopic",
-                        "DISPUTE_MAP_WORKER",
-                        response
-                );
+    @UiService(value = "publishDisputeRequest", method = MethodType.GET, requiresAuthentication = false)
+    public String publishDisputeRequest(
+            @ServiceParam("issuerId") String issuerId,
+            @ServiceParam("cardReference") String cardReference) {
+        LOGGER.info("📤 Publishing dispute request to reliable topic for issuerId={} and cardRef={}", issuerId, cardReference);
 
-                LOGGER.debug("✅ Processed and removed correlationId={}", correlationId);
-                processedCount++;
+        try {
+            // Dummy payload for test purposes
+            DisputeLookupRequestDto payload = DisputeLookupRequestDto.newBuilder()
+                    .setRequestChannel("APL-UI")
+                    .setMessageType("DISPUTE_LOOKUP")
+                    .setRequestedBy("UI-MANUAL-TEST")
+                    .setBusinessContext("test")
+                    .build();
 
-            } catch (Exception e) {
-                LOGGER.error("❌ Error processing entry [correlationId={}]: {}", correlationId, e.getMessage(), e);
-            }
+            String correlationId = UUID.randomUUID().toString();
+
+            DisputeLookupRequestWrapperDto wrapper = DisputeLookupRequestWrapperDto.newBuilder()
+                    .setCorrelationId(correlationId)
+                    .setIssuerId(issuerId)
+                    .setCardReference(cardReference)
+                    .setPayload(payload)
+                    .build();
+
+            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic("DisputeLookupRequestReliableTopic");
+            topic.publish(wrapper.toByteArray());
+
+            return "{ \"status\": \"success\", \"correlationId\": \"" + correlationId + "\" }";
+
+        } catch (Exception e) {
+            LOGGER.error("Failed to publish dispute request", e);
+            return "{ \"status\": \"error\", \"message\": \"" + e.getMessage() + "\" }";
         }
 
-        if (processedCount > 0) {
-            LOGGER.info("🧾 Batch processed {} requests from {}", processedCount, REQUEST_MAP_NAME);
-        }
     }
+
 }
