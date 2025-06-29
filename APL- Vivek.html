@@ -21,7 +21,6 @@ import java.util.Map;
 public class DisputeLookupMapConsumer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DisputeLookupMapConsumer.class);
-
     private static final String REQUEST_MAP_NAME = "dispute-lookup-request-map";
 
     private final HazelcastInstance hazelcastInstance;
@@ -40,20 +39,29 @@ public class DisputeLookupMapConsumer {
 
     @PostConstruct
     public void logStartup() {
-        LOGGER.info("DisputeLookupMapConsumer initialized. Polling IMap for new requests.");
+        LOGGER.info("✅ DisputeLookupMapConsumer initialized. Polling IMap: '{}'", REQUEST_MAP_NAME);
     }
 
-    @Scheduled(fixedRate = 1000) // every second
+    @Scheduled(fixedRate = 1000) // configurable polling interval
     public void pollMapForRequests() {
         IMap<String, DisputeLookupRequestWrapperDto> requestMap =
                 hazelcastInstance.getMap(REQUEST_MAP_NAME);
+
+        int processedCount = 0;
 
         for (Map.Entry<String, DisputeLookupRequestWrapperDto> entry : requestMap.entrySet()) {
             String correlationId = entry.getKey();
             DisputeLookupRequestWrapperDto request = entry.getValue();
 
             try {
-                LOGGER.info("Processing dispute request with correlationId={}", correlationId);
+                // Atomically claim and remove the entry to avoid race conditions
+                boolean claimed = requestMap.tryRemove(correlationId);
+
+                if (!claimed) {
+                    continue; // already processed by another instance
+                }
+
+                LOGGER.debug("➡️ Processing dispute request with correlationId={}", correlationId);
 
                 DisputeLookupResponseDto result = disputeService.lookupDisputeFolder(
                         request.getIssuerId(),
@@ -65,14 +73,22 @@ public class DisputeLookupMapConsumer {
                         .setResponse(result)
                         .build();
 
-                responsePublisher.sendMessage("DisputeLookupResponseReliableTopic", "DISPUTE_MAP_WORKER", response);
+                responsePublisher.sendMessage(
+                        "DisputeLookupResponseReliableTopic",
+                        "DISPUTE_MAP_WORKER",
+                        response
+                );
 
-                requestMap.remove(correlationId); // cleanup after processing
-                LOGGER.info("Processed and removed entry with correlationId={}", correlationId);
+                LOGGER.debug("✅ Processed and removed correlationId={}", correlationId);
+                processedCount++;
 
             } catch (Exception e) {
-                LOGGER.error("Error processing entry with correlationId={}: {}", correlationId, e.getMessage(), e);
+                LOGGER.error("❌ Error processing entry [correlationId={}]: {}", correlationId, e.getMessage(), e);
             }
+        }
+
+        if (processedCount > 0) {
+            LOGGER.info("🧾 Batch processed {} requests from {}", processedCount, REQUEST_MAP_NAME);
         }
     }
 }
