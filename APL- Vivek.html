@@ -1,18 +1,20 @@
-@PostConstruct
-public void initResponseListener() {
-    ITopic<byte[]> responseTopic = hazelcastInstance.getReliableTopic("DisputeLookupResponseReliableTopic");
+import java.util.concurrent.*;
 
-    responseTopic.addMessageListener(message -> {
-        try {
-            byte[] messageBytes = message.getMessageObject();
-            DisputeLookupResponseWrapperDto wrapper = DisputeLookupResponseWrapperDto.parser().parseFrom(messageBytes);
-            String correlationId = wrapper.getCorrelationId();
-            DisputeLookupResponseTracker.complete(correlationId, wrapper.getResponse());
+public class DisputeResponseTracker {
+    private static final ConcurrentMap<String, CompletableFuture<DisputeLookupResponseDto>> pending = new ConcurrentHashMap<>();
 
-        } catch (Exception e) {
-            LOGGER.error("Failed to process response from topic", e);
+    public static void register(String correlationId) {
+        pending.put(correlationId, new CompletableFuture<>());
+    }
+
+    public static void complete(String correlationId, DisputeLookupResponseDto response) {
+        CompletableFuture<DisputeLookupResponseDto> future = pending.remove(correlationId);
+        if (future != null) {
+            future.complete(response);
         }
-    });
+    }
 
-    LOGGER.info("✅ Dispute response listener initialized.");
+    public static CompletableFuture<DisputeLookupResponseDto> await(String correlationId) {
+        return pending.get(correlationId);
+    }
 }
