@@ -1,8 +1,9 @@
+package osplus.pkptuna.hazelcast.pubsub;
+
 import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.EntryEvent;
 import com.hazelcast.map.IMap;
 import com.hazelcast.map.listener.EntryAddedListener;
-import com.hazelcast.map.listener.MapListener;
-import com.hazelcast.map.listener.MapListenerAdapter;
 import jakarta.annotation.PostConstruct;
 import osplus.apl.core.api.AplComponent;
 import osplus.fi.core.logging.api.Logger;
@@ -14,7 +15,7 @@ import osplus.pkptuna.dispute.service.DisputeService;
 import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufSerializer;
 
 @AplComponent
-public class DisputeLookupMapConsumer {
+public class DisputeLookupMapConsumer implements EntryAddedListener<String, DisputeLookupRequestWrapperDto> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DisputeLookupMapConsumer.class);
     private static final String MAP_NAME = "dispute-request-map";
@@ -36,38 +37,32 @@ public class DisputeLookupMapConsumer {
     @PostConstruct
     public void registerListener() {
         IMap<String, DisputeLookupRequestWrapperDto> map = hazelcastInstance.getMap(MAP_NAME);
-
-        map.addEntryListener(new MapListenerAdapter<String, DisputeLookupRequestWrapperDto>() {
-            @Override
-            public void entryAdded(com.hazelcast.map.listener.MapEvent event) {
-                String key = event.getKey().toString();
-                processEntry(key);
-            }
-        }, true);
-
-        LOGGER.info("Registered safe map listener on map '{}'", MAP_NAME);
+        map.addEntryListener(this, true); // include value
+        LOGGER.info("Registered EntryAddedListener for map: {}", MAP_NAME);
     }
 
-    private void processEntry(String key) {
+    @Override
+    public void entryAdded(EntryEvent<String, DisputeLookupRequestWrapperDto> event) {
         try {
-            IMap<String, DisputeLookupRequestWrapperDto> map = hazelcastInstance.getMap(MAP_NAME);
-            DisputeLookupRequestWrapperDto request = map.get(key);
+            String key = event.getKey();
+            DisputeLookupRequestWrapperDto request = event.getValue(); // or map.get(key) if needed
 
-            if (request == null) return;
-
-            DisputeLookupResponseDto responseDto = disputeService.lookupDisputeFolder(
+            DisputeLookupResponseDto result = disputeService.lookupDisputeFolder(
                     request.getIssuerId(), request.getCardReference());
 
             DisputeLookupResponseWrapperDto response = DisputeLookupResponseWrapperDto.newBuilder()
                     .setCorrelationId(request.getCorrelationId())
-                    .setResponse(responseDto)
+                    .setResponse(result)
                     .build();
 
             responsePublisher.sendMessage("DisputeLookupResponseReliableTopic", "DISPUTE_MAP_WORKER", response);
-            map.remove(key);
+
+            // Remove the entry after processing
+            hazelcastInstance.getMap(MAP_NAME).remove(key);
             LOGGER.info("Processed and removed key: {}", key);
+
         } catch (Exception e) {
-            LOGGER.error("Failed processing key {}: {}", key, e.getMessage(), e);
+            LOGGER.error("Error processing entry: {}", e.getMessage(), e);
         }
     }
 }
