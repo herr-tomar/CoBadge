@@ -42,7 +42,7 @@ public class DisputeLookupMapConsumer {
         LOGGER.info("✅ DisputeLookupMapConsumer initialized. Polling IMap: '{}'", REQUEST_MAP_NAME);
     }
 
-    @Scheduled(fixedRate = 1000) // configurable polling interval
+    @Scheduled(fixedRate = 1000)
     public void pollMapForRequests() {
         IMap<String, DisputeLookupRequestWrapperDto> requestMap =
                 hazelcastInstance.getMap(REQUEST_MAP_NAME);
@@ -54,11 +54,10 @@ public class DisputeLookupMapConsumer {
             DisputeLookupRequestWrapperDto request = entry.getValue();
 
             try {
-                // Atomically claim and remove the entry to avoid race conditions
-                boolean claimed = requestMap.tryRemove(correlationId);
-
-                if (!claimed) {
-                    continue; // already processed by another instance
+                // Attempt to atomically remove the entry using value match
+                boolean removed = requestMap.remove(correlationId, request);
+                if (!removed) {
+                    continue; // already processed by someone else
                 }
 
                 LOGGER.debug("➡️ Processing dispute request with correlationId={}", correlationId);
