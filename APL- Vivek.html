@@ -1,115 +1,20 @@
-syntax = "proto3";
-
-package osplus.pkptuna.dispute.model;
-
-import "google/protobuf/timestamp.proto";
-
-option java_package = "osplus.pkptuna.dispute.model";
-option java_outer_classname = "DisputeResponseProto";
-option java_multiple_files = true;
-
-message DisputeResponseDto {
-  ResponseMetadataDto responseMetadata = 1;
-  DataDto data = 2;
-}
-
-message ResponseMetadataDto {
+message DisputeDetailRequestWrapperDto {
   string correlationId = 1;
-  LinksDto links = 2;
-  string statusMessage = 3;
-  int32 statusCode = 4;
-  google.protobuf.Timestamp responseDateTime = 5;
-  int32 timeTakenMs = 6;
+  string issuerId = 2;
+  string disputeFolderReference = 3;
+
+  DisputeDetailRequestDto payload = 4;
 }
 
-message LinksDto {
-  string self = 1;
-  string next = 2;
+message DisputeDetailRequestDto {
+  string requestedBy = 1;
+  string requestChannel = 2;
+  string messageType = 3;
+  string businessContext = 4;
+  repeated string embed = 5;
 }
 
-message DataDto {
-  string issuerId = 1;
-  DisputeFolderIdentifierDto disputeFolderIdentifier = 2;
-  repeated EventDto events = 3;
-  repeated PostingDto postings = 4;
-  repeated DocumentDto documents = 5;
-  repeated MessageDto messages = 6;
-  string acquirerReferenceData = 7;
-  string transactionType = 8;
-  google.protobuf.Timestamp transactionTime = 9;
-  AmountDto transactionAmount = 10;
-  AmountDto reconciliationAmount = 11;
-  AmountDto billingAmount = 12;
-  AmountDto billingFees = 13;
-  AmountDto outstandingBalance = 14;
-  AmountDto issuerAccountingBalance = 15;
-  string statusCode = 16;
-  string reason = 17;
-  google.protobuf.Timestamp creationDate = 18;
-  string cardAcceptorName = 19;
-  string cardAcceptorCity = 20;
-  string cardAcceptorCountry = 21;
-  string cardAcceptorIdCode = 22;
-  string cardAcceptorZipCode = 23;
-  string userInCharge = 24;
-  CardIdentifierDto cardIdentifier = 25;
-  string lastMessageType = 26;
-  google.protobuf.Timestamp lastMessageDate = 27;
-  string lastMessageStatus = 28;
-  string superFolderReference = 29;
-  string transactionCategory = 30;
-  google.protobuf.Timestamp transmissionDate = 31;
-  google.protobuf.Timestamp clientOpenDate = 32;
-}
-
-message DisputeFolderIdentifierDto {
-  string disputeFolderReference = 1;
-  string issuerDisputeExternalReference = 2;
-}
-
-message EventDto {
-  string type = 1;
-  string message = 2;
-  bool external = 3;
-  google.protobuf.Timestamp creationDate = 4;
-}
-
-message PostingDto {
-  AmountDto postingAmount = 1;
-  string message = 2;
-  bool immediateReimbursement = 3;
-  string postingTypeReference = 4;
-  string operationReference = 5;
-  string disputeAdjustmentType = 6;
-  google.protobuf.Timestamp creationDate = 7;
-}
-
-message DocumentDto {
-  string data = 1;
-  string type = 2;
-  string label = 3;
-  string fileName = 4;
-  google.protobuf.Timestamp creationDate = 5;
-}
-
-message MessageDto {
-  string type = 1;
-  string status = 2;
-  google.protobuf.Timestamp creationDate = 3;
-  AmountDto amount = 4;
-  string reasonCode = 5;
-  string reasonCodeDescription = 6;
-  bool reverseFlag = 7;
-  string schemeCaseId = 8;
-}
-
-message AmountDto {
-  int64 value = 1;
-  int32 exponent = 2;
-  string isoCode = 3;
-}
-
-message CardIdentifierDto {
-  string cardReference = 1;
-  string issuerCardExternalReference = 2;
+message DisputeDetailResponseWrapperDto {
+  string correlationId = 1;
+  DisputeResponseDto response = 2;
 }
