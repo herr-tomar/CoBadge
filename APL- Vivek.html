@@ -1,12 +1,34 @@
-hazelcast:
-  flows:
-    dispute-lookup:
-      requestTopic: DisputeLookupRequestReliableTopic
-      responseTopic: DisputeLookupResponseReliableTopic
-      mapBase: dispute-lookup-request-map-
-      partitions: 4
-    dispute-detail:
-      requestTopic: DisputeDetailRequestReliableTopic
-      responseTopic: DisputeDetailResponseReliableTopic
-      mapBase: dispute-detail-request-map-
-      partitions: 3
+@Scheduled(fixedRate = 1000)
+public void pollRequestMaps() {
+    for (HazelcastFlowConfigs.FlowConfig config : flowConfigs.flows()) {
+        String baseMap = config.mapBase();
+        int partitions = config.partitions();
+        String responseTopic = config.responseTopic();
+
+        for (int i = 0; i < partitions; i++) {
+            String mapName = baseMap + i;
+            IMap<String, byte[]> map = hazelcastInstance.getMap(mapName);
+
+            for (Map.Entry<String, byte[]> entry : map.entrySet()) {
+                String correlationId = entry.getKey();
+                byte[] rawRequest = entry.getValue();
+
+                try {
+                    FlowHandler<?, ?> handler = handlerRegistry.getHandler(config.name());
+
+                    Object request = handler.deserializeRequest(rawRequest);
+                    Object response = handler.handleRequest(request);
+                    Object wrapped = handler.wrapResponse(correlationId, response);
+
+                    handler.sendResponse(hazelcastInstance, responseTopic, wrapped);
+                    map.remove(correlationId);
+
+                    LOGGER.info("✅ Processed and removed entry from {} with correlationId={}", mapName, correlationId);
+
+                } catch (Exception e) {
+                    LOGGER.error("❌ Failed to process request from {}: {}", mapName, e.getMessage(), e);
+                }
+            }
+        }
+    }
+}
