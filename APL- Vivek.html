@@ -1,27 +1,90 @@
-@Override
-public void onMessage(Message<byte[]> message) {
-    try {
-        T request = handler.deserializeRequest(message.getMessageObject());
-        String correlationId = handler.extractCorrelationId(request);
-        String issuerId = handler.extractIssuerId(request);
-        String lockKey = "route-lock-" + correlationId;
+package osplus.pkptuna.hazelcast.router;
 
-        IMap<String, String> routerMap = hazelcastInstance.getMap("router-claim-map");
-        String uniqueId = UUID.randomUUID().toString();
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.topic.ITopic;
+import com.hazelcast.topic.Message;
+import com.hazelcast.topic.MessageListener;
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import osplus.apl.core.api.AplComponent;
+import osplus.pkptuna.hazelcast.configprops.HazelcastFlowConfigs;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
 
-        String existing = routerMap.putIfAbsent(lockKey, uniqueId);
-        if (existing != null) {
-            LOGGER.info("Skipped duplicate routing for correlationId={}", correlationId);
-            return;
+import java.util.Map;
+import java.util.UUID;
+
+@AplComponent
+public class GenericHazelcastRouter {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastRouter.class);
+
+    private final HazelcastInstance hazelcastInstance;
+    private final HazelcastFlowConfigs flowConfigs;
+    private final FlowHandlerRegistry handlerRegistry;
+
+    public GenericHazelcastRouter(HazelcastInstance hazelcastInstance,
+                                  HazelcastFlowConfigs flowConfigs,
+                                  FlowHandlerRegistry handlerRegistry) {
+        this.hazelcastInstance = hazelcastInstance;
+        this.flowConfigs = flowConfigs;
+        this.handlerRegistry = handlerRegistry;
+    }
+
+    @PostConstruct
+    public void initRouters() {
+        for (Map.Entry<String, HazelcastFlowConfigs.FlowConfig> entry : flowConfigs.getFlowMap().entrySet()) {
+            String flowName = entry.getKey();
+            HazelcastFlowConfigs.FlowConfig config = entry.getValue();
+
+            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(config.requestTopic());
+            topic.addMessageListener(new RoutingListener(flowName, config));
+            LOGGER.info("Listening to requestTopic={} for flow={}.", config.requestTopic(), flowName);
+        }
+    }
+
+    private class RoutingListener implements MessageListener<byte[]> {
+
+        private final String flowName;
+        private final HazelcastFlowConfigs.FlowConfig config;
+
+        RoutingListener(String flowName, HazelcastFlowConfigs.FlowConfig config) {
+            this.flowName = flowName;
+            this.config = config;
         }
 
-        int index = roundRobinCounter.getAndIncrement() % partitionCount;
-        String mapKey = mapBase + index;
-        hazelcastInstance.getMap(mapKey).put(correlationId, request);
+        @Override
+        public void onMessage(Message<byte[]> message) {
+            try {
+                T request = handler.deserializeRequest(message.getMessageObject());
+                String correlationId = handler.extractCorrelationId(request);
+                String issuerId = handler.extractIssuerId(request);
+                String lockKey = "route-lock-" + correlationId;
 
-        LOGGER.info("🔄 Routed message with correlationId={} to {}", correlationId, mapKey);
+                IMap<String, String> routerMap = hazelcastInstance.getMap("router-claim-map");
+                String uniqueId = UUID.randomUUID().toString();
 
-    } catch (Exception e) {
-        LOGGER.error("Routing failure: {}", e.getMessage(), e);
+                String existing = routerMap.putIfAbsent(lockKey, uniqueId);
+                if (existing != null) {
+                    LOGGER.info("Skipped duplicate routing for correlationId={}", correlationId);
+                    return;
+                }
+
+                int index = roundRobinCounter.getAndIncrement() % partitionCount;
+                String mapKey = mapBase + index;
+                hazelcastInstance.getMap(mapKey).put(correlationId, request);
+
+                LOGGER.info("🔄 Routed message with correlationId={} to {}", correlationId, mapKey);
+
+            } catch (Exception e) {
+                LOGGER.error("Routing failure: {}", e.getMessage(), e);
+            }
+        }
+
+        private String generateMapKey(String base, String correlationId, int partitions) {
+            int index = Math.abs(correlationId.hashCode()) % partitions;
+            return base + index;
+        }
     }
 }
