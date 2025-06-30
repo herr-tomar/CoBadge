@@ -1,88 +1,140 @@
-package osplus.pkptuna.hazelcast.flow;
+package osplus.pkptuna.hazelcast.generic;
 
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.topic.ITopic;
+import com.hazelcast.topic.Message;
+import com.hazelcast.topic.MessageListener;
+import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Component;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.hazelcast.config.HazelcastFlowConfigs;
+import osplus.pkptuna.hazelcast.flow.FlowHandler;
+import osplus.pkptuna.hazelcast.flow.FlowHandlerRegistry;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @Component
-public class FlowHandlerRegistry {
+public class GenericHazelcastRouter {
 
-    private final Map<String, FlowHandler<?, ?>> handlerMap = new HashMap<>();
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastRouter.class);
 
-    public void register(String flowName, FlowHandler<?, ?> handler) {
-        handlerMap.put(flowName, handler);
-    }
+    private final HazelcastInstance hazelcastInstance;
+    private final HazelcastFlowConfigs configs;
+    private final FlowHandlerRegistry handlerRegistry;
 
-    public FlowHandler<?, ?> getHandler(String flowName) {
-        FlowHandler<?, ?> handler = handlerMap.get(flowName);
-        if (handler == null) {
-            throw new IllegalArgumentException("No FlowHandler registered for flow: " + flowName);
-        }
-        return handler;
-    }
-
-    public boolean contains(String flowName) {
-        return handlerMap.containsKey(flowName);
-    }
-}
-
-
-import jakarta.annotation.PostConstruct;
-import org.springframework.context.annotation.Configuration;
-
-@Configuration
-public class FlowHandlerInitializer {
-
-    private final FlowHandlerRegistry registry;
-
-    private final DisputeLookupFlowHandler disputeLookupFlowHandler;
-    private final DisputeDetailsFlowHandler disputeDetailsFlowHandler;
-
-    public FlowHandlerInitializer(
-        FlowHandlerRegistry registry,
-        DisputeLookupFlowHandler disputeLookupFlowHandler,
-        DisputeDetailsFlowHandler disputeDetailsFlowHandler
-    ) {
-        this.registry = registry;
-        this.disputeLookupFlowHandler = disputeLookupFlowHandler;
-        this.disputeDetailsFlowHandler = disputeDetailsFlowHandler;
+    public GenericHazelcastRouter(HazelcastInstance hazelcastInstance,
+                                  HazelcastFlowConfigs configs,
+                                  FlowHandlerRegistry handlerRegistry) {
+        this.hazelcastInstance = hazelcastInstance;
+        this.configs = configs;
+        this.handlerRegistry = handlerRegistry;
     }
 
     @PostConstruct
-    public void registerHandlers() {
-        registry.register("disputeLookup", disputeLookupFlowHandler);
-        registry.register("disputeDetails", disputeDetailsFlowHandler);
+    public void initListeners() {
+        for (HazelcastFlowConfigs.FlowConfig config : configs.flows()) {
+            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(config.requestTopic());
+            topic.addMessageListener(new GenericMessageListener(config.flowName(), config.requestMap()));
+            LOGGER.info("Router started for flow '{}' on topic '{}'", config.flowName(), config.requestTopic());
+        }
+    }
+
+    private class GenericMessageListener implements MessageListener<byte[]> {
+        private final String flowName;
+        private final String mapName;
+
+        GenericMessageListener(String flowName, String mapName) {
+            this.flowName = flowName;
+            this.mapName = mapName;
+        }
+
+        @Override
+        public void onMessage(Message<byte[]> message) {
+            try {
+                FlowHandler handler = handlerRegistry.getHandler(flowName);
+                Object request = handler.deserialize(message.getMessageObject());
+                String correlationId = handler.extractCorrelationId(request);
+
+                IMap<String, Object> map = hazelcastInstance.getMap(mapName);
+                map.put(correlationId, request);
+
+                LOGGER.info("Routed message for flow '{}' with correlationId={}", flowName, correlationId);
+            } catch (Exception e) {
+                LOGGER.error("Error routing message for flow '{}': {}", flowName, e.getMessage(), e);
+            }
+        }
     }
 }
 
 
-        package osplus.pkptuna.hazelcast.flow;
 
-public interface FlowHandler<REQ, RES> {
+--------------------------
 
-    /**
-     * @return The name of the request map (used by consumers).
-     */
-    String getRequestMapName();
 
-    /**
-     * Deserialize the byte[] message received from Hazelcast into a typed request DTO.
-     */
-    REQ deserializeRequest(byte[] message) throws Exception;
+package osplus.pkptuna.hazelcast.generic;
 
-    /**
-     * Execute the actual business logic and return a response DTO.
-     */
-    RES processRequest(REQ request);
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import jakarta.annotation.PostConstruct;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.hazelcast.config.HazelcastFlowConfigs;
+import osplus.pkptuna.hazelcast.flow.FlowHandler;
+import osplus.pkptuna.hazelcast.flow.FlowHandlerRegistry;
 
-    /**
-     * @return The name of the topic where the response should be published.
-     */
-    String getResponseTopicName();
+import java.util.Map;
 
-    /**
-     * Extract the correlation ID from the request.
-     */
-    String getCorrelationId(REQ request);
+@Component
+@EnableScheduling
+public class GenericHazelcastMapConsumer {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastMapConsumer.class);
+
+    private final HazelcastInstance hazelcastInstance;
+    private final HazelcastFlowConfigs configs;
+    private final FlowHandlerRegistry handlerRegistry;
+
+    public GenericHazelcastMapConsumer(HazelcastInstance hazelcastInstance,
+                                       HazelcastFlowConfigs configs,
+                                       FlowHandlerRegistry handlerRegistry) {
+        this.hazelcastInstance = hazelcastInstance;
+        this.configs = configs;
+        this.handlerRegistry = handlerRegistry;
+    }
+
+    @PostConstruct
+    public void logStartup() {
+        LOGGER.info("GenericHazelcastMapConsumer initialized for {} flow(s)", configs.flows().size());
+    }
+
+    @Scheduled(fixedRate = 1000)
+    public void pollRequestMaps() {
+        for (HazelcastFlowConfigs.FlowConfig config : configs.flows()) {
+            try {
+                IMap<String, Object> requestMap = hazelcastInstance.getMap(config.requestMap());
+                FlowHandler handler = handlerRegistry.getHandler(config.flowName());
+
+                for (Map.Entry<String, Object> entry : requestMap.entrySet()) {
+                    String correlationId = entry.getKey();
+                    Object request = entry.getValue();
+
+                    Object response = handler.process(request);
+
+                    handler.publishResponse(config.responseTopic(), "GENERIC_FLOW", response);
+
+                    requestMap.remove(correlationId);
+                    LOGGER.info("Processed and removed entry for flow '{}' with correlationId={}", config.flowName(), correlationId);
+                }
+
+            } catch (Exception e) {
+                LOGGER.error("Error processing flow '{}': {}", config.flowName(), e.getMessage(), e);
+            }
+        }
+    }
 }
