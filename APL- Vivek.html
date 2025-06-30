@@ -1,51 +1,18 @@
-@AplComponent
-@EnableScheduling
-public class GenericMapConsumer {
+import org.springframework.boot.context.properties.ConfigurationProperties;
 
-    private final HazelcastInstance hazelcastInstance;
-    private final DisputeService disputeService;
-    private final HazelcastFlowProperties flowProperties;
+import java.util.Map;
 
-    public GenericMapConsumer(HazelcastInstance hazelcastInstance,
-                              DisputeService disputeService,
-                              HazelcastFlowProperties flowProperties) {
-        this.hazelcastInstance = hazelcastInstance;
-        this.disputeService = disputeService;
-        this.flowProperties = flowProperties;
+@ConfigurationProperties(prefix = "hazelcast.flows")
+public class HazelcastFlowConfigs {
+    private Map<String, FlowConfig> flowMap;
+
+    public Map<String, FlowConfig> getFlowMap() {
+        return flowMap;
     }
 
-    @Scheduled(fixedRate = 1000)
-    public void pollAllConfiguredMaps() {
-        for (HazelcastFlowConfig config : flowProperties.getFlows()) {
-            for (int i = 0; i < config.partitions(); i++) {
-                String mapName = config.baseMap() + i;
-                IMap<String, DisputeLookupRequestWrapperDto> requestMap = hazelcastInstance.getMap(mapName);
-
-                for (Map.Entry<String, DisputeLookupRequestWrapperDto> entry : requestMap.entrySet()) {
-                    try {
-                        String correlationId = entry.getKey();
-                        DisputeLookupRequestWrapperDto request = entry.getValue();
-
-                        // Business logic
-                        DisputeLookupResponseDto responseData = disputeService.lookupDisputeFolder(
-                                request.getIssuerId(), request.getCardReference());
-
-                        DisputeLookupResponseWrapperDto response = DisputeLookupResponseWrapperDto.newBuilder()
-                                .setCorrelationId(correlationId)
-                                .setResponse(responseData)
-                                .build();
-
-                        new CustomHazelcastReliableTopicPublisher<>(hazelcastInstance, new ProtobufSerializer<>())
-                                .sendMessage(config.responseTopic(), "GENERIC_CONSUMER", response);
-
-                        requestMap.remove(correlationId);
-                        LoggerFactory.getLogger(getClass()).info("✅ Processed & removed {}", correlationId);
-
-                    } catch (Exception e) {
-                        LoggerFactory.getLogger(getClass()).error("❌ Error processing map {}: {}", mapName, e.getMessage(), e);
-                    }
-                }
-            }
-        }
+    public void setFlowMap(Map<String, FlowConfig> flowMap) {
+        this.flowMap = flowMap;
     }
+
+    public record FlowConfig(String requestTopic, String responseTopic, String mapBase, int partitions) {}
 }
