@@ -1,83 +1,53 @@
-// GenericHazelcastRouter.java
-package osplus.pkptuna.hazelcast.router;
+package osplus.pkptuna.hazelcast.flow;
 
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.map.IMap;
-import com.hazelcast.topic.ITopic;
-import com.hazelcast.topic.Message;
-import com.hazelcast.topic.MessageListener;
-import jakarta.annotation.PostConstruct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import osplus.apl.core.api.AplComponent;
-import osplus.pkptuna.hazelcast.configprops.HazelcastFlowConfigs;
-import osplus.pkptuna.hazelcast.flow.FlowHandler;
-import osplus.pkptuna.hazelcast.flow.FlowHandlerRegistry;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseWrapperDto;
+import osplus.pkptuna.dispute.service.DisputeService;
+import osplus.pkptuna.hazelcast.framework.FlowHandler;
+import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufSerializer;
+import org.springframework.stereotype.Component;
 
-import java.util.Map;
-import java.util.UUID;
+@Component
+public class DisputeLookupFlowHandler implements FlowHandler<DisputeLookupRequestWrapperDto, DisputeLookupResponseWrapperDto> {
 
-@AplComponent
-public class GenericHazelcastRouter {
+    private final DisputeService disputeService;
+    private final ProtobufSerializer<DisputeLookupResponseWrapperDto> serializer = new ProtobufSerializer<>();
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastRouter.class);
-
-    private final HazelcastInstance hazelcastInstance;
-    private final HazelcastFlowConfigs flowConfigs;
-    private final FlowHandlerRegistry handlerRegistry;
-
-    public GenericHazelcastRouter(HazelcastInstance hazelcastInstance,
-                                   HazelcastFlowConfigs flowConfigs,
-                                   FlowHandlerRegistry handlerRegistry) {
-        this.hazelcastInstance = hazelcastInstance;
-        this.flowConfigs = flowConfigs;
-        this.handlerRegistry = handlerRegistry;
+    public DisputeLookupFlowHandler(DisputeService disputeService) {
+        this.disputeService = disputeService;
     }
 
-    @PostConstruct
-    public void initRouters() {
-        for (Map.Entry<String, HazelcastFlowConfigs.FlowConfig> entry : flowConfigs.getFlowMap().entrySet()) {
-            String flowName = entry.getKey();
-            HazelcastFlowConfigs.FlowConfig config = entry.getValue();
-
-            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(config.requestTopic());
-            topic.addMessageListener(new RoutingListener(flowName, config));
-            LOGGER.info("Listening to requestTopic={} for flow={}.", config.requestTopic(), flowName);
-        }
+    @Override
+    public DisputeLookupRequestWrapperDto deserializeRequest(byte[] data) throws Exception {
+        return DisputeLookupRequestWrapperDto.parseFrom(data);
     }
 
-    private class RoutingListener implements MessageListener<byte[]> {
+    @Override
+    public String extractCorrelationId(DisputeLookupRequestWrapperDto request) {
+        return request.getCorrelationId();
+    }
 
-        private final String flowName;
-        private final HazelcastFlowConfigs.FlowConfig config;
+    @Override
+    public String extractIssuerId(DisputeLookupRequestWrapperDto request) {
+        return request.getIssuerId();
+    }
 
-        RoutingListener(String flowName, HazelcastFlowConfigs.FlowConfig config) {
-            this.flowName = flowName;
-            this.config = config;
-        }
+    @Override
+    public DisputeLookupResponseWrapperDto processRequest(DisputeLookupRequestWrapperDto request) {
+        DisputeLookupResponseDto responseDto = disputeService.lookupDisputeFolder(
+                request.getIssuerId(),
+                request.getCardReference()
+        );
 
-        @Override
-        public void onMessage(Message<byte[]> message) {
-            try {
-                FlowHandler handler = handlerRegistry.getHandler(flowName);
-                String correlationId = handler.extractCorrelationId(message.getMessageObject());
-                String mapKey = generateMapKey(config.mapBase(), correlationId, config.partitions());
+        return DisputeLookupResponseWrapperDto.newBuilder()
+                .setCorrelationId(request.getCorrelationId())
+                .setResponse(responseDto)
+                .build();
+    }
 
-                IMap<String, byte[]> map = hazelcastInstance.getMap(mapKey);
-                map.put(correlationId, message.getMessageObject());
-
-                LOGGER.info("Routed message for flow={} with correlationId={} to mapKey={}", flowName, correlationId, mapKey);
-            } catch (InvalidProtocolBufferException e) {
-                LOGGER.error("Deserialization error for flow={}: {}", flowName, e.getMessage(), e);
-            } catch (Exception e) {
-                LOGGER.error("Routing failed for flow={}: {}", flowName, e.getMessage(), e);
-            }
-        }
-
-        private String generateMapKey(String base, String correlationId, int partitions) {
-            int index = Math.abs(correlationId.hashCode()) % partitions;
-            return base + index;
-        }
+    @Override
+    public byte[] serializeResponse(DisputeLookupResponseWrapperDto response) throws Exception {
+        return serializer.serialize(response);
     }
 }
