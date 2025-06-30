@@ -55,3 +55,34 @@ public class FlowHandlerInitializer {
         registry.register("disputeDetails", disputeDetailsFlowHandler);
     }
 }
+
+
+        package osplus.pkptuna.hazelcast.flow;
+
+public interface FlowHandler<REQ, RES> {
+
+    /**
+     * @return The name of the request map (used by consumers).
+     */
+    String getRequestMapName();
+
+    /**
+     * Deserialize the byte[] message received from Hazelcast into a typed request DTO.
+     */
+    REQ deserializeRequest(byte[] message) throws Exception;
+
+    /**
+     * Execute the actual business logic and return a response DTO.
+     */
+    RES processRequest(REQ request);
+
+    /**
+     * @return The name of the topic where the response should be published.
+     */
+    String getResponseTopicName();
+
+    /**
+     * Extract the correlation ID from the request.
+     */
+    String getCorrelationId(REQ request);
+}
