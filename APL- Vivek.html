@@ -1,20 +1,41 @@
-import java.util.concurrent.*;
+@AplComponent
+public class GenericHazelcastRouter {
 
-public class DisputeResponseTracker {
-    private static final ConcurrentMap<String, CompletableFuture<DisputeLookupResponseDto>> pending = new ConcurrentHashMap<>();
+    private final HazelcastInstance hazelcastInstance;
+    private final HazelcastFlowProperties flowProperties;
+    private final Map<String, AtomicInteger> partitionCounters = new ConcurrentHashMap<>();
 
-    public static void register(String correlationId) {
-        pending.put(correlationId, new CompletableFuture<>());
+    public GenericHazelcastRouter(HazelcastInstance hazelcastInstance, HazelcastFlowProperties flowProperties) {
+        this.hazelcastInstance = hazelcastInstance;
+        this.flowProperties = flowProperties;
     }
 
-    public static void complete(String correlationId, DisputeLookupResponseDto response) {
-        CompletableFuture<DisputeLookupResponseDto> future = pending.remove(correlationId);
-        if (future != null) {
-            future.complete(response);
+    @PostConstruct
+    public void init() {
+        for (HazelcastFlowConfig config : flowProperties.getFlows()) {
+            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(config.topic());
+            topic.addMessageListener(message -> handleMessage(config, message));
+            partitionCounters.put(config.name(), new AtomicInteger(0));
         }
     }
 
-    public static CompletableFuture<DisputeLookupResponseDto> await(String correlationId) {
-        return pending.get(correlationId);
+    private void handleMessage(HazelcastFlowConfig config, Message<byte[]> message) {
+        try {
+            DisputeLookupRequestWrapperDto request = 
+                DisputeLookupRequestWrapperDto.parser().parseFrom(message.getMessageObject());
+
+            String correlationId = request.getCorrelationId();
+            String mapName = config.baseMap() + (partitionCounters.get(config.name()).getAndIncrement() % config.partitions());
+
+            hazelcastInstance.getMap(mapName)
+                .put(correlationId, request, 30, TimeUnit.SECONDS);
+
+            LoggerFactory.getLogger(getClass()).info(
+                "📥 Routed to map {} for correlationId={}", mapName, correlationId
+            );
+
+        } catch (Exception e) {
+            LoggerFactory.getLogger(getClass()).error("❌ Failed to handle message: {}", e.getMessage(), e);
+        }
     }
 }
