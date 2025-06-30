@@ -1,40 +1,38 @@
-@Scheduled(fixedRate = 1000)
-public void pollRequestMaps() {
-    for (Map.Entry<String, HazelcastFlowConfigs.FlowConfig> entry : flowConfigs.getFlowMap().entrySet()) {
-        String flowName = entry.getKey();
-        HazelcastFlowConfigs.FlowConfig config = entry.getValue();
+package osplus.pkptuna.hazelcast.configprops;
 
-        FlowHandler<?, ?> handler = handlerRegistry.get(flowName);
-        if (handler == null) {
-            LOGGER.warn("No handler found for flow: {}", flowName);
-            continue;
-        }
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
+import osplus.apl.core.api.AplComponent;
 
-        // Cast for generic operations
-        @SuppressWarnings("unchecked")
-        FlowHandler<Object, Object> typedHandler = (FlowHandler<Object, Object>) handler;
+import java.util.Map;
 
-        for (int i = 0; i < config.partitions(); i++) {
-            String mapName = config.mapBase() + i;
-            IMap<String, Object> requestMap = hazelcastInstance.getMap(mapName);
+@ConstructorBinding
+@ConfigurationProperties(prefix = "hazelcast.flows")
+public class HazelcastFlowConfigs {
 
-            for (Map.Entry<String, Object> item : requestMap.entrySet()) {
-                String correlationId = item.getKey();
-                Object rawRequest = item.getValue();
+    private static final Logger LOGGER = LoggerFactory.getLogger(HazelcastFlowConfigs.class);
 
-                try {
-                    Object response = typedHandler.handleRequest(rawRequest);
-                    Object wrappedResponse = typedHandler.wrapResponse(correlationId, response);
+    private Map<String, FlowConfig> flowMap;
 
-                    typedHandler.sendResponse(hazelcastInstance, config.responseTopic(), wrappedResponse);
-                    requestMap.remove(correlationId);
-
-                    LOGGER.info("✅ Processed and removed request [{}] from map [{}]", correlationId, mapName);
-
-                } catch (Exception e) {
-                    LOGGER.error("❌ Error processing request [{}] in map [{}]: {}", correlationId, mapName, e.getMessage(), e);
-                }
-            }
-        }
+    public HazelcastFlowConfigs(Map<String, FlowConfig> flowMap) {
+        this.flowMap = flowMap;
     }
+
+    public Map<String, FlowConfig> getFlowMap() {
+        return flowMap;
+    }
+
+    public void setFlowMap(Map<String, FlowConfig> flowMap) {
+        this.flowMap = flowMap;
+    }
+
+    @PostConstruct
+    public void logInit(){
+        LOGGER.info("loaded flow configs:" + flowMap);
+    }
+
+    public record FlowConfig(String requestTopic, String responseTopic, String mapBase, int partitions) {}
 }
