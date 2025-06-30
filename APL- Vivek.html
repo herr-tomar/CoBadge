@@ -1,41 +1,51 @@
 @AplComponent
-public class GenericHazelcastRouter {
+@EnableScheduling
+public class GenericMapConsumer {
 
     private final HazelcastInstance hazelcastInstance;
+    private final DisputeService disputeService;
     private final HazelcastFlowProperties flowProperties;
-    private final Map<String, AtomicInteger> partitionCounters = new ConcurrentHashMap<>();
 
-    public GenericHazelcastRouter(HazelcastInstance hazelcastInstance, HazelcastFlowProperties flowProperties) {
+    public GenericMapConsumer(HazelcastInstance hazelcastInstance,
+                              DisputeService disputeService,
+                              HazelcastFlowProperties flowProperties) {
         this.hazelcastInstance = hazelcastInstance;
+        this.disputeService = disputeService;
         this.flowProperties = flowProperties;
     }
 
-    @PostConstruct
-    public void init() {
+    @Scheduled(fixedRate = 1000)
+    public void pollAllConfiguredMaps() {
         for (HazelcastFlowConfig config : flowProperties.getFlows()) {
-            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(config.topic());
-            topic.addMessageListener(message -> handleMessage(config, message));
-            partitionCounters.put(config.name(), new AtomicInteger(0));
-        }
-    }
+            for (int i = 0; i < config.partitions(); i++) {
+                String mapName = config.baseMap() + i;
+                IMap<String, DisputeLookupRequestWrapperDto> requestMap = hazelcastInstance.getMap(mapName);
 
-    private void handleMessage(HazelcastFlowConfig config, Message<byte[]> message) {
-        try {
-            DisputeLookupRequestWrapperDto request = 
-                DisputeLookupRequestWrapperDto.parser().parseFrom(message.getMessageObject());
+                for (Map.Entry<String, DisputeLookupRequestWrapperDto> entry : requestMap.entrySet()) {
+                    try {
+                        String correlationId = entry.getKey();
+                        DisputeLookupRequestWrapperDto request = entry.getValue();
 
-            String correlationId = request.getCorrelationId();
-            String mapName = config.baseMap() + (partitionCounters.get(config.name()).getAndIncrement() % config.partitions());
+                        // Business logic
+                        DisputeLookupResponseDto responseData = disputeService.lookupDisputeFolder(
+                                request.getIssuerId(), request.getCardReference());
 
-            hazelcastInstance.getMap(mapName)
-                .put(correlationId, request, 30, TimeUnit.SECONDS);
+                        DisputeLookupResponseWrapperDto response = DisputeLookupResponseWrapperDto.newBuilder()
+                                .setCorrelationId(correlationId)
+                                .setResponse(responseData)
+                                .build();
 
-            LoggerFactory.getLogger(getClass()).info(
-                "📥 Routed to map {} for correlationId={}", mapName, correlationId
-            );
+                        new CustomHazelcastReliableTopicPublisher<>(hazelcastInstance, new ProtobufSerializer<>())
+                                .sendMessage(config.responseTopic(), "GENERIC_CONSUMER", response);
 
-        } catch (Exception e) {
-            LoggerFactory.getLogger(getClass()).error("❌ Failed to handle message: {}", e.getMessage(), e);
+                        requestMap.remove(correlationId);
+                        LoggerFactory.getLogger(getClass()).info("✅ Processed & removed {}", correlationId);
+
+                    } catch (Exception e) {
+                        LoggerFactory.getLogger(getClass()).error("❌ Error processing map {}: {}", mapName, e.getMessage(), e);
+                    }
+                }
+            }
         }
     }
 }
