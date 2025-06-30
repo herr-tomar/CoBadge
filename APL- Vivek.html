@@ -1,95 +1,39 @@
-package osplus.pkptuna.hazelcast.router;
+@Scheduled(fixedRate = 1000)
+public void pollRequestMaps() {
+    for (Map.Entry<String, HazelcastFlowConfigs.FlowConfig> entry : flowConfigs.getFlowMap().entrySet()) {
+        String flowName = entry.getKey();
+        HazelcastFlowConfigs.FlowConfig config = entry.getValue();
 
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.map.IMap;
-import com.hazelcast.topic.ITopic;
-import com.hazelcast.topic.Message;
-import com.hazelcast.topic.MessageListener;
-import jakarta.annotation.PostConstruct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import osplus.apl.core.api.AplComponent;
-import osplus.pkptuna.hazelcast.configprops.HazelcastFlowConfigs;
-import osplus.pkptuna.hazelcast.pubsub.flow.FlowHandler;
-import osplus.pkptuna.hazelcast.pubsub.flow.FlowHandlerRegistry;
-
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-
-@AplComponent
-public class GenericHazelcastRouter {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastRouter.class);
-
-    private final HazelcastInstance hazelcastInstance;
-    private final HazelcastFlowConfigs flowConfigs;
-    private final FlowHandlerRegistry handlerRegistry;
-
-    // Maintain round-robin counters per flow
-    private final Map<String, AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
-
-    public GenericHazelcastRouter(HazelcastInstance hazelcastInstance,
-                                  HazelcastFlowConfigs flowConfigs,
-                                  FlowHandlerRegistry handlerRegistry) {
-        this.hazelcastInstance = hazelcastInstance;
-        this.flowConfigs = flowConfigs;
-        this.handlerRegistry = handlerRegistry;
-    }
-
-    @PostConstruct
-    public void initRouters() {
-        for (Map.Entry<String, HazelcastFlowConfigs.FlowConfig> entry : flowConfigs.getFlowMap().entrySet()) {
-            String flowName = entry.getKey();
-            HazelcastFlowConfigs.FlowConfig config = entry.getValue();
-
-            roundRobinCounters.put(flowName, new AtomicInteger(0));
-
-            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(config.requestTopic());
-            topic.addMessageListener(new RoutingListener<>(flowName, config));
-            LOGGER.info("✅ Listening to requestTopic='{}' for flow='{}'.", config.requestTopic(), flowName);
-        }
-    }
-
-    private class RoutingListener<T> implements MessageListener<byte[]> {
-
-        private final String flowName;
-        private final HazelcastFlowConfigs.FlowConfig config;
-
-        RoutingListener(String flowName, HazelcastFlowConfigs.FlowConfig config) {
-            this.flowName = flowName;
-            this.config = config;
+        FlowHandler<?, ?> handler = handlerRegistry.get(flowName);
+        if (handler == null) {
+            LOGGER.warn("No handler found for flow: {}", flowName);
+            continue;
         }
 
-        @Override
-        public void onMessage(Message<byte[]> message) {
-            try {
-                FlowHandler<T, ?> handler = (FlowHandler<T, ?>) handlerRegistry.getHandler(flowName);
+        // Cast for generic operations
+        @SuppressWarnings("unchecked")
+        FlowHandler<Object, Object> typedHandler = (FlowHandler<Object, Object>) handler;
 
-                T request = handler.deserializeRequest(message.getMessageObject());
-                String correlationId = handler.extractCorrelationId(request);
-                String issuerId = handler.extractIssuerId(request); // Optional based on logic
-                String lockKey = "route-lock-" + correlationId;
+        for (int i = 0; i < config.partitions(); i++) {
+            String mapName = config.mapBase() + i;
+            IMap<String, Object> requestMap = hazelcastInstance.getMap(mapName);
 
-                IMap<String, String> routerMap = hazelcastInstance.getMap("router-claim-map");
-                String uniqueId = UUID.randomUUID().toString();
+            for (Map.Entry<String, Object> item : requestMap.entrySet()) {
+                String correlationId = item.getKey();
+                Object rawRequest = item.getValue();
 
-                String existing = routerMap.putIfAbsent(lockKey, uniqueId);
-                if (existing != null) {
-                    LOGGER.info("⛔ Skipped duplicate routing for correlationId={}", correlationId);
-                    return;
+                try {
+                    Object response = typedHandler.handleRequest(rawRequest);
+                    Object wrappedResponse = typedHandler.wrapResponse(correlationId, response);
+
+                    typedHandler.sendResponse(hazelcastInstance, config.responseTopic(), wrappedResponse);
+                    requestMap.remove(correlationId);
+
+                    LOGGER.info("✅ Processed and removed request [{}] from map [{}]", correlationId, mapName);
+
+                } catch (Exception e) {
+                    LOGGER.error("❌ Error processing request [{}] in map [{}]: {}", correlationId, mapName, e.getMessage(), e);
                 }
-
-                int partition = roundRobinCounters.get(flowName).getAndIncrement() % config.partitions();
-                String mapKey = config.mapBase() + partition;
-
-                hazelcastInstance.getMap(mapKey).put(correlationId, request);
-
-                LOGGER.info("📨 Routed correlationId='{}' to map '{}'", correlationId, mapKey);
-
-            } catch (Exception e) {
-                LOGGER.error("❌ Routing failure for flow '{}': {}", flowName, e.getMessage(), e);
             }
         }
     }
