@@ -11,3 +11,13 @@ java.lang.NullPointerException: Cannot invoke "java.util.concurrent.atomic.Atomi
 	at osplus.pkptuna.hazelcast.router.GenericHazelcastRouter$RoutingListener.onMessage(GenericHazelcastRouter.java:98) ~[classes/:na]
 	at com.hazelcast.topic.impl.reliable.ReliableMessageListenerAdapter.onMessage(ReliableMessageListenerAdapter.java:49) ~[hazelcast-5.5.5.jar:5.5.5]
 	at com.hazelcast.topic.impl.reliable.MessageRunner.lambda$accept$0(MessageRunner.java:119) ~[hazelcast-5.5.5.jar:5.5.5]
+
+
+AtomicInteger counter = roundRobinCounters.get(flowName);
+if (counter == null) {
+    LOGGER.error("No round-robin counter found for flow '{}'. Skipping message.", flowName);
+    return;
+}
+
+int index = counter.getAndIncrement() % config.partitions();
+String mapKey = config.mapBase() + index;
