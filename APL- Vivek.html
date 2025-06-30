@@ -1,38 +1,12 @@
-package osplus.pkptuna.hazelcast.configprops;
-
-import jakarta.annotation.PostConstruct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.boot.context.properties.bind.ConstructorBinding;
-import osplus.apl.core.api.AplComponent;
-
-import java.util.Map;
-
-@ConstructorBinding
-@ConfigurationProperties(prefix = "hazelcast.flows")
-public class HazelcastFlowConfigs {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(HazelcastFlowConfigs.class);
-
-    private Map<String, FlowConfig> flowMap;
-
-    public HazelcastFlowConfigs(Map<String, FlowConfig> flowMap) {
-        this.flowMap = flowMap;
-    }
-
-    public Map<String, FlowConfig> getFlowMap() {
-        return flowMap;
-    }
-
-    public void setFlowMap(Map<String, FlowConfig> flowMap) {
-        this.flowMap = flowMap;
-    }
-
-    @PostConstruct
-    public void logInit(){
-        LOGGER.info("loaded flow configs:" + flowMap);
-    }
-
-    public record FlowConfig(String requestTopic, String responseTopic, String mapBase, int partitions) {}
-}
+hazelcast:
+  flows:
+    dispute-lookup:
+      requestTopic: DisputeLookupRequestReliableTopic
+      responseTopic: DisputeLookupResponseReliableTopic
+      mapBase: dispute-lookup-request-map-
+      partitions: 4
+    dispute-detail:
+      requestTopic: DisputeDetailRequestReliableTopic
+      responseTopic: DisputeDetailResponseReliableTopic
+      mapBase: dispute-detail-request-map-
+      partitions: 3
