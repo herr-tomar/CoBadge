@@ -1,34 +1,25 @@
-@Scheduled(fixedRate = 1000)
-public void pollRequestMaps() {
-    for (HazelcastFlowConfigs.FlowConfig config : flowConfigs.flows()) {
-        String baseMap = config.mapBase();
-        int partitions = config.partitions();
-        String responseTopic = config.responseTopic();
+@PostConstruct
+public void initRouters() {
+    List<HazelcastFlowConfigs.FlowConfig> flowList = flowConfigs.flows();
 
-        for (int i = 0; i < partitions; i++) {
-            String mapName = baseMap + i;
-            IMap<String, byte[]> map = hazelcastInstance.getMap(mapName);
+    if (flowList == null || flowList.isEmpty()) {
+        LOGGER.warn("No Hazelcast flow configurations found.");
+        return;
+    }
 
-            for (Map.Entry<String, byte[]> entry : map.entrySet()) {
-                String correlationId = entry.getKey();
-                byte[] rawRequest = entry.getValue();
+    for (HazelcastFlowConfigs.FlowConfig config : flowList) {
+        String flowName = config.name();
 
-                try {
-                    FlowHandler<?, ?> handler = handlerRegistry.getHandler(config.name());
+        @SuppressWarnings("unchecked")
+        FlowHandler<Object, Object> handler = (FlowHandler<Object, Object>) handlerRegistry.get(flowName);
 
-                    Object request = handler.deserializeRequest(rawRequest);
-                    Object response = handler.handleRequest(request);
-                    Object wrapped = handler.wrapResponse(correlationId, response);
-
-                    handler.sendResponse(hazelcastInstance, responseTopic, wrapped);
-                    map.remove(correlationId);
-
-                    LOGGER.info("✅ Processed and removed entry from {} with correlationId={}", mapName, correlationId);
-
-                } catch (Exception e) {
-                    LOGGER.error("❌ Failed to process request from {}: {}", mapName, e.getMessage(), e);
-                }
-            }
+        if (handler == null) {
+            LOGGER.warn("No FlowHandler registered for flow: {}", flowName);
+            continue;
         }
+
+        ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(config.requestTopic());
+        topic.addMessageListener(new RoutingListener(flowName, config, handler));
+        LOGGER.info("📬 Listening on topic={} for flow={}", config.requestTopic(), flowName);
     }
 }
