@@ -1,25 +1,50 @@
-@PostConstruct
-public void initRouters() {
-    List<HazelcastFlowConfigs.FlowConfig> flowList = flowConfigs.flows();
+2025-06-30 17:52:14.235  INFO 25928 --- [           main] o.apache.catalina.core.StandardEngine   : Starting Servlet engine: [Apache Tomcat/10.1.40]
+2025-06-30 17:52:14.258  INFO 25928 --- [           main] o.a.c.c.C.[.[localhost].[/pkptuna]      : Initializing Spring embedded WebApplicationContext
+2025-06-30 17:52:14.258  INFO 25928 --- [           main] w.s.c.ServletWebServerApplicationContext: Root WebApplicationContext: initialization completed in 4559 ms
+2025-06-30 17:52:15.350  INFO 25928 --- [           main] o.pkptuna.uimodule.DisputeUiModule      : Dispute response listener initialized.
+2025-06-30 17:52:15.388  INFO 25928 --- [           main] o.p.h.pubsub.GenericHazelcastConsumer   : GenericHazelcastConsumer initialized for flows: [FlowConfig[name=dispute-lookup, requestTopic=DisputeLookupRequestReliableTopic, responseTopic=DisputeLookupResponseReliableTopic, mapBase=dispute-lookup-request-map-, partitions=4], FlowConfig[name=dispute-detail, requestTopic=DisputeDetailRequestReliableTopic, responseTopic=DisputeDetailResponseReliableTopic, mapBase=dispute-detail-request-map-, partitions=3]]
+2025-06-30 17:52:15.401  WARN 25928 --- [           main] ConfigServletWebServerApplicationContext: Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'osplus.pkptuna.hazelcast.router.GenericHazelcastRouter': Invocation of init method failed
+2025-06-30 17:52:15.403  INFO 25928 --- [           main] com.hazelcast.core.LifecycleService     : EN02-apl-pkptuna [grid-hazelcastimdg-in03] [5.5.5] HazelcastClient 5.5.5 (20250319) is SHUTTING_DOWN
+2025-06-30 17:52:15.403 ERROR 25928 --- [una.lifecycle-1] o.f.c.c.h.i.status.CacheStatusUpdater   : Hazelcast client state changed to SHUTTING_DOWN. Hazelcast client is shutting shutdown!
+2025-06-30 17:52:15.408  INFO 25928 --- [           main] c.h.c.i.c.ClientConnectionManager       : EN02-apl-pkptuna [grid-hazelcastimdg-in03] [5.5.5] Removed connection to endpoint: [10.130.7.188]:5701:e827e4f5-3a8f-4411-a3c0-dd8d3edd2d80, connection: ClientConnection{alive=false, connectionId=1, channel=NioChannel{/16.160.131.235:63339->EN02-dev.sfg-mkg-etaps.intern/4.239.148.22:5701}, remoteAddress=[10.130.7.188]:5701, remoteUuid=e827e4f5-3a8f-4411-a3c0-dd8d3edd2d80, clusterUuid=e03a572e-d600-4240-8207-9229e717e6fc, lastReadTime=2025-06-30 17:52:15.347, lastWriteTime=2025-06-30 17:52:15.348, closedTime=2025-06-30 17:52:15.403}
+2025-06-30 17:52:15.408  INFO 25928 --- [           main] com.hazelcast.core.LifecycleService     : EN02-apl-pkptuna [grid-hazelcastimdg-in03] [5.5.5] HazelcastClient 5.5.5 (20250319) is CLIENT_DISCONNECTED
+2025-06-30 17:52:15.408  INFO 25928 --- [una.lifecycle-1] o.f.c.c.h.i.status.CacheStatusUpdater   : Hazelcast client state changed to CLIENT_DISCONNECTED.
+2025-06-30 17:52:15.515  INFO 25928 --- [           main] com.hazelcast.core.LifecycleService     : EN02-apl-pkptuna [grid-hazelcastimdg-in03] [5.5.5] HazelcastClient 5.5.5 (20250319) is SHUTDOWN
+2025-06-30 17:52:15.515 ERROR 25928 --- [una.lifecycle-1] o.f.c.c.h.i.status.CacheStatusUpdater   : Hazelcast client state changed to SHUTDOWN. Hazelcast client is shutdown permanently. No further reconnects will be attempted!
+2025-06-30 17:52:15.518  INFO 25928 --- [           main] o.f.c.c.h.api.HazelcastCacheInitializer : Deinitializing hazelcast cache provider
+2025-06-30 17:52:15.522  INFO 25928 --- [           main] o.apache.catalina.core.StandardService  : Stoppin**********[Tomcat]
+2025-06-30 17:52:15.541  INFO 25928 --- [           main] .s.b.a.l.ConditionEvaluationReportLogger: 
 
-    if (flowList == null || flowList.isEmpty()) {
-        LOGGER.warn("No Hazelcast flow configurations found.");
-        return;
-    }
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2025-06-30 17:52:15.582 ERROR 25928 --- [           main] o.s.boot.SpringApplication              : Application run failed
 
-    for (HazelcastFlowConfigs.FlowConfig config : flowList) {
-        String flowName = config.name();
+org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'osplus.pkptuna.hazelcast.router.GenericHazelcastRouter': Invocation of init method failed
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor.postProcessBeforeInitialization(InitDestroyAnnotationBeanPostProcessor.java:222) ~[spring-beans-6.2.6.jar:6.2.6]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.applyBeanPostProcessorsBeforeInitialization(AbstractAutowireCapableBeanFactory.java:429) ~[spring-beans-6.2.6.jar:6.2.6]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(AbstractAutowireCapableBeanFactory.java:1810) ~[spring-beans-6.2.6.jar:6.2.6]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:607) ~[spring-beans-6.2.6.jar:6.2.6]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529) ~[spring-beans-6.2.6.jar:6.2.6]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339) ~[spring-beans-6.2.6.jar:6.2.6]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:371) ~[spring-beans-6.2.6.jar:6.2.6]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337) ~[spring-beans-6.2.6.jar:6.2.6]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202) ~[spring-beans-6.2.6.jar:6.2.6]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1221) ~[spring-beans-6.2.6.jar:6.2.6]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1187) ~[spring-beans-6.2.6.jar:6.2.6]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1122) ~[spring-beans-6.2.6.jar:6.2.6]
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:987) ~[spring-context-6.2.6.jar:6.2.6]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:627) ~[spring-context-6.2.6.jar:6.2.6]
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146) ~[spring-boot-3.4.5.jar:3.4.5]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:753) ~[spring-boot-3.4.5.jar:3.4.5]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439) ~[spring-boot-3.4.5.jar:3.4.5]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318) ~[spring-boot-3.4.5.jar:3.4.5]
+	at osplus.apl.core.AplCoreRunner.main(AplCoreRunner.java:248) ~[apl-core-runner-251.0.0-M3.jar:251.0.0-M3]
+Caused by: java.lang.IllegalArgumentException: No FlowHandler registered for flow: dispute-lookup
+	at osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry.getHandler(FlowHandlerRegistry.java:20) ~[classes/:na]
+	at osplus.pkptuna.hazelcast.router.GenericHazelcastRouter.initRouters(GenericHazelcastRouter.java:55) ~[classes/:na]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor$LifecycleMethod.invoke(InitDestroyAnnotationBeanPostProcessor.java:457) ~[spring-beans-6.2.6.jar:6.2.6]
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor$LifecycleMetadata.invokeInitMethods(InitDestroyAnnotationBeanPostProcessor.java:401) ~[spring-beans-6.2.6.jar:6.2.6]
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor.postProcessBeforeInitialization(InitDestroyAnnotationBeanPostProcessor.java:219) ~[spring-beans-6.2.6.jar:6.2.6]
+	... 18 common frames omitted
 
-        @SuppressWarnings("unchecked")
-        FlowHandler<Object, Object> handler = (FlowHandler<Object, Object>) handlerRegistry.get(flowName);
-
-        if (handler == null) {
-            LOGGER.warn("No FlowHandler registered for flow: {}", flowName);
-            continue;
-        }
-
-        ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(config.requestTopic());
-        topic.addMessageListener(new RoutingListener(flowName, config, handler));
-        LOGGER.info("📬 Listening on topic={} for flow={}", config.requestTopic(), flowName);
-    }
-}
