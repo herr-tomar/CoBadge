@@ -3,3 +3,11 @@
       responseTopic: DisputeDetailResponseReliableTopic
       mapBase: dispute-detail-request-map-
       partitions: 3
+
+2025-06-30 18:05:47.160  INFO 30608 --- [omcat-handler-0] o.a.c.d.s.OnlineSessionContextProvider  : Login against https://en02-dev.sfg-mkg-etaps.intern/fisession/keepAlive ends with status 200. RequestId: 5e3db0d0-3d20-4a1c-b39a-c6287234e138
+2025-06-30 18:05:47.439 ERROR 30608 --- [onPool-worker-1] o.p.h.router.GenericHazelcastRouter     : Routing failure for flow 'dispute-lookup': Cannot invoke "java.util.concurrent.atomic.AtomicInteger.getAndIncrement()" because the return value of "java.util.Map.get(Object)" is null
+
+java.lang.NullPointerException: Cannot invoke "java.util.concurrent.atomic.AtomicInteger.getAndIncrement()" because the return value of "java.util.Map.get(Object)" is null
+	at osplus.pkptuna.hazelcast.router.GenericHazelcastRouter$RoutingListener.onMessage(GenericHazelcastRouter.java:98) ~[classes/:na]
+	at com.hazelcast.topic.impl.reliable.ReliableMessageListenerAdapter.onMessage(ReliableMessageListenerAdapter.java:49) ~[hazelcast-5.5.5.jar:5.5.5]
+	at com.hazelcast.topic.impl.reliable.MessageRunner.lambda$accept$0(MessageRunner.java:119) ~[hazelcast-5.5.5.jar:5.5.5]
