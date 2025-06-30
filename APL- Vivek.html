@@ -1,53 +1,27 @@
-package osplus.pkptuna.hazelcast.flow;
+@Override
+public void onMessage(Message<byte[]> message) {
+    try {
+        T request = handler.deserializeRequest(message.getMessageObject());
+        String correlationId = handler.extractCorrelationId(request);
+        String issuerId = handler.extractIssuerId(request);
+        String lockKey = "route-lock-" + correlationId;
 
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseWrapperDto;
-import osplus.pkptuna.dispute.service.DisputeService;
-import osplus.pkptuna.hazelcast.framework.FlowHandler;
-import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufSerializer;
-import org.springframework.stereotype.Component;
+        IMap<String, String> routerMap = hazelcastInstance.getMap("router-claim-map");
+        String uniqueId = UUID.randomUUID().toString();
 
-@Component
-public class DisputeLookupFlowHandler implements FlowHandler<DisputeLookupRequestWrapperDto, DisputeLookupResponseWrapperDto> {
+        String existing = routerMap.putIfAbsent(lockKey, uniqueId);
+        if (existing != null) {
+            LOGGER.info("Skipped duplicate routing for correlationId={}", correlationId);
+            return;
+        }
 
-    private final DisputeService disputeService;
-    private final ProtobufSerializer<DisputeLookupResponseWrapperDto> serializer = new ProtobufSerializer<>();
+        int index = roundRobinCounter.getAndIncrement() % partitionCount;
+        String mapKey = mapBase + index;
+        hazelcastInstance.getMap(mapKey).put(correlationId, request);
 
-    public DisputeLookupFlowHandler(DisputeService disputeService) {
-        this.disputeService = disputeService;
-    }
+        LOGGER.info("🔄 Routed message with correlationId={} to {}", correlationId, mapKey);
 
-    @Override
-    public DisputeLookupRequestWrapperDto deserializeRequest(byte[] data) throws Exception {
-        return DisputeLookupRequestWrapperDto.parseFrom(data);
-    }
-
-    @Override
-    public String extractCorrelationId(DisputeLookupRequestWrapperDto request) {
-        return request.getCorrelationId();
-    }
-
-    @Override
-    public String extractIssuerId(DisputeLookupRequestWrapperDto request) {
-        return request.getIssuerId();
-    }
-
-    @Override
-    public DisputeLookupResponseWrapperDto processRequest(DisputeLookupRequestWrapperDto request) {
-        DisputeLookupResponseDto responseDto = disputeService.lookupDisputeFolder(
-                request.getIssuerId(),
-                request.getCardReference()
-        );
-
-        return DisputeLookupResponseWrapperDto.newBuilder()
-                .setCorrelationId(request.getCorrelationId())
-                .setResponse(responseDto)
-                .build();
-    }
-
-    @Override
-    public byte[] serializeResponse(DisputeLookupResponseWrapperDto response) throws Exception {
-        return serializer.serialize(response);
+    } catch (Exception e) {
+        LOGGER.error("Routing failure: {}", e.getMessage(), e);
     }
 }
