@@ -1,18 +1,57 @@
-import org.springframework.boot.context.properties.ConfigurationProperties;
+package osplus.pkptuna.hazelcast.flow;
 
+import org.springframework.stereotype.Component;
+
+import java.util.HashMap;
 import java.util.Map;
 
-@ConfigurationProperties(prefix = "hazelcast.flows")
-public class HazelcastFlowConfigs {
-    private Map<String, FlowConfig> flowMap;
+@Component
+public class FlowHandlerRegistry {
 
-    public Map<String, FlowConfig> getFlowMap() {
-        return flowMap;
+    private final Map<String, FlowHandler<?, ?>> handlerMap = new HashMap<>();
+
+    public void register(String flowName, FlowHandler<?, ?> handler) {
+        handlerMap.put(flowName, handler);
     }
 
-    public void setFlowMap(Map<String, FlowConfig> flowMap) {
-        this.flowMap = flowMap;
+    public FlowHandler<?, ?> getHandler(String flowName) {
+        FlowHandler<?, ?> handler = handlerMap.get(flowName);
+        if (handler == null) {
+            throw new IllegalArgumentException("No FlowHandler registered for flow: " + flowName);
+        }
+        return handler;
     }
 
-    public record FlowConfig(String requestTopic, String responseTopic, String mapBase, int partitions) {}
+    public boolean contains(String flowName) {
+        return handlerMap.containsKey(flowName);
+    }
+}
+
+
+import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class FlowHandlerInitializer {
+
+    private final FlowHandlerRegistry registry;
+
+    private final DisputeLookupFlowHandler disputeLookupFlowHandler;
+    private final DisputeDetailsFlowHandler disputeDetailsFlowHandler;
+
+    public FlowHandlerInitializer(
+        FlowHandlerRegistry registry,
+        DisputeLookupFlowHandler disputeLookupFlowHandler,
+        DisputeDetailsFlowHandler disputeDetailsFlowHandler
+    ) {
+        this.registry = registry;
+        this.disputeLookupFlowHandler = disputeLookupFlowHandler;
+        this.disputeDetailsFlowHandler = disputeDetailsFlowHandler;
+    }
+
+    @PostConstruct
+    public void registerHandlers() {
+        registry.register("disputeLookup", disputeLookupFlowHandler);
+        registry.register("disputeDetails", disputeDetailsFlowHandler);
+    }
 }
