@@ -4,20 +4,71 @@
       mapBase: dispute-detail-request-map-
       partitions: 3
 
-2025-06-30 18:05:47.160  INFO 30608 --- [omcat-handler-0] o.a.c.d.s.OnlineSessionContextProvider  : Login against https://en02-dev.sfg-mkg-etaps.intern/fisession/keepAlive ends with status 200. RequestId: 5e3db0d0-3d20-4a1c-b39a-c6287234e138
-2025-06-30 18:05:47.439 ERROR 30608 --- [onPool-worker-1] o.p.h.router.GenericHazelcastRouter     : Routing failure for flow 'dispute-lookup': Cannot invoke "java.util.concurrent.atomic.AtomicInteger.getAndIncrement()" because the return value of "java.util.Map.get(Object)" is null
+2025-06-30 18:19:26.094  INFO 3000 --- [onPool-worker-2] o.p.h.router.GenericHazelcastRouter     : Routed correlationId='9222b8f3-4c22-4ed6-b230-512a7fbdb669' to map 'dispute-lookup-request-map-0'
+2025-06-30 18:19:26.733 ERROR 3000 --- [poolScheduler10] o.s.s.s.TaskUtils$LoggingErrorHandler   : Unexpected error occurred in scheduled task
 
-java.lang.NullPointerException: Cannot invoke "java.util.concurrent.atomic.AtomicInteger.getAndIncrement()" because the return value of "java.util.Map.get(Object)" is null
-	at osplus.pkptuna.hazelcast.router.GenericHazelcastRouter$RoutingListener.onMessage(GenericHazelcastRouter.java:98) ~[classes/:na]
-	at com.hazelcast.topic.impl.reliable.ReliableMessageListenerAdapter.onMessage(ReliableMessageListenerAdapter.java:49) ~[hazelcast-5.5.5.jar:5.5.5]
-	at com.hazelcast.topic.impl.reliable.MessageRunner.lambda$accept$0(MessageRunner.java:119) ~[hazelcast-5.5.5.jar:5.5.5]
+java.lang.ClassCastException: class osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto cannot be cast to class [B (osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto is in unnamed module of loader 'app'; [B is in module java.base of loader 'bootstrap')
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer.pollRequestMaps(GenericHazelcastConsumer.java:59) ~[classes/:na]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130) ~[spring-context-6.2.6.jar:6.2.6]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124) ~[spring-context-6.2.6.jar:6.2.6]
+	at io.micrometer.observation.Observation.observe(Observation.java:498) ~[micrometer-observation-1.14.6.jar:1.14.6]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124) ~[spring-context-6.2.6.jar:6.2.6]
+	at org.springframework.scheduling.config.Task$OutcomeTrackingRunnable.run(Task.java:85) ~[spring-context-6.2.6.jar:6.2.6]
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54) ~[spring-context-6.2.6.jar:6.2.6]
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572) ~[na:na]
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:358) ~[na:na]
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642) ~[na:na]
+	at java.base/java.lang.Thread.run(Thread.java:1583) ~[na:na]
 
+2025-06-30 18:19:27.724 ERROR 3000 --- [poolScheduler10] o.s.s.s.TaskUtils$LoggingErrorHandler   : Unexpected error occurred in scheduled task
 
-AtomicInteger counter = roundRobinCounters.get(flowName);
-if (counter == null) {
-    LOGGER.error("No round-robin counter found for flow '{}'. Skipping message.", flowName);
-    return;
-}
+java.lang.ClassCastException: class osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto cannot be cast to class [B (osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto is in unnamed module of loader 'app'; [B is in module java.base of loader 'bootstrap')
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer.pollRequestMaps(GenericHazelcastConsumer.java:59) ~[classes/:na]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130) ~[spring-context-6.2.6.jar:6.2.6]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124) ~[spring-context-6.2.6.jar:6.2.6]
+	at io.micrometer.observation.Observation.observe(Observation.java:498) ~[micrometer-observation-1.14.6.jar:1.14.6]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124) ~[spring-context-6.2.6.jar:6.2.6]
+	at org.springframework.scheduling.config.Task$OutcomeTrackingRunnable.run(Task.java:85) ~[spring-context-6.2.6.jar:6.2.6]
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54) ~[spring-context-6.2.6.jar:6.2.6]
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572) ~[na:na]
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:358) ~[na:na]
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642) ~[na:na]
+	at java.base/java.lang.Thread.run(Thread.java:1583) ~[na:na]
 
-int index = counter.getAndIncrement() % config.partitions();
-String mapKey = config.mapBase() + index;
+2025-06-30 18:19:28.725 ERROR 3000 --- [poolScheduler10] o.s.s.s.TaskUtils$LoggingErrorHandler   : Unexpected error occurred in scheduled task
+
+java.lang.ClassCastException: class osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto cannot be cast to class [B (osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto is in unnamed module of loader 'app'; [B is in module java.base of loader 'bootstrap')
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer.pollRequestMaps(GenericHazelcastConsumer.java:59) ~[classes/:na]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130) ~[spring-context-6.2.6.jar:6.2.6]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124) ~[spring-context-6.2.6.jar:6.2.6]
+	at io.micrometer.observation.Observation.observe(Observation.java:498) ~[micrometer-observation-1.14.6.jar:1.14.6]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124) ~[spring-context-6.2.6.jar:6.2.6]
+	at org.springframework.scheduling.config.Task$OutcomeTrackingRunnable.run(Task.java:85) ~[spring-context-6.2.6.jar:6.2.6]
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54) ~[spring-context-6.2.6.jar:6.2.6]
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572) ~[na:na]
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:358) ~[na:na]
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642) ~[na:na]
+	at java.base/java.lang.Thread.run(Thread.java:1583) ~[na:na]
+
+2025-06-30 18:19:29.740 ERROR 3000 --- [poolScheduler10] o.s.s.s.TaskUtils$LoggingErrorHandler   : Unexpected error occurred in scheduled task
+
+java.lang.ClassCastException: class osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto cannot be cast to class [B (osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto is in unnamed module of loader 'app'; [B is in module java.base of loader 'bootstrap')
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer.pollRequestMaps(GenericHazelcastConsumer.java:59) ~[classes/:na]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.runInternal(ScheduledMethodRunnable.java:130) ~[spring-context-6.2.6.jar:6.2.6]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.lambda$run$2(ScheduledMethodRunnable.java:124) ~[spring-context-6.2.6.jar:6.2.6]
+	at io.micrometer.observation.Observation.observe(Observation.java:498) ~[micrometer-observation-1.14.6.jar:1.14.6]
+	at org.springframework.scheduling.support.ScheduledMethodRunnable.run(ScheduledMethodRunnable.java:124) ~[spring-context-6.2.6.jar:6.2.6]
