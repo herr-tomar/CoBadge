@@ -1,35 +1,17 @@
-package osplus.pkptuna.hazelcast.flows;
+@Configuration
+public class FlowHandlerRegistration {
 
-import jakarta.annotation.PostConstruct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
-
-import java.util.List;
-
-@Component
-public class FlowHandlerInitializer {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(FlowHandlerInitializer.class);
-
-    private final List<FlowHandler<?, ?>> flowHandlers;
-    private final FlowHandlerRegistry registry;
-
-    public FlowHandlerInitializer(List<FlowHandler<?, ?>> flowHandlers, FlowHandlerRegistry registry) {
-        this.flowHandlers = flowHandlers;
-        this.registry = registry;
+    @Bean
+    public DisputeLookupFlowHandler disputeLookupFlowHandler(DisputeService service, FlowHandlerRegistry registry) {
+        DisputeLookupFlowHandler handler = new DisputeLookupFlowHandler(service);
+        registry.register("dispute-lookup", handler);
+        return handler;
     }
 
-    @PostConstruct
-    public void registerHandlers() {
-        for (FlowHandler<?, ?> handler : flowHandlers) {
-            String flowName = handler.getFlowName();  // Make sure each handler defines this
-            registry.register(flowName, handler);
-            LOGGER.info("✅ Registered flow handler: {}", flowName);
-        }
-
-        if (flowHandlers.isEmpty()) {
-            LOGGER.warn("⚠️ No FlowHandlers found during initialization!");
-        }
+    @Bean
+    public DisputeDetailFlowHandler disputeDetailFlowHandler(DisputeDetailService service, FlowHandlerRegistry registry) {
+        DisputeDetailFlowHandler handler = new DisputeDetailFlowHandler(service);
+        registry.register("dispute-detail", handler);
+        return handler;
     }
 }
