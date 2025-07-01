@@ -1,20 +1,35 @@
-message DisputeDetailRequestWrapperDto {
-  string correlationId = 1;
-  string issuerId = 2;
-  string disputeFolderReference = 3;
+package osplus.pkptuna.hazelcast.flows;
 
-  DisputeDetailRequestDto payload = 4;
-}
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
-message DisputeDetailRequestDto {
-  string requestedBy = 1;
-  string requestChannel = 2;
-  string messageType = 3;
-  string businessContext = 4;
-  repeated string embed = 5;
-}
+import java.util.List;
 
-message DisputeDetailResponseWrapperDto {
-  string correlationId = 1;
-  DisputeResponseDto response = 2;
+@Component
+public class FlowHandlerInitializer {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(FlowHandlerInitializer.class);
+
+    private final List<FlowHandler<?, ?>> flowHandlers;
+    private final FlowHandlerRegistry registry;
+
+    public FlowHandlerInitializer(List<FlowHandler<?, ?>> flowHandlers, FlowHandlerRegistry registry) {
+        this.flowHandlers = flowHandlers;
+        this.registry = registry;
+    }
+
+    @PostConstruct
+    public void registerHandlers() {
+        for (FlowHandler<?, ?> handler : flowHandlers) {
+            String flowName = handler.getFlowName();  // Make sure each handler defines this
+            registry.register(flowName, handler);
+            LOGGER.info("✅ Registered flow handler: {}", flowName);
+        }
+
+        if (flowHandlers.isEmpty()) {
+            LOGGER.warn("⚠️ No FlowHandlers found during initialization!");
+        }
+    }
 }
