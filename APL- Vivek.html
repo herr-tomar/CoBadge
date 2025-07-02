@@ -1,98 +1,25 @@
-package osplus.pkptuna.hazelcast.pubsub;
+package osplus.pkptuna.flows.bootstrap;
 
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.topic.ITopic;
-import com.hazelcast.topic.Message;
-import com.hazelcast.topic.MessageListener;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.Configuration;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
 
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
+@Configuration
+public class HazelcastFlowBootstrap {
 
-/**
- * Generic Hazelcast message router. Configurable via injected interfaces.
- */
-public class GenericHazelcastRouter {
+    private final GenericHazelcastRouter router;
+    private final GenericHazelcastConsumer consumer;
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastRouter.class);
-
-    private final HazelcastInstance hazelcastInstance;
-    private final FlowConfigProvider configProvider;
-    private final FlowHandlerResolver handlerResolver;
-
-    private final Map<String, AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
-
-    public GenericHazelcastRouter(HazelcastInstance hazelcastInstance,
-                                  FlowConfigProvider configProvider,
-                                  FlowHandlerResolver handlerResolver) {
-        this.hazelcastInstance = hazelcastInstance;
-        this.configProvider = configProvider;
-        this.handlerResolver = handlerResolver;
+    public HazelcastFlowBootstrap(GenericHazelcastRouter router,
+                                   GenericHazelcastConsumer consumer) {
+        this.router = router;
+        this.consumer = consumer;
     }
 
-    public void initRouters() {
-        List<FlowConfig> flowList = configProvider.getFlowConfigs();
-        if (flowList == null || flowList.isEmpty()) {
-            LOGGER.warn("No flow configurations provided.");
-            return;
-        }
-
-        for (FlowConfig config : flowList) {
-            String flowName = config.getName();
-            roundRobinCounters.putIfAbsent(flowName, new AtomicInteger(0));
-
-            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(config.getTopicName());
-            topic.addMessageListener(new MessageListener<byte[]>() {
-                @Override
-                public void onMessage(Message<byte[]> message) {
-                    try {
-                        FlowHandler handler = handlerResolver.resolve(flowName);
-                        if (handler == null) {
-                            LOGGER.warn("No handler found for flow: {}", flowName);
-                            return;
-                        }
-                        handler.handleMessage(flowName, message.getMessageObject());
-                    } catch (Exception ex) {
-                        LOGGER.error("Error handling message for flow {}: {}", flowName, ex.getMessage(), ex);
-                    }
-                }
-            });
-        }
-    }
-
-    // --- Interfaces used for injection ---
-
-    public interface FlowConfigProvider {
-        List<FlowConfig> getFlowConfigs();
-    }
-
-    public interface FlowHandlerResolver {
-        FlowHandler resolve(String flowName);
-    }
-
-    public interface FlowHandler {
-        void handleMessage(String flowName, byte[] message);
-    }
-
-    public static class FlowConfig {
-        private final String name;
-        private final String topicName;
-
-        public FlowConfig(String name, String topicName) {
-            this.name = name;
-            this.topicName = topicName;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public String getTopicName() {
-            return topicName;
-        }
+    @PostConstruct
+    public void startFlowInfra() {
+        router.initRouters();
+        consumer.startPolling();
     }
 }
