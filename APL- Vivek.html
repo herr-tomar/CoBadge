@@ -1,81 +1,26 @@
-package osplus.pkptuna.flows.bootstrap;
+package osplus.pkptuna.flows;
 
-import com.hazelcast.core.HazelcastInstance;
-import jakarta.annotation.PostConstruct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.scheduling.TaskScheduler;
-import osplus.pkptuna.hazelcast.config.FlowConfig;
-import osplus.pkptuna.hazelcast.config.HazelcastFlowConfigs;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+import osplus.pkptuna.flows.bootstrap.FlowHandlerInitializer;
+import osplus.pkptuna.flows.bootstrap.HazelcastFlowBootstrap;
+import osplus.pkptuna.flows.bootstrap.HazelcastFlowConfigs;
 import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
 import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
 
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-
 @Configuration
-public class FlowHandlerInitializer {
+@EnableConfigurationProperties(HazelcastFlowConfigs.class)
+public class FlowsModuleConfiguration {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(FlowHandlerInitializer.class);
-
-    private final List<FlowConfig> configs;
-    private final Map<String, FlowHandler> flowHandlers;
-    private final FlowHandlerRegistry<String, FlowHandler> registry;
-
-    public FlowHandlerInitializer(
-            HazelcastFlowConfigs external,
-            Map<String, FlowHandler> flowHandlers,
-            FlowHandlerRegistry<String, FlowHandler> registry
-    ) {
-        this.configs = external.flows().stream()
-                .map(c -> new FlowConfig(
-                        c.name(),
-                        c.requestTopic(),
-                        c.responseTopic(),
-                        c.mapBase(),
-                        c.partitions()
-                ))
-                .collect(Collectors.toList());
-        LOGGER.info("Loaded hazelcast flow configs: {}", configs);
-        this.flowHandlers = flowHandlers;
-        this.registry = registry;
-    }
-
-    @PostConstruct
-    public void registerHandlers() {
-        for (FlowConfig config : configs) {
-            FlowHandler handler = flowHandlers.get(config.name());
-            if (handler == null) {
-                throw new IllegalArgumentException("❌ No FlowHandler registered for flow: " + config.name());
-            }
-            registry.register(config.name(), handler);
-            LOGGER.info("✅ Registered handler '{}' for flow '{}'", handler.getClass().getSimpleName(), config.name());
-        }
+    @Bean
+    public FlowHandlerInitializer flowHandlerInitializer() {
+        return new FlowHandlerInitializer();
     }
 
     @Bean
-    public List<FlowConfig> hazelcastFlowConfigs() {
-        return configs;
-    }
-
-    @Bean
-    public GenericHazelcastRouter hazelcastRouter(
-            HazelcastInstance hazelcastInstance,
-            FlowHandlerRegistry<String, FlowHandler> registry) {
-        return new GenericHazelcastRouter(hazelcastInstance, configs, registry);
-    }
-
-    @Bean
-    public GenericHazelcastConsumer hazelcastConsumer(
-            HazelcastInstance hazelcastInstance,
-            @Qualifier("flowTaskScheduler") TaskScheduler scheduler,
-            FlowHandlerRegistry<String, FlowHandler> registry) {
-        return new GenericHazelcastConsumer(hazelcastInstance, scheduler, configs, registry);
+    public HazelcastFlowBootstrap hazelcastFlowBootstrap(GenericHazelcastRouter router,
+                                                         GenericHazelcastConsumer consumer) {
+        return new HazelcastFlowBootstrap(router, consumer);
     }
 }
