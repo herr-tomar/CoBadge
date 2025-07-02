@@ -1,124 +1,15 @@
-2025-07-02 17:24:24.891  INFO 25172 --- [           main] o.apache.catalina.core.StandardEngine   : Starting Servlet engine: [Apache Tomcat/10.1.40]
-2025-07-02 17:24:24.913  INFO 25172 --- [           main] o.a.c.c.C.[.[localhost].[/pkptuna]      : Initializing Spring embedded WebApplicationContext
-2025-07-02 17:24:24.914  INFO 25172 --- [           main] w.s.c.ServletWebServerApplicationContext: Root WebApplicationContext: initialization completed in 4444 ms
-2025-07-02 17:24:25.900  INFO 25172 --- [           main] o.p.f.handlers.DisputeLookupFlowHandler : Loaded DisputeLookupFlowHandler code ...........
-2025-07-02 17:24:26.053  INFO 25172 --- [           main] o.pkptuna.uimodule.DisputeUiModule      : Dispute response listener initialized.
-2025-07-02 17:24:26.156  INFO 25172 --- [           main] o.pkptuna.uimodule.DisputeUiModule      : Dispute response listener initialized.
-2025-07-02 17:24:26.201  INFO 25172 --- [           main] o.p.f.handlers.DisputeDetailFlowHandler : Loaded DisputeDetailFlowHandler code ...........
-2025-07-02 17:24:26.217  WARN 25172 --- [           main] o.p.h.pubsub.GenericHazelcastRouter     : No Hazelcast flow configurations provided.
-2025-07-02 17:24:26.219  WARN 25172 --- [ poolScheduler1] o.p.h.pubsub.GenericHazelcastConsumer   : Skippin********** no flow configurations
-2025-07-02 17:24:27.230  WARN 25172 --- [ poolScheduler1] o.p.h.pubsub.GenericHazelcastConsumer   : Skippin********** no flow configurations
-2025-07-02 17:24:28.223  WARN 25172 --- [ poolScheduler2] o.p.h.pubsub.GenericHazelcastConsumer   : Skippin********** no flow configurations
-2025-07-02 17:24:28.364  WARN 25172 --- [           main] .a.c.c.s.CorsConfigurerCustomizerFactory: Configuring restriction-less CORS Configuration for local development
-2025-07-02 17:24:28.390  WARN 25172 --- [           main] .a.c.c.s.CorsConfigurerCustomizerFactory: Configuring restriction-less CORS Configuration for local development
-2025-07-02 17:24:28.392  INFO 25172 --- [           main] o.a.c.a.AplCoreSecurityConfiguration    : anonymousPathList: [osplus.apl.autoconfigure.AplLocalDevelopmentAutoConfiguration$$Lambda/0x000001b4589d5168@60ca607, osplus.apl.uui.service.security.UuiAnonymousPaths@6984d41a, osplus.apl.autoconfigure.OnlineDevelopmentAutoConfiguration$$Lambda/0x000001b458a76018@5d6850f7, osplus.apl.autoconfigure.UniversalUiAutoConfiguration$1@674502f9]
-2025-07-02 17:24:28.474  WARN 25172 --- [           main] i.m.core.instrument.MeterRegistry       : This Gauge has been already registered (MeterId{name='utc.timediff', tags=[]}), the registration will be ignored. Note that subsequent logs will be logged at debug level.
-2025-07-02 17:24:28.532  INFO 25172 --- [           main] o.a.configuration.DynsAplConfiguration  : Activate DynsAplConfiguration with Ausfallmenge (EN02)
-20250702 17:24:28 DynSSystemConfiguration: ***###*** Start einer neuen Applikation ***###*** Framework Version 5.Y2  Java-Version: 21.0.3
-2025-07-02 17:24:28.548  INFO 25172 --- [           main] d.s.d.s.DynSSystemConfiguration         : ***###*** Start einer neuen Applikation ***###*** Framework Version 5.Y2  Java-Version: 21.0.3
-2025-07-02 17:24:28.549  INFO 25172 --- [           main] d.s.d.s.DynSSystemConfiguration         : DynSSystemConfigurationInitialisierung... Frameworkversion 5.Y2
-2025-07-02 17:24:28.550  INFO 25172 --- [           main] d.s.d.s.DynSSystemConfiguration         : Die System-Property sun.net.http.retryPost wurde auf false gesetzt, damit langlaufende POST-Requests im Fall eines Verbindungs-Abbruchs nicht erneut gesendet werden. Siehe dazu auch https://docs.oracle.com/javase/8/docs/technotes/guides/net/properties.html sowie https://bugs.java.com/bugdatabase/view_bug.do?bug_id=6382788
-2025-07-02 17:24:28.551  INFO 25172 --- [           main] d.s.d.s.DynSSystemConfiguration         : DynS-Properties werden gelesen aus: C:\Users\j769180\AppData\Local\Temp\dyns148884622671264919
-20250702 17:24:28 DynSSystemConfiguration: C:\Users\j769180\AppData\Local\Temp\dyns148884622671264919: Version null / null / null
-20250702 17:24:28 DynSSystemConfiguration: Das Laden der Systemkonfiguration erfolgte mit folgenden Werten:
-*** DynSSystemConfiguration ***
-*** Umgebung ***
-+ UMG_ENV_INTERNET: false
-+ UMG_ENV_TYPE: NICHT-PROD
-*** Schema ***
-+ transaktion: PMS3
-+ programmContainerC: MDC24000
-+ programmContainerJavaFdp: JPGMDY
-+ programmContainerJavaOo: JPGMDY
-+ cics-codepage: IBM273
-*** Defaults ***
-+ evasion-duration: 1800000
-+ evasion-no-switch-time: 0
-+ CICS-heartbeat-timeout: 5000
-+ langlaeufer-warnung: 30000
-+ DatenTransport Java-Strg: DTT_FREE(???)
-+ use-internal-WS-Pool: false
-+ use-jca: false
-+ max-anzahl-bfdp-ws-instanzen: 50
+@Bean
+public List<FlowConfig> hazelcastFlowConfigs(HazelcastFlowConfigs external) {
+    List<FlowConfig> flowConfigList = external.getFlows().stream()
+        .map(c -> new FlowConfig(
+                c.getName(),
+                c.getRequestTopic(),
+                c.getResponseTopic(),
+                c.getMapBase(),
+                c.getPartitions()
+        ))
+        .collect(Collectors.toList());
 
-2025-07-02 17:24:29.109  INFO 25172 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer : Tomcat started on port 8080 (http) with context path '/pkptuna'
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] u.j.c.RefreshScopeRefreshedEventListener: Refreshing cached encryptable property sources on ServletWebServerInitializedEvent
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source systemProperties refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source systemEnvironment refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source random refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source Config resource 'class path resource [application.properties]' via location 'optional:classpath:/' refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source Config resource 'class path resource [application.yml]' via location 'optional:classpath:/' refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source Config resource 'class path resource [application.yaml]' via location 'optional:classpath:/' refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source springCloudClientHostInfo refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source applicationInfo refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-aaa-command.properties] refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-und-client.properties] refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [mkp-products.properties] refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-fiss-client.properties] refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-local-online.properties] refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-local.properties] refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-grid.properties] refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [mkp-build.properties] refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-auth-application.properties] refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-httpclient.properties] refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-administration.properties] refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-core.properties] refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-core-runner.properties] refreshed
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] c.u.j.EncryptablePropertySourceConverter: Skippin**********Source configurationProperties [class org.springframework.boot.context.properties.source.ConfigurationPropertySourcesPropertySource
-2025-07-02 17:24:29.111  INFO 25172 --- [           main] c.u.j.EncryptablePropertySourceConverter: Skippin**********Source servletConfigInitParams [class org.springframework.core.env.PropertySource$StubPropertySource
-2025-07-02 17:24:29.112  INFO 25172 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource servletContextInitParams [org.springframework.web.context.support.ServletContextPropertySource] to EncryptableEnumerablePropertySourceWrapper
-2025-07-02 17:24:29.180  INFO 25172 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer : Tomcat initialized with port 8088 (http)
-2025-07-02 17:24:29.181  INFO 25172 --- [           main] o.apache.catalina.core.StandardService  : Starting service [Tomcat]
-2025-07-02 17:24:29.181  INFO 25172 --- [           main] o.apache.catalina.core.StandardEngine   : Starting Servlet engine: [Apache Tomcat/10.1.40]
-2025-07-02 17:24:29.186  INFO 25172 --- [           main] o.a.c.c.C.[Tomcat-1].[localhost].[/]    : Initializing Spring embedded WebApplicationContext
-2025-07-02 17:24:29.186  INFO 25172 --- [           main] w.s.c.ServletWebServerApplicationContext: Root WebApplicationContext: initialization completed in 68 ms
-2025-07-02 17:24:29.193  INFO 25172 --- [           main] o.s.b.a.e.web.EndpointLinksResolver     : Exposing 15 endpoints beneath base path '/management'
-2025-07-02 17:24:29.235  WARN 25172 --- [ poolScheduler1] o.p.h.pubsub.GenericHazelcastConsumer   : Skippin********** no flow configurations
-2025-07-02 17:24:29.769  INFO 25172 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer : Tomcat started on port 8088 (http) with context path '/'
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] u.j.c.RefreshScopeRefreshedEventListener: Refreshing cached encryptable property sources on ServletWebServerInitializedEvent
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source servletContextInitParams refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source systemProperties refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source systemEnvironment refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source random refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source Config resource 'class path resource [application.properties]' via location 'optional:classpath:/' refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source Config resource 'class path resource [application.yml]' via location 'optional:classpath:/' refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source Config resource 'class path resource [application.yaml]' via location 'optional:classpath:/' refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source springCloudClientHostInfo refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source applicationInfo refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-aaa-command.properties] refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-und-client.properties] refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [mkp-products.properties] refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-fiss-client.properties] refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-local-online.properties] refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-local.properties] refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-grid.properties] refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [mkp-build.properties] refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-auth-application.properties] refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-httpclient.properties] refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-administration.properties] refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-core.properties] refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] CachingDelegateEncryptablePropertySource: Property Source class path resource [apl-core-runner.properties] refreshed
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] c.u.j.EncryptablePropertySourceConverter: Converting PropertySource server.ports [org.springframework.core.env.MapPropertySource] to EncryptableMapPropertySourceWrapper
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] c.u.j.EncryptablePropertySourceConverter: Skippin**********Source configurationProperties [class org.springframework.boot.context.properties.source.ConfigurationPropertySourcesPropertySource
-2025-07-02 17:24:29.770  INFO 25172 --- [           main] c.u.j.EncryptablePropertySourceConverter: Skippin**********Source servletConfigInitParams [class org.springframework.core.env.PropertySource$StubPropertySource
-2025-07-02 17:24:29.782  INFO 25172 --- [           main] osplus.apl.core.AplCoreRunner           : Started AplCoreRunner in 9.972 seconds (process running for 10.503)
-2025-07-02 17:24:30.228  WARN 25172 --- [ poolScheduler4] o.p.h.pubsub.GenericHazelcastConsumer   : Skippin********** no flow configurations
-2025-07-02 17:24:31.234  WARN 25172 --- [ poolScheduler1] o.p.h.pubsub.GenericHazelcastConsumer   : Skippin********** no flow configurations
-2025-07-02 17:24:32.222  WARN 25172 --- [ poolScheduler6] o.p.h.pubsub.GenericHazelcastConsumer   : Skippin********** no flow configurations
-2025-07-02 17:24:33.232  WARN 25172 --- [ poolScheduler7] o.p.h.pubsub.GenericHazelcastConsumer   : Skippin********** no flow configurations
-2025-07-02 17:24:33.546  INFO 25172 --- [tuna.internal-2] c.h.c.util.ClientConnectivityLogger     : EN02-apl-pkptuna [grid-hazelcastimdg-in03] [5.5.5] 
-
-Client Connectivity [3] {
-	Member [10.128.17.166]:5701 - d78ff073-4f74-4313-905d-5655eb2f1a1a - disconnected
-	Member [10.128.19.170]:5701 - 323d5bb6-f7cc-4aca-951e-7b41928d6e12 - disconnected
-	Member [10.130.7.253]:5701 - f78903cc-cb2f-4f78-96c2-30f6c6c384ab - connected
+    LOGGER.info("Loaded hazelcast flow configs: {}", flowConfigList);
+    return flowConfigList;
 }
-
-2025-07-02 17:24:34.221  WARN 25172 --- [ poolScheduler4] o.p.h.pubsub.GenericHazelcastConsumer   : Skippin********** no flow configurations
-2025-07-02 17:24:35.223  WARN 25172 --- [ poolScheduler5] o.p.h.pubsub.GenericHazelcastConsumer   : Skippin********** no flow configurations
-2025-07-02 17:24:36.223  WARN 25172 --- [ poolScheduler9] o.p.h.pubsub.GenericHazelcastConsumer   : Skippin********** no flow configurations
-2025-07-02 17:24:37.226  WARN 25172 --- [ poolScheduler9] o.p.h.pubsub.GenericHazelcastConsumer   : Skippin********** no flow configurations
-2025-07-02 17:24:38.225  WARN 25172 --- [ poolScheduler3] o.p.h.pubsub.GenericHazelcastConsumer   : Skippin********** no flow configurations
-2025-07-02 17:24:39.221  WARN 25172 --- [poolScheduler11] o.p.h.pubsub.GenericHazelcastConsumer   : Skippin********** no flow configurations
-2025-07-02 17:24:40.219  WARN 25172 --- [ poolScheduler7] o.p.h.pubsub.GenericHazelcastConsumer   : Skippin********** no flow configurations
-2025-07-02 17:24:41.233  WARN 25172 --- [ poolScheduler7] o.p.h.pubsub.GenericHazelcastConsumer   : Skippin********** no flow configurations
