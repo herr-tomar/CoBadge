@@ -1,12 +1,81 @@
-Object request = handler.deserializeRequest(message.getMessageObject());
-String correlationId = handler.extractCorrelationId(request);
+package osplus.pkptuna.hazelcast.pubsub;
 
-byte[] serialized = handler.serializeRequest(request);
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
+import osplus.apl.core.api.AplComponent;
+import osplus.pkptuna.hazelcast.configprops.HazelcastFlowConfigs;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
 
-int partition = getNextPartition(flowName, config.partitions());
-String mapName = config.mapBase() + "-" + partition;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
-IMap<UUID, byte[]> map = hazelcastInstance.getMap(mapName);
-map.set(UUID.randomUUID(), serialized);
 
-LOGGER.debug("Published request to map: {}", mapName);
+@AplComponent
+@EnableScheduling
+public class GenericHazelcastConsumer {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastConsumer.class);
+
+    private final HazelcastInstance hazelcastInstance;
+    private final HazelcastFlowConfigs flowConfigs;
+    private final FlowHandlerRegistry flowHandlerRegistry;
+
+    // Track round-robin position for each flow
+    private final Map<String, Integer> partitionTracker = new ConcurrentHashMap<>();
+
+    public GenericHazelcastConsumer(HazelcastInstance hazelcastInstance,
+                                    HazelcastFlowConfigs flowConfigs,
+                                    FlowHandlerRegistry flowHandlerRegistry) {
+        this.hazelcastInstance = hazelcastInstance;
+        this.flowConfigs = flowConfigs;
+        this.flowHandlerRegistry = flowHandlerRegistry;
+    }
+
+    @PostConstruct
+    public void init() {
+        LOGGER.info("GenericHazelcastConsumer initialized for flows: {}", flowConfigs.flows());
+    }
+
+    @Scheduled(fixedRate = 200)
+    public void pollRequestMaps() {
+        for (HazelcastFlowConfigs.FlowConfig config : flowConfigs.flows()) {
+            String baseMap = config.mapBase();
+            int partitions = config.partitions();
+            String responseTopic = config.responseTopic();
+            String flowName = config.name();
+
+            for (int i = 0; i < partitions; i++) {
+                String mapName = baseMap + i;
+                IMap<String, Object> map = hazelcastInstance.getMap(mapName);
+
+                for (Map.Entry<String, Object> entry : map.entrySet()) {
+                    String correlationId = entry.getKey();
+                    Object rawRequest = entry.getValue();
+
+                    try {
+                        FlowHandler<Object, Object> handler = flowHandlerRegistry.getHandler(flowName);
+
+                        // No need for deserialization anymore
+                        Object response = handler.handleRequest(rawRequest);
+                        Object wrapped = handler.wrapResponse(correlationId, response);
+
+                        handler.sendResponse(hazelcastInstance, responseTopic, wrapped);
+                        map.remove(correlationId);
+
+                        LOGGER.info("Processed and removed entry from {} with correlationId={}", mapName, correlationId);
+
+                    } catch (Exception e) {
+                        LOGGER.error("Failed to process request from {}: {}", mapName, e.getMessage(), e);
+                    }
+                }
+            }
+        }
+    }
+
+}
