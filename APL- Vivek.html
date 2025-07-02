@@ -1,63 +1,70 @@
 package osplus.pkptuna.hazelcast.pubsub;
 
 import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.topic.ITopic;
+import com.hazelcast.topic.Message;
+import com.hazelcast.topic.MessageListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.TaskScheduler;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Generic consumer that polls Hazelcast maps based on flow configuration.
- * Flow-specific logic is injected via FlowConfigProvider and FlowHandlerResolver interfaces.
+ * Generic Hazelcast message router. Configurable via injected interfaces.
  */
-public class GenericHazelcastConsumer {
+public class GenericHazelcastRouter {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastConsumer.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastRouter.class);
 
     private final HazelcastInstance hazelcastInstance;
-    private final TaskScheduler taskScheduler;
     private final FlowConfigProvider configProvider;
     private final FlowHandlerResolver handlerResolver;
 
-    private final Map<String, Integer> partitionTracker = new ConcurrentHashMap<>();
+    private final Map<String, AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
 
-    public GenericHazelcastConsumer(HazelcastInstance hazelcastInstance,
-                                    TaskScheduler taskScheduler,
-                                    FlowConfigProvider configProvider,
-                                    FlowHandlerResolver handlerResolver) {
+    public GenericHazelcastRouter(HazelcastInstance hazelcastInstance,
+                                  FlowConfigProvider configProvider,
+                                  FlowHandlerResolver handlerResolver) {
         this.hazelcastInstance = hazelcastInstance;
-        this.taskScheduler = taskScheduler;
         this.configProvider = configProvider;
         this.handlerResolver = handlerResolver;
     }
 
-    public void startPolling() {
-        taskScheduler.scheduleAtFixedRate(this::pollRequestMaps, Duration.ofMillis(1000));
-    }
-
-    public void pollRequestMaps() {
-        List<FlowConfig> configs = configProvider.getFlowConfigs();
-        if (configs == null || configs.isEmpty()) {
-            LOGGER.warn("No flows configured. Skipping poll.");
+    public void initRouters() {
+        List<FlowConfig> flowList = configProvider.getFlowConfigs();
+        if (flowList == null || flowList.isEmpty()) {
+            LOGGER.warn("No flow configurations provided.");
             return;
         }
 
-        for (FlowConfig config : configs) {
-            FlowHandler handler = handlerResolver.resolve(config.getName());
-            if (handler == null) {
-                LOGGER.warn("No handler found for flow: {}", config.getName());
-                continue;
-            }
+        for (FlowConfig config : flowList) {
+            String flowName = config.getName();
+            roundRobinCounters.putIfAbsent(flowName, new AtomicInteger(0));
 
-            handler.handle(hazelcastInstance, config);
+            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(config.getTopicName());
+            topic.addMessageListener(new MessageListener<byte[]>() {
+                @Override
+                public void onMessage(Message<byte[]> message) {
+                    try {
+                        FlowHandler handler = handlerResolver.resolve(flowName);
+                        if (handler == null) {
+                            LOGGER.warn("No handler found for flow: {}", flowName);
+                            return;
+                        }
+                        handler.handleMessage(flowName, message.getMessageObject());
+                    } catch (Exception ex) {
+                        LOGGER.error("Error handling message for flow {}: {}", flowName, ex.getMessage(), ex);
+                    }
+                }
+            });
         }
     }
 
-    // --- Supporting Interfaces ---
+    // --- Interfaces used for injection ---
 
     public interface FlowConfigProvider {
         List<FlowConfig> getFlowConfigs();
@@ -68,24 +75,24 @@ public class GenericHazelcastConsumer {
     }
 
     public interface FlowHandler {
-        void handle(HazelcastInstance instance, FlowConfig config);
+        void handleMessage(String flowName, byte[] message);
     }
 
     public static class FlowConfig {
         private final String name;
-        private final String mapName;
+        private final String topicName;
 
-        public FlowConfig(String name, String mapName) {
+        public FlowConfig(String name, String topicName) {
             this.name = name;
-            this.mapName = mapName;
+            this.topicName = topicName;
         }
 
         public String getName() {
             return name;
         }
 
-        public String getMapName() {
-            return mapName;
+        public String getTopicName() {
+            return topicName;
         }
     }
 }
