@@ -2,79 +2,85 @@ package osplus.pkptuna.hazelcast.pubsub;
 
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
+import com.hazelcast.topic.ITopic;
+import com.hazelcast.topic.Message;
+import com.hazelcast.topic.MessageListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.TaskScheduler;
 import osplus.pkptuna.hazelcast.configprops.HazelcastFlowConfigs;
 import osplus.pkptuna.hazelcast.flows.FlowHandler;
 import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
-public class GenericHazelcastConsumer {
+public class GenericHazelcastRouter {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastConsumer.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastRouter.class);
 
     private final HazelcastInstance hazelcastInstance;
-    private final TaskScheduler taskScheduler;
     private final HazelcastFlowConfigs flowConfigs;
     private final FlowHandlerRegistry<?, ?> registry;
 
-    private final Map<String, Integer> partitionTracker = new ConcurrentHashMap<>();
+    private final Map<String, AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
 
-    public GenericHazelcastConsumer(HazelcastInstance hazelcastInstance,
-                                    TaskScheduler taskScheduler,
-                                    HazelcastFlowConfigs flowConfigs,
-                                    FlowHandlerRegistry<?, ?> registry) {
+    public GenericHazelcastRouter(HazelcastInstance hazelcastInstance,
+                                  HazelcastFlowConfigs flowConfigs,
+                                  FlowHandlerRegistry<?, ?> registry) {
         this.hazelcastInstance = hazelcastInstance;
-        this.taskScheduler = taskScheduler;
         this.flowConfigs = flowConfigs;
         this.registry = registry;
     }
 
-    public void startPolling() {
-        taskScheduler.scheduleAtFixedRate(this::pollRequestMaps, Duration.ofMillis(1000));
-    }
-
-    public void pollRequestMaps() {
-        List<HazelcastFlowConfigs.FlowConfig> configs = flowConfigs.flows();
-        if (configs == null || configs.isEmpty()) {
-            LOGGER.warn("Skipping polling: no flow configurations");
+    public void initRouters() {
+        List<HazelcastFlowConfigs.FlowConfig> flowList = flowConfigs.flows();
+        if (flowList == null || flowList.isEmpty()) {
+            LOGGER.warn("No Hazelcast flow configurations found.");
             return;
         }
 
-        for (HazelcastFlowConfigs.FlowConfig config : configs) {
+        for (HazelcastFlowConfigs.FlowConfig config : flowList) {
             String flowName = config.name();
-            FlowHandler<Object, Object> handler = (FlowHandler<Object, Object>) registry.getHandler(flowName);
-            if (handler == null) {
-                LOGGER.warn("No handler registered for flow: {}", flowName);
-                continue;
-            }
+            roundRobinCounters.putIfAbsent(flowName, new AtomicInteger(0));
 
-            int currentPartition = partitionTracker.compute(flowName, (k, v) -> (v == null || v >= config.partitions() - 1) ? 0 : v + 1);
+            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(config.requestTopic());
 
-            String mapKey = config.mapBase() + "-" + currentPartition;
-            IMap<UUID, byte[]> map = hazelcastInstance.getMap(mapKey);
+            topic.addMessageListener(new MessageListener<>() {
+                @Override
+                public void onMessage(Message<byte[]> message) {
+                    try {
+                        FlowHandler<Object, Object> handler = (FlowHandler<Object, Object>) registry.getHandler(flowName);
+                        if (handler == null) {
+                            LOGGER.warn("No handler found for flow: {}", flowName);
+                            return;
+                        }
 
-            try {
-                for (Map.Entry<UUID, byte[]> entry : map.entrySet()) {
-                    UUID key = entry.getKey();
-                    byte[] data = entry.getValue();
+                        Object request = handler.deserializeRequest(message.getMessageObject());
+                        String correlationId = handler.extractCorrelationId(request);
+                        Object response = handler.handleRequest(request);
+                        Object wrapped = handler.wrapResponse(correlationId, response);
 
-                    Object request = handler.deserializeRequest(data);
-                    String correlationId = handler.extractCorrelationId(request);
-                    Object response = handler.handleRequest(request);
-                    Object wrapped = handler.wrapResponse(correlationId, response);
+                        int partition = getNextPartition(flowName, config.partitions());
+                        String mapName = config.mapBase() + "-" + partition;
+                        IMap<UUID, Object> map = hazelcastInstance.getMap(mapName);
 
-                    handler.sendResponse(hazelcastInstance, config.responseTopic(), wrapped);
-                    map.remove(key);
+                        map.set(UUID.randomUUID(), wrapped);
+                        LOGGER.debug("Published response to map: {}", mapName);
+
+                    } catch (Exception ex) {
+                        LOGGER.error("Error handling message for flow {}: {}", flowName, ex.getMessage(), ex);
+                    }
                 }
-            } catch (Exception ex) {
-                LOGGER.error("Error polling map {}: {}", mapKey, ex.getMessage(), ex);
-            }
+            });
         }
+    }
+
+    private int getNextPartition(String flowName, int maxPartitions) {
+        AtomicInteger counter = roundRobinCounters.get(flowName);
+        int next = counter.getAndUpdate(prev -> (prev + 1) % maxPartitions);
+        return next;
     }
 }
