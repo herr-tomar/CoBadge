@@ -1,18 +1,10 @@
-@Bean
-public FlowHandlerRegistry<String, FlowHandler> flowHandlerRegistry(
-        List<FlowConfig> configs,
-        Map<String, FlowHandler> flowHandlers) {
-
-    FlowHandlerRegistry<String, FlowHandler> registry = new FlowHandlerRegistry<>();
-
+@PostConstruct
+public void registerHandlers() {
     for (FlowConfig config : configs) {
-        String name = config.name();
-        FlowHandler handler = flowHandlers.get(name);
+        FlowHandler handler = flowHandlers.get(config.name());
         if (handler == null) {
-            throw new IllegalArgumentException("No FlowHandler registered for flow: " + name);
+            throw new IllegalArgumentException("No FlowHandler registered for flow: " + config.name());
         }
-        registry.register(name, handler);
+        registry.register(config.name(), handler);
     }
-
-    return registry;
 }
