@@ -57,16 +57,24 @@ public class GenericHazelcastConsumer {
             }
 
             int currentPartition = partitionTracker.compute(flowName, (k, v) -> (v == null || v >= config.partitions() - 1) ? 0 : v + 1);
-
             String mapKey = config.mapBase() + "-" + currentPartition;
-            IMap<UUID, byte[]> map = hazelcastInstance.getMap(mapKey);
+
+            IMap<UUID, Object> map = hazelcastInstance.getMap(mapKey);
 
             try {
-                for (Map.Entry<UUID, byte[]> entry : map.entrySet()) {
+                for (Map.Entry<UUID, Object> entry : map.entrySet()) {
                     UUID key = entry.getKey();
-                    byte[] data = entry.getValue();
+                    Object value = entry.getValue();
 
-                    Object request = handler.deserializeRequest(data);
+                    Object request;
+
+                    if (value instanceof byte[] data) {
+                        request = handler.deserializeRequest(data);
+                    } else {
+                        LOGGER.debug("Map {} received deserialized object of type {}", mapKey, value.getClass());
+                        request = value;
+                    }
+
                     String correlationId = handler.extractCorrelationId(request);
                     Object response = handler.handleRequest(request);
                     Object wrapped = handler.wrapResponse(correlationId, response);
