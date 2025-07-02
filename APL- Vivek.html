@@ -1,26 +1,27 @@
-package osplus.pkptuna.flows;
+@Component
+public class FlowHandlerInitializer {
 
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import osplus.pkptuna.flows.bootstrap.FlowHandlerInitializer;
-import osplus.pkptuna.flows.bootstrap.HazelcastFlowBootstrap;
-import osplus.pkptuna.flows.bootstrap.HazelcastFlowConfigs;
-import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
-import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
+    private final List<FlowConfig> configs;
+    private final Map<String, FlowHandler> flowHandlers;
+    private final FlowHandlerRegistry<String, FlowHandler> registry;
 
-@Configuration
-@EnableConfigurationProperties(HazelcastFlowConfigs.class)
-public class FlowsModuleConfiguration {
-
-    @Bean
-    public FlowHandlerInitializer flowHandlerInitializer() {
-        return new FlowHandlerInitializer();
+    public FlowHandlerInitializer(
+            List<FlowConfig> configs,
+            Map<String, FlowHandler> flowHandlers,
+            FlowHandlerRegistry<String, FlowHandler> registry) {
+        this.configs = configs;
+        this.flowHandlers = flowHandlers;
+        this.registry = registry;
     }
 
-    @Bean
-    public HazelcastFlowBootstrap hazelcastFlowBootstrap(GenericHazelcastRouter router,
-                                                         GenericHazelcastConsumer consumer) {
-        return new HazelcastFlowBootstrap(router, consumer);
+    @PostConstruct
+    public void registerHandlers() {
+        for (FlowConfig config : configs) {
+            FlowHandler handler = flowHandlers.get(config.name());
+            if (handler == null) {
+                throw new IllegalArgumentException("❌ No FlowHandler registered for flow: " + config.name());
+            }
+            registry.register(config.name(), handler);
+        }
     }
 }
