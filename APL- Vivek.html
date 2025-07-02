@@ -1,27 +1,9 @@
-@Component
-public class FlowHandlerInitializer {
 
-    private final List<FlowConfig> configs;
-    private final Map<String, FlowHandler> flowHandlers;
-    private final FlowHandlerRegistry<String, FlowHandler> registry;
+Description:
 
-    public FlowHandlerInitializer(
-            List<FlowConfig> configs,
-            Map<String, FlowHandler> flowHandlers,
-            FlowHandlerRegistry<String, FlowHandler> registry) {
-        this.configs = configs;
-        this.flowHandlers = flowHandlers;
-        this.registry = registry;
-    }
+Parameter 0 of constructor in osplus.pkptuna.flows.bootstrap.HazelcastFlowBootstrap required a bean of type 'osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter' that could not be found.
 
-    @PostConstruct
-    public void registerHandlers() {
-        for (FlowConfig config : configs) {
-            FlowHandler handler = flowHandlers.get(config.name());
-            if (handler == null) {
-                throw new IllegalArgumentException("❌ No FlowHandler registered for flow: " + config.name());
-            }
-            registry.register(config.name(), handler);
-        }
-    }
-}
+
+Action:
+
+Consider defining a bean of type 'osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter' in your configuration.
