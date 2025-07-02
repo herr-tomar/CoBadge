@@ -1,32 +1,44 @@
-package osplus.pkptuna.flows;
+025-07-02 16:30:34.299  INFO 19276 --- [           main] w.s.c.ServletWebServerApplicationContext: Root WebApplicationContext: initialization completed in 5088 ms
+2025-07-02 16:30:35.510  INFO 19276 --- [           main] o.pkptuna.uimodule.DisputeUiModule      : Dispute response listener initialized.
+2025-07-02 16:30:35.612  INFO 19276 --- [           main] o.pkptuna.uimodule.DisputeUiModule      : Dispute response listener initialized.
+2025-07-02 16:30:35.628  INFO 19276 --- [           main] o.p.f.bootstrap.FlowHandlerInitializer  : Loaded hazelcast flow configs:[FlowConfig[name=dispute-lookup, requestTopic=DisputeLookupRequestReliableTopic, responseTopic=DisputeLookupResponseReliableTopic, mapBase=dispute-lookup-request-map-, partitions=4], FlowConfig[name=dispute-detail, requestTopic=DisputeDetailRequestReliableTopic, responseTopic=DisputeDetailResponseReliableTopic, mapBase=dispute-detail-request-map-, partitions=3]]
+2025-07-02 16:30:35.889 ERROR 19276 --- [azelcast-poll-1] o.s.s.s.TaskUtils$LoggingErrorHandler   : Unexpected error occurred in scheduled task
 
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import osplus.pkptuna.flows.bootstrap.FlowHandlerInitializer;
-import osplus.pkptuna.flows.bootstrap.HazelcastFlowBootstrap;
-import osplus.pkptuna.flows.bootstrap.HazelcastFlowConfigs;
-import osplus.pkptuna.flows.bootstrap.HazelcastFlowYamlConfig;
-import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
-import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
+java.lang.IllegalArgumentException: No FlowHandler registered for flow: dispute-lookup
+	at osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry.getHandler(FlowHandlerRegistry.java:20) ~[classes/:na]
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer.pollRequestMaps(GenericHazelcastConsumer.java:51) ~[classes/:na]
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54) ~[spring-context-6.2.6.jar:6.2.6]
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572) ~[na:na]
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:358) ~[na:na]
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642) ~[na:na]
+	at java.base/java.lang.Thread.run(Thread.java:1583) ~[na:na]
 
-@Configuration
-@EnableConfigurationProperties(HazelcastFlowConfigs.class)
-public class FlowsModuleConfiguration {
+2025-07-02 16:30:35.934  INFO 19276 --- [           main] o.pkptuna.flows.handlers.FlowsDebugBean : FlowDebugBean has been loaded......................
+2025-07-02 16:30:35.962  INFO 19276 --- [           main] o.p.f.handlers.DisputeDetailFlowHandler : Loaded DisputeDetailFlowHandler code ...........
+2025-07-02 16:30:36.913 ERROR 19276 --- [azelcast-poll-1] o.s.s.s.TaskUtils$LoggingErrorHandler   : Unexpected error occurred in scheduled task
 
-    @Bean
-    public FlowHandlerInitializer flowHandlerInitializer() {
-        return new FlowHandlerInitializer();
-    }
+java.lang.IllegalArgumentException: No FlowHandler registered for flow: dispute-lookup
+	at osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry.getHandler(FlowHandlerRegistry.java:20) ~[classes/:na]
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer.pollRequestMaps(GenericHazelcastConsumer.java:51) ~[classes/:na]
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54) ~[spring-context-6.2.6.jar:6.2.6]
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572) ~[na:na]
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:358) ~[na:na]
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642) ~[na:na]
+	at java.base/java.lang.Thread.run(Thread.java:1583) ~[na:na]
 
-    @Bean
-    public HazelcastFlowYamlConfig hazelcastFlowYamlConfig(HazelcastFlowConfigs flowConfigs) {
-        return new HazelcastFlowYamlConfig(flowConfigs);
-    }
+2025-07-02 16:30:37.892 ERROR 19276 --- [azelcast-poll-1] o.s.s.s.TaskUtils$LoggingErrorHandler   : Unexpected error occurred in scheduled task
 
-    @Bean
-    public HazelcastFlowBootstrap hazelcastFlowBootstrap(GenericHazelcastRouter router,
-                                                         GenericHazelcastConsumer consumer) {
-        return new HazelcastFlowBootstrap(router, consumer);
-    }
-}
+java.lang.IllegalArgumentException: No FlowHandler registered for flow: dispute-lookup
+	at osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry.getHandler(FlowHandlerRegistry.java:20) ~[classes/:na]
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer.pollRequestMaps(GenericHazelcastConsumer.java:51) ~[classes/:na]
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54) ~[spring-context-6.2.6.jar:6.2.6]
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572) ~[na:na]
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:358) ~[na:na]
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642) ~[na:na]
+	at java.base/java.lang.Thread.run(Thread.java:1583) ~[na:na]
