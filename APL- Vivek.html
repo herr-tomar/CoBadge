@@ -1,36 +1,91 @@
-package osplus.pkptuna.hazelcast.bootstrap;
+package osplus.pkptuna.hazelcast.pubsub;
 
 import com.hazelcast.core.HazelcastInstance;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
-import osplus.pkptuna.hazelcast.router.GenericHazelcastRouter;
-import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
-import osplus.pkptuna.hazelcast.configprops.HazelcastFlowConfigs;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.TaskScheduler;
 
-@Configuration
-public class HazelcastInfraBootstrap {
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
-    @Bean
-    public GenericHazelcastConsumer genericHazelcastConsumer(
-            HazelcastInstance hazelcastInstance,
-            HazelcastFlowConfigs flowConfigs,
-            FlowHandlerRegistry registry
-    ) {
-        return new GenericHazelcastConsumer(hazelcastInstance, flowConfigs, registry);
+/**
+ * Generic consumer that polls Hazelcast maps based on flow configuration.
+ * Flow-specific logic is injected via FlowConfigProvider and FlowHandlerResolver interfaces.
+ */
+public class GenericHazelcastConsumer {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastConsumer.class);
+
+    private final HazelcastInstance hazelcastInstance;
+    private final TaskScheduler taskScheduler;
+    private final FlowConfigProvider configProvider;
+    private final FlowHandlerResolver handlerResolver;
+
+    private final Map<String, Integer> partitionTracker = new ConcurrentHashMap<>();
+
+    public GenericHazelcastConsumer(HazelcastInstance hazelcastInstance,
+                                    TaskScheduler taskScheduler,
+                                    FlowConfigProvider configProvider,
+                                    FlowHandlerResolver handlerResolver) {
+        this.hazelcastInstance = hazelcastInstance;
+        this.taskScheduler = taskScheduler;
+        this.configProvider = configProvider;
+        this.handlerResolver = handlerResolver;
     }
 
-    @Bean
-    public GenericHazelcastRouter genericHazelcastRouter(
-            HazelcastInstance hazelcastInstance,
-            HazelcastFlowConfigs flowConfigs,
-            FlowHandlerRegistry registry
-    ) {
-        return new GenericHazelcastRouter(hazelcastInstance, flowConfigs, registry);
+    public void startPolling() {
+        taskScheduler.scheduleAtFixedRate(this::pollRequestMaps, Duration.ofMillis(1000));
     }
 
-    @Bean
-    public FlowHandlerRegistry flowHandlerRegistry() {
-        return new FlowHandlerRegistry();
+    public void pollRequestMaps() {
+        List<FlowConfig> configs = configProvider.getFlowConfigs();
+        if (configs == null || configs.isEmpty()) {
+            LOGGER.warn("No flows configured. Skipping poll.");
+            return;
+        }
+
+        for (FlowConfig config : configs) {
+            FlowHandler handler = handlerResolver.resolve(config.getName());
+            if (handler == null) {
+                LOGGER.warn("No handler found for flow: {}", config.getName());
+                continue;
+            }
+
+            handler.handle(hazelcastInstance, config);
+        }
+    }
+
+    // --- Supporting Interfaces ---
+
+    public interface FlowConfigProvider {
+        List<FlowConfig> getFlowConfigs();
+    }
+
+    public interface FlowHandlerResolver {
+        FlowHandler resolve(String flowName);
+    }
+
+    public interface FlowHandler {
+        void handle(HazelcastInstance instance, FlowConfig config);
+    }
+
+    public static class FlowConfig {
+        private final String name;
+        private final String mapName;
+
+        public FlowConfig(String name, String mapName) {
+            this.name = name;
+            this.mapName = mapName;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public String getMapName() {
+            return mapName;
+        }
     }
 }
