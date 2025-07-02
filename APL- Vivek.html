@@ -1,17 +1,36 @@
+package osplus.pkptuna.hazelcast.bootstrap;
+
+import com.hazelcast.core.HazelcastInstance;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
+import osplus.pkptuna.hazelcast.router.GenericHazelcastRouter;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+import osplus.pkptuna.hazelcast.configprops.HazelcastFlowConfigs;
+
 @Configuration
-public class FlowHandlerRegistration {
+public class HazelcastInfraBootstrap {
 
     @Bean
-    public DisputeLookupFlowHandler disputeLookupFlowHandler(DisputeService service, FlowHandlerRegistry registry) {
-        DisputeLookupFlowHandler handler = new DisputeLookupFlowHandler(service);
-        registry.register("dispute-lookup", handler);
-        return handler;
+    public GenericHazelcastConsumer genericHazelcastConsumer(
+            HazelcastInstance hazelcastInstance,
+            HazelcastFlowConfigs flowConfigs,
+            FlowHandlerRegistry registry
+    ) {
+        return new GenericHazelcastConsumer(hazelcastInstance, flowConfigs, registry);
     }
 
     @Bean
-    public DisputeDetailFlowHandler disputeDetailFlowHandler(DisputeDetailService service, FlowHandlerRegistry registry) {
-        DisputeDetailFlowHandler handler = new DisputeDetailFlowHandler(service);
-        registry.register("dispute-detail", handler);
-        return handler;
+    public GenericHazelcastRouter genericHazelcastRouter(
+            HazelcastInstance hazelcastInstance,
+            HazelcastFlowConfigs flowConfigs,
+            FlowHandlerRegistry registry
+    ) {
+        return new GenericHazelcastRouter(hazelcastInstance, flowConfigs, registry);
+    }
+
+    @Bean
+    public FlowHandlerRegistry flowHandlerRegistry() {
+        return new FlowHandlerRegistry();
     }
 }
