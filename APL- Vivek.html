@@ -1,22 +1,18 @@
-2025-07-02 16:38:32.139  INFO 34780 --- [           main] o.a.c.c.C.[.[localhost].[/pkptuna]      : Initializing Spring embedded WebApplicationContext
-2025-07-02 16:38:32.139  INFO 34780 --- [           main] w.s.c.ServletWebServerApplicationContext: Root WebApplicationContext: initialization completed in 4677 ms
-2025-07-02 16:38:33.105  INFO 34780 --- [           main] o.p.f.handlers.DisputeLookupFlowHandler : Loaded DisputeLookupFlowHandler code ...........
-2025-07-02 16:38:33.238  INFO 34780 --- [           main] o.pkptuna.uimodule.DisputeUiModule      : Dispute response listener initialized.
-2025-07-02 16:38:33.341  INFO 34780 --- [           main] o.pkptuna.uimodule.DisputeUiModule      : Dispute response listener initialized.
-2025-07-02 16:38:33.373  INFO 34780 --- [           main] o.p.f.bootstrap.FlowHandlerInitializer  : Loaded hazelcast flow configs:[FlowConfig[name=dispute-lookup, requestTopic=DisputeLookupRequestReliableTopic, responseTopic=DisputeLookupResponseReliableTopic, mapBase=dispute-lookup-request-map-, partitions=4], FlowConfig[name=dispute-detail, requestTopic=DisputeDetailRequestReliableTopic, responseTopic=DisputeDetailResponseReliableTopic, mapBase=dispute-detail-request-map-, partitions=3]]
-2025-07-02 16:38:33.631 ERROR 34780 --- [azelcast-poll-1] o.s.s.s.TaskUtils$LoggingErrorHandler   : Unexpected error occurred in scheduled task
+@Bean
+public FlowHandlerRegistry<String, FlowHandler> flowHandlerRegistry(
+        List<FlowConfig> configs,
+        Map<String, FlowHandler> flowHandlers) {
 
-java.lang.IllegalArgumentException: No FlowHandler registered for flow: dispute-lookup
-	at osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry.getHandler(FlowHandlerRegistry.java:20) ~[classes/:na]
-	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer.pollRequestMaps(GenericHazelcastConsumer.java:51) ~[classes/:na]
-	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54) ~[spring-context-6.2.6.jar:6.2.6]
-	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572) ~[na:na]
-	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:358) ~[na:na]
-	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305) ~[na:na]
-	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144) ~[na:na]
-	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642) ~[na:na]
-	at java.base/java.lang.Thread.run(Thread.java:1583) ~[na:na]
+    FlowHandlerRegistry<String, FlowHandler> registry = new FlowHandlerRegistry<>();
 
-2025-07-02 16:38:33.674  INFO 34780 --- [           main] o.pkptuna.flows.handlers.FlowsDebugBean : FlowDebugBean has been loaded......................
-2025-07-02 16:38:33.684  INFO 34780 --- [           main] o.p.f.handlers.DisputeDetailFlowHandler : Loaded DisputeDetailFlowHandler code ...........
-2025-07-02 16:38:34.632 ERROR 34780 --- [azelcast-poll-1] o.s.s.s.TaskUtils$LoggingErrorHandler   : Unexpected error occurred in scheduled task
+    for (FlowConfig config : configs) {
+        String name = config.name();
+        FlowHandler handler = flowHandlers.get(name);
+        if (handler == null) {
+            throw new IllegalArgumentException("No FlowHandler registered for flow: " + name);
+        }
+        registry.register(name, handler);
+    }
+
+    return registry;
+}
