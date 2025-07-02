@@ -5,41 +5,43 @@ import com.hazelcast.map.IMap;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.TaskScheduler;
 import osplus.apl.core.api.AplComponent;
 import osplus.pkptuna.hazelcast.config.FlowConfig;
 import osplus.pkptuna.hazelcast.flows.FlowHandler;
 import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @AplComponent
-@EnableScheduling
 public class GenericHazelcastConsumer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastConsumer.class);
 
     private final HazelcastInstance hazelcastInstance;
+    private final TaskScheduler taskScheduler;
     private final List<FlowConfig> flowConfigs;
     private final FlowHandlerRegistry handlerRegistry;
 
     public GenericHazelcastConsumer(HazelcastInstance hazelcastInstance,
+                                    TaskScheduler taskScheduler,
                                     List<FlowConfig> flowConfigs,
                                     FlowHandlerRegistry handlerRegistry) {
         this.hazelcastInstance = hazelcastInstance;
+        this.taskScheduler = taskScheduler;
         this.flowConfigs = flowConfigs;
         this.handlerRegistry = handlerRegistry;
     }
 
     @PostConstruct
-    public void init() {
-        LOGGER.info("GenericHazelcastConsumer initialized for flows: {}", flowConfigs);
+    public void startPolling() {
+        taskScheduler.scheduleAtFixedRate(this::pollRequestMaps, Duration.ofMillis(200));
+        LOGGER.info("Scheduled Hazelcast consumer polling with fixed rate.");
     }
 
-    @Scheduled(fixedRate = 200)
     public void pollRequestMaps() {
         for (FlowConfig config : flowConfigs) {
             String flowName = config.name();
