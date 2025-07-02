@@ -1,45 +1,79 @@
-package osplus.pkptuna.flows.bootstrap;
+package osplus.pkptuna.hazelcast.pubsub;
 
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.TaskScheduler;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
 import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
-import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
-import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
-import osplus.pkptuna.hazelcast.pubsub.FlowConfig;
 
+import java.time.Duration;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
-@Configuration
-public class FlowHandlerInitializer {
+public class GenericHazelcastConsumer {
 
-    @Bean
-    public List<FlowConfig> hazelcastFlowConfigs(HazelcastFlowConfigs external) {
-        return external.flows().stream()
-            .map(c -> new FlowConfig(
-                c.name(),
-                c.requestTopic(),
-                c.responseTopic(),
-                c.mapBase(),
-                c.partitions()
-            ))
-            .collect(Collectors.toList());
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastConsumer.class);
+
+    private final HazelcastInstance hazelcastInstance;
+    private final TaskScheduler taskScheduler;
+    private final List<FlowConfig> flowConfigs;
+    private final FlowHandlerRegistry<?, ?> registry;
+
+    private final Map<String, Integer> partitionTracker = new ConcurrentHashMap<>();
+
+    public GenericHazelcastConsumer(HazelcastInstance hazelcastInstance,
+                                    TaskScheduler taskScheduler,
+                                    List<FlowConfig> flowConfigs,
+                                    FlowHandlerRegistry<?, ?> registry) {
+        this.hazelcastInstance = hazelcastInstance;
+        this.taskScheduler = taskScheduler;
+        this.flowConfigs = flowConfigs;
+        this.registry = registry;
     }
 
-    @Bean
-    public GenericHazelcastRouter hazelcastRouter(
-            HazelcastInstance hazelcastInstance,
-            List<FlowConfig> flowConfigs,
-            FlowHandlerRegistry<?, ?> registry) {
-        return new GenericHazelcastRouter(hazelcastInstance, flowConfigs, registry);
+    public void startPolling() {
+        taskScheduler.scheduleAtFixedRate(this::pollRequestMaps, Duration.ofMillis(1000));
     }
 
-    @Bean
-    public GenericHazelcastConsumer hazelcastConsumer(
-            HazelcastInstance hazelcastInstance,
-            TaskScheduler scheduler,
-            List<FlowConfig> flowConfigs,
-            FlowHandlerRegistry<?, ?> registry) {
-        return new GenericHazelcastConsumer(hazelcastInstance, scheduler, flowConfigs, registry);
+    public void pollRequestMaps() {
+        if (flowConfigs == null || flowConfigs.isEmpty()) {
+            LOGGER.warn("Skipping polling: no flow configurations");
+            return;
+        }
+
+        for (FlowConfig config : flowConfigs) {
+            String flowName = config.name();
+            FlowHandler<Object, Object> handler = (FlowHandler<Object, Object>) registry.getHandler(flowName);
+            if (handler == null) {
+                LOGGER.warn("No handler registered for flow: {}", flowName);
+                continue;
+            }
+
+            int currentPartition = partitionTracker.compute(flowName, (k, v) -> (v == null || v >= config.partitions() - 1) ? 0 : v + 1);
+
+            String mapKey = config.mapBase() + "-" + currentPartition;
+            IMap<UUID, byte[]> map = hazelcastInstance.getMap(mapKey);
+
+            try {
+                for (Map.Entry<UUID, byte[]> entry : map.entrySet()) {
+                    UUID key = entry.getKey();
+                    byte[] data = entry.getValue();
+
+                    Object request = handler.deserializeRequest(data);
+                    String correlationId = handler.extractCorrelationId(request);
+                    Object response = handler.handleRequest(request);
+                    Object wrapped = handler.wrapResponse(correlationId, response);
+
+                    handler.sendResponse(hazelcastInstance, config.responseTopic(), wrapped);
+                    map.remove(key);
+                }
+            } catch (Exception ex) {
+                LOGGER.error("Error polling map {}: {}", mapKey, ex.getMessage(), ex);
+            }
+        }
     }
 }
