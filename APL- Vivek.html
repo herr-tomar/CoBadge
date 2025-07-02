@@ -1,25 +1,60 @@
 package osplus.pkptuna.flows.bootstrap;
 
-import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
+import osplus.pkptuna.dispute.service.DisputeDetailService;
+import osplus.pkptuna.dispute.service.DisputeService;
+import osplus.pkptuna.flows.handlers.DisputeDetailFlowHandler;
+import osplus.pkptuna.flows.handlers.DisputeLookupFlowHandler;
 import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Configuration
-public class HazelcastFlowBootstrap {
+public class FlowHandlerInitializer {
 
-    private final GenericHazelcastRouter router;
-    private final GenericHazelcastConsumer consumer;
-
-    public HazelcastFlowBootstrap(GenericHazelcastRouter router,
-                                   GenericHazelcastConsumer consumer) {
-        this.router = router;
-        this.consumer = consumer;
+    @Bean
+    public DisputeLookupFlowHandler disputeLookupFlowHandler(DisputeService service) {
+        return new DisputeLookupFlowHandler(service);
     }
 
-    @PostConstruct
-    public void startFlowInfra() {
-        router.initRouters();
-        consumer.startPolling();
+    @Bean
+    public DisputeDetailFlowHandler disputeDetailFlowHandler(DisputeDetailService service) {
+        return new DisputeDetailFlowHandler(service);
+    }
+
+    @Bean
+    public GenericHazelcastRouter.FlowHandlerResolver flowHandlerResolver(
+            List<GenericHazelcastRouter.FlowHandler> handlers) {
+        Map<String, GenericHazelcastRouter.FlowHandler> map =
+            handlers.stream().collect(Collectors.toMap(GenericHazelcastRouter.FlowHandler::getFlowName, h -> h));
+        return map::get;
+    }
+
+    @Bean
+    public GenericHazelcastRouter.FlowConfigProvider flowConfigProvider(HazelcastFlowConfigs config) {
+        List<GenericHazelcastRouter.FlowConfig> configs = config.flows().stream()
+            .map(f -> new GenericHazelcastRouter.FlowConfig(f.name(), f.requestTopic()))
+            .collect(Collectors.toList());
+        return () -> configs;
+    }
+
+    @Bean
+    public GenericHazelcastConsumer.FlowHandlerResolver consumerFlowHandlerResolver(
+            List<GenericHazelcastConsumer.FlowHandler> handlers) {
+        Map<String, GenericHazelcastConsumer.FlowHandler> map =
+            handlers.stream().collect(Collectors.toMap(GenericHazelcastConsumer.FlowHandler::getFlowName, h -> h));
+        return map::get;
+    }
+
+    @Bean
+    public GenericHazelcastConsumer.FlowConfigProvider consumerFlowConfigProvider(HazelcastFlowConfigs config) {
+        List<GenericHazelcastConsumer.FlowConfig> configs = config.flows().stream()
+            .map(f -> new GenericHazelcastConsumer.FlowConfig(f.name(), f.mapBase()))
+            .collect(Collectors.toList());
+        return () -> configs;
     }
 }
