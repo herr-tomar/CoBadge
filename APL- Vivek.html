@@ -1,10 +1,69 @@
-@PostConstruct
-public void registerHandlers() {
-    for (FlowConfig config : configs) {
-        FlowHandler handler = flowHandlers.get(config.name());
-        if (handler == null) {
-            throw new IllegalArgumentException("No FlowHandler registered for flow: " + config.name());
-        }
-        registry.register(config.name(), handler);
+package osplus.pkptuna.flows.bootstrap;
+
+import com.hazelcast.core.HazelcastInstance;
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.TaskScheduler;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Configuration
+public class FlowHandlerInitializer {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(FlowHandlerInitializer.class);
+
+    @Bean
+    public List<FlowConfig> hazelcastFlowConfigs(HazelcastFlowConfigs external) {
+        List<FlowConfig> flowConfigList =  external.flows().stream()
+                .map(c -> new FlowConfig(
+                        c.name(),
+                        c.requestTopic(),
+                        c.responseTopic(),
+                        c.mapBase(),
+                        c.partitions()
+                ))
+                .collect(Collectors.toList());
+        LOGGER.info("Loaded hazelcast flow configs:" + flowConfigList);
+        return flowConfigList;
     }
-}
+
+    @Bean
+    public GenericHazelcastRouter hazelcastRouter(
+            HazelcastInstance hazelcastInstance,
+            List<FlowConfig> flowConfigs,
+            FlowHandlerRegistry<?, ?> registry) {
+        return new GenericHazelcastRouter(hazelcastInstance, flowConfigs, registry);
+    }
+
+    @Bean
+    public GenericHazelcastConsumer hazelcastConsumer(
+            HazelcastInstance hazelcastInstance,
+            @Qualifier("flowTaskScheduler") TaskScheduler scheduler,
+            List<FlowConfig> flowConfigs,
+            FlowHandlerRegistry<?, ?> registry) {
+        return new GenericHazelcastConsumer(hazelcastInstance, scheduler, flowConfigs, registry);
+    }
+
+    @PostConstruct
+    public void registerHandlers() {
+        for (FlowConfig config : configs) {
+            FlowHandler handler = flowHandlers.get(config.name());
+            if (handler == null) {
+                throw new IllegalArgumentException("No FlowHandler registered for flow: " + config.name());
+            }
+            registry.register(config.name(), handler);
+        }
+    }
+
+
+}   
