@@ -4,13 +4,13 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import osplus.pkptuna.flows.bootstrap.FlowHandlerInitializer;
 import osplus.pkptuna.flows.bootstrap.HazelcastFlowYamlConfig;
-import osplus.pkptuna.hazelcast.consumer.GenericHazelcastConsumer;
+import osplus.pkptuna.flows.bootstrap.HazelcastFlowBootstrap;
 
 @Configuration
 @Import({
     FlowHandlerInitializer.class,
-    HazelcastFlowYamlConfig.class
+    HazelcastFlowYamlConfig.class,
+    HazelcastFlowBootstrap.class   // ✅ This is the startup trigger
 })
 public class FlowsModuleConfiguration {
-    // Registers all flows-related beans
 }
