@@ -1,4 +1,3 @@
-// New version of GenericHazelcastRouter using updated architecture
 package osplus.pkptuna.hazelcast.pubsub;
 
 import com.hazelcast.core.HazelcastInstance;
@@ -10,7 +9,7 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import osplus.apl.core.api.AplComponent;
-import osplus.pkptuna.hazelcast.configprops.HazelcastFlowConfigs;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
 import osplus.pkptuna.hazelcast.flows.FlowHandler;
 import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
 
@@ -26,13 +25,13 @@ public class GenericHazelcastRouter {
     private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastRouter.class);
 
     private final HazelcastInstance hazelcastInstance;
-    private final HazelcastFlowConfigs flowConfigs;
+    private final List<FlowConfig> flowConfigs;
     private final FlowHandlerRegistry handlerRegistry;
 
     private final Map<String, AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
 
     public GenericHazelcastRouter(HazelcastInstance hazelcastInstance,
-                                  HazelcastFlowConfigs flowConfigs,
+                                  List<FlowConfig> flowConfigs,
                                   FlowHandlerRegistry handlerRegistry) {
         this.hazelcastInstance = hazelcastInstance;
         this.flowConfigs = flowConfigs;
@@ -41,18 +40,18 @@ public class GenericHazelcastRouter {
 
     @PostConstruct
     public void initRouters() {
-        List<HazelcastFlowConfigs.FlowConfig> flowList = flowConfigs.flows();
-
-        if (flowList == null || flowList.isEmpty()) {
+        if (flowConfigs == null || flowConfigs.isEmpty()) {
             LOGGER.warn("No Hazelcast flow configurations found.");
             return;
         }
 
-        for (HazelcastFlowConfigs.FlowConfig config : flowList) {
+        for (FlowConfig config : flowConfigs) {
             String flowName = config.name();
             roundRobinCounters.putIfAbsent(flowName, new AtomicInteger(0));
 
+            @SuppressWarnings("unchecked")
             FlowHandler<Object, Object> handler = (FlowHandler<Object, Object>) handlerRegistry.getHandler(flowName);
+
             if (handler == null) {
                 LOGGER.warn("No FlowHandler registered for flow: {}", flowName);
                 continue;
@@ -67,10 +66,10 @@ public class GenericHazelcastRouter {
     private class RoutingListener<T> implements MessageListener<byte[]> {
 
         private final String flowName;
-        private final HazelcastFlowConfigs.FlowConfig config;
+        private final FlowConfig config;
         private final FlowHandler<T, ?> handler;
 
-        RoutingListener(String flowName, HazelcastFlowConfigs.FlowConfig config, FlowHandler<T, ?> handler) {
+        RoutingListener(String flowName, FlowConfig config, FlowHandler<T, ?> handler) {
             this.flowName = flowName;
             this.config = config;
             this.handler = handler;
@@ -92,8 +91,7 @@ public class GenericHazelcastRouter {
                     return;
                 }
 
-                AtomicInteger counter = roundRobinCounters.get(flowName);
-                int index = counter.getAndIncrement() % config.partitions();
+                int index = roundRobinCounters.get(flowName).getAndIncrement() % config.partitions();
                 String mapKey = config.mapBase() + index;
 
                 hazelcastInstance.getMap(mapKey).put(correlationId, request);
