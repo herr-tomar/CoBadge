@@ -1,16 +1,32 @@
 package osplus.pkptuna.flows;
 
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Import;
 import osplus.pkptuna.flows.bootstrap.FlowHandlerInitializer;
-import osplus.pkptuna.flows.bootstrap.HazelcastFlowYamlConfig;
 import osplus.pkptuna.flows.bootstrap.HazelcastFlowBootstrap;
+import osplus.pkptuna.flows.bootstrap.HazelcastFlowConfigs;
+import osplus.pkptuna.flows.bootstrap.HazelcastFlowYamlConfig;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
 
 @Configuration
-@Import({
-    FlowHandlerInitializer.class,
-    HazelcastFlowYamlConfig.class,
-    HazelcastFlowBootstrap.class   // ✅ This is the startup trigger
-})
+@EnableConfigurationProperties(HazelcastFlowConfigs.class)
 public class FlowsModuleConfiguration {
+
+    @Bean
+    public FlowHandlerInitializer flowHandlerInitializer() {
+        return new FlowHandlerInitializer();
+    }
+
+    @Bean
+    public HazelcastFlowYamlConfig hazelcastFlowYamlConfig(HazelcastFlowConfigs flowConfigs) {
+        return new HazelcastFlowYamlConfig(flowConfigs);
+    }
+
+    @Bean
+    public HazelcastFlowBootstrap hazelcastFlowBootstrap(GenericHazelcastRouter router,
+                                                         GenericHazelcastConsumer consumer) {
+        return new HazelcastFlowBootstrap(router, consumer);
+    }
 }
