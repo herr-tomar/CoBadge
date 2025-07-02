@@ -1,86 +1,45 @@
-package osplus.pkptuna.hazelcast.pubsub;
+package osplus.pkptuna.flows.bootstrap;
 
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.map.IMap;
-import com.hazelcast.topic.ITopic;
-import com.hazelcast.topic.Message;
-import com.hazelcast.topic.MessageListener;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import osplus.pkptuna.hazelcast.configprops.HazelcastFlowConfigs;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
+import osplus.pkptuna.hazelcast.pubsub.FlowConfig;
 
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
-public class GenericHazelcastRouter {
+@Configuration
+public class FlowHandlerInitializer {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastRouter.class);
-
-    private final HazelcastInstance hazelcastInstance;
-    private final HazelcastFlowConfigs flowConfigs;
-    private final FlowHandlerRegistry<?, ?> registry;
-
-    private final Map<String, AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
-
-    public GenericHazelcastRouter(HazelcastInstance hazelcastInstance,
-                                  HazelcastFlowConfigs flowConfigs,
-                                  FlowHandlerRegistry<?, ?> registry) {
-        this.hazelcastInstance = hazelcastInstance;
-        this.flowConfigs = flowConfigs;
-        this.registry = registry;
+    @Bean
+    public List<FlowConfig> hazelcastFlowConfigs(HazelcastFlowConfigs external) {
+        return external.flows().stream()
+            .map(c -> new FlowConfig(
+                c.name(),
+                c.requestTopic(),
+                c.responseTopic(),
+                c.mapBase(),
+                c.partitions()
+            ))
+            .collect(Collectors.toList());
     }
 
-    public void initRouters() {
-        List<HazelcastFlowConfigs.FlowConfig> flowList = flowConfigs.flows();
-        if (flowList == null || flowList.isEmpty()) {
-            LOGGER.warn("No Hazelcast flow configurations found.");
-            return;
-        }
-
-        for (HazelcastFlowConfigs.FlowConfig config : flowList) {
-            String flowName = config.name();
-            roundRobinCounters.putIfAbsent(flowName, new AtomicInteger(0));
-
-            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(config.requestTopic());
-
-            topic.addMessageListener(new MessageListener<>() {
-                @Override
-                public void onMessage(Message<byte[]> message) {
-                    try {
-                        FlowHandler<Object, Object> handler = (FlowHandler<Object, Object>) registry.getHandler(flowName);
-                        if (handler == null) {
-                            LOGGER.warn("No handler found for flow: {}", flowName);
-                            return;
-                        }
-
-                        Object request = handler.deserializeRequest(message.getMessageObject());
-                        String correlationId = handler.extractCorrelationId(request);
-                        Object response = handler.handleRequest(request);
-                        Object wrapped = handler.wrapResponse(correlationId, response);
-
-                        int partition = getNextPartition(flowName, config.partitions());
-                        String mapName = config.mapBase() + "-" + partition;
-                        IMap<UUID, Object> map = hazelcastInstance.getMap(mapName);
-
-                        map.set(UUID.randomUUID(), wrapped);
-                        LOGGER.debug("Published response to map: {}", mapName);
-
-                    } catch (Exception ex) {
-                        LOGGER.error("Error handling message for flow {}: {}", flowName, ex.getMessage(), ex);
-                    }
-                }
-            });
-        }
+    @Bean
+    public GenericHazelcastRouter hazelcastRouter(
+            HazelcastInstance hazelcastInstance,
+            List<FlowConfig> flowConfigs,
+            FlowHandlerRegistry<?, ?> registry) {
+        return new GenericHazelcastRouter(hazelcastInstance, flowConfigs, registry);
     }
 
-    private int getNextPartition(String flowName, int maxPartitions) {
-        AtomicInteger counter = roundRobinCounters.get(flowName);
-        int next = counter.getAndUpdate(prev -> (prev + 1) % maxPartitions);
-        return next;
+    @Bean
+    public GenericHazelcastConsumer hazelcastConsumer(
+            HazelcastInstance hazelcastInstance,
+            TaskScheduler scheduler,
+            List<FlowConfig> flowConfigs,
+            FlowHandlerRegistry<?, ?> registry) {
+        return new GenericHazelcastConsumer(hazelcastInstance, scheduler, flowConfigs, registry);
     }
 }
