@@ -1,90 +1,11 @@
-package osplus.pkptuna.hazelcast.pubsub;
 
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.map.IMap;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.TaskScheduler;
-import osplus.apl.core.api.AplComponent;
-import osplus.pkptuna.hazelcast.config.FlowConfig;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
-
-import java.time.Duration;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-
-@AplComponent
-public class GenericHazelcastConsumer {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastConsumer.class);
-
-    private final HazelcastInstance hazelcastInstance;
-    private final TaskScheduler taskScheduler;
-    private final List<FlowConfig> flowConfigs;
-    private final FlowHandlerRegistry<?, ?> registry;
-
-    private final Map<String, Integer> partitionTracker = new ConcurrentHashMap<>();
-
-    public GenericHazelcastConsumer(HazelcastInstance hazelcastInstance,
-                                    TaskScheduler taskScheduler,
-                                    List<FlowConfig> flowConfigs,
-                                    FlowHandlerRegistry<?, ?> registry) {
-        this.hazelcastInstance = hazelcastInstance;
-        this.taskScheduler = taskScheduler;
-        this.flowConfigs = flowConfigs;
-        this.registry = registry;
-    }
-
-    public void startPolling() {
-        taskScheduler.scheduleAtFixedRate(this::pollRequestMaps, Duration.ofMillis(1000));
-    }
-
-    public void pollRequestMaps() {
-        if (flowConfigs == null || flowConfigs.isEmpty()) {
-            LOGGER.warn("Skipping polling: no flow configurations");
-            return;
-        }
-
-        for (FlowConfig config : flowConfigs) {
-            String flowName = config.name();
-            FlowHandler<Object, Object> handler = (FlowHandler<Object, Object>) registry.getHandler(flowName);
-            if (handler == null) {
-                LOGGER.warn("No handler registered for flow: {}", flowName);
-                continue;
-            }
-
-            int currentPartition = partitionTracker.compute(flowName, (k, v) -> (v == null || v >= config.partitions() - 1) ? 0 : v + 1);
-            String mapKey = config.mapBase() + "-" + currentPartition;
-
-            IMap<UUID, Object> map = hazelcastInstance.getMap(mapKey);
-
-            try {
-                for (Map.Entry<UUID, Object> entry : map.entrySet()) {
-                    UUID key = entry.getKey();
-                    Object value = entry.getValue();
-
-                    Object request;
-
-                    if (value instanceof byte[] data) {
-                        request = handler.deserializeRequest(data);
-                    } else {
-                        LOGGER.debug("Map {} received deserialized object of type {}", mapKey, value.getClass());
-                        request = value;
-                    }
-
-                    String correlationId = handler.extractCorrelationId(request);
-                    Object response = handler.handleRequest(request);
-                    Object wrapped = handler.wrapResponse(correlationId, response);
-
-                    handler.sendResponse(hazelcastInstance, config.responseTopic(), wrapped);
-                    map.remove(key);
-                }
-            } catch (Exception ex) {
-                LOGGER.error("Error polling map {}: {}", mapKey, ex.getMessage(), ex);
-            }
-        }
-    }
-}
+java.lang.ClassCastException: class osplus.pkptuna.dispute.model.DisputeDetailResponseWrapperDto cannot be cast to class osplus.pkptuna.dispute.model.DisputeDetailRequestWrapperDto (osplus.pkptuna.dispute.model.DisputeDetailResponseWrapperDto and osplus.pkptuna.dispute.model.DisputeDetailRequestWrapperDto are in unnamed module of loader 'app')
+	at osplus.pkptuna.flows.handlers.DisputeDetailFlowHandler.extractCorrelationId(DisputeDetailFlowHandler.java:21) ~[classes/:na]
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer.pollRequestMaps(GenericHazelcastConsumer.java:78) ~[classes/:na]
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54) ~[spring-context-6.2.6.jar:6.2.6]
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572) ~[na:na]
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:358) ~[na:na]
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642) ~[na:na]
+	at java.base/java.lang.Thread.run(Thread.java:1583) ~[na:na]
