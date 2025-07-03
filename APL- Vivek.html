@@ -11,12 +11,25 @@ import osplus.pkptuna.hazelcast.config.FlowConfig;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Konfigurationsklasse für das Flows-Modul.
+ * 
+ * Diese Klasse aktiviert die Bindung der Hazelcast-Flow-Konfigurationen
+ * und stellt ein Bean zur Verfügung, das die Konfigurationen in das interne Modell überführt.
+ */
 @Configuration
 @EnableConfigurationProperties(HazelcastFlowConfigs.class)
 public class FlowsModuleConfiguration {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(FlowsModuleConfiguration.class);
 
+    /**
+     * Wandelt die extern geladenen Flow-Konfigurationen (`HazelcastFlowConfigs`) in eine Liste
+     * von internen `FlowConfig`-Objekten um, die vom Hazelcast-Modul genutzt werden.
+     *
+     * @param external Die vom Spring-Kontext bereitgestellten Konfigurationen aus application.yml
+     * @return Liste von `FlowConfig`-Objekten
+     */
     @Bean
     public List<FlowConfig> hazelcastFlowConfigs(HazelcastFlowConfigs external) {
         List<FlowConfig> flowConfigList = external.flows().stream()
@@ -29,7 +42,7 @@ public class FlowsModuleConfiguration {
                 ))
                 .collect(Collectors.toList());
 
-        LOGGER.info("Loaded hazelcast flow configs: {}", flowConfigList);
+        LOGGER.info("Hazelcast-Flow-Konfigurationen geladen: {}", flowConfigList);
         return flowConfigList;
     }
 
