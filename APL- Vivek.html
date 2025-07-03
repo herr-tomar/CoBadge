@@ -1,123 +1,248 @@
-package osplus.pkptuna.util;
+package osplus.pkptuna.uimodule;
 
-import java.util.Map;
-import java.util.concurrent.*;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.topic.ITopic;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
+import osplus.apl.uui.api.MethodType;
+import osplus.apl.uui.api.ServiceParam;
+import osplus.apl.uui.api.UiModule;
+import osplus.apl.uui.api.UiService;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestMetadataDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseWrapperDto;
+import osplus.pkptuna.dispute.model.DisputeDetailRequestDto;
+import osplus.pkptuna.dispute.model.DisputeDetailRequestMetadataDto;
+import osplus.pkptuna.dispute.model.DisputeDetailRequestWrapperDto;
+import osplus.pkptuna.dispute.model.DisputeDetailResponseWrapperDto;
+import osplus.pkptuna.dispute.model.DisputeResponseDto;
+import osplus.pkptuna.dispute.service.DisputeDetailService;
+import osplus.pkptuna.dispute.service.DisputeService;
+import osplus.pkptuna.dispute.util.ProtobufJsonUtil;
+import osplus.pkptuna.util.GenericResponseTracker;
+import osplus.pkptuna.util.HazelcastListenerUtils;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
- * Zentraler, generischer Tracker für mehrere Antworttypen basierend auf Korrelations-ID und Typ.
+ * APL UI module to expose dispute lookup and detail functionality via APL runtime.
  */
-public class CentralResponseTracker {
+@UiModule("disputeUiModule")
+public class DisputeUiModule {
 
-    private final Map<String, CompletableFuture<?>> pending = new ConcurrentHashMap<>();
+    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeUiModule.class);
 
+    private final DisputeService disputeService;
+    private final DisputeDetailService disputeDetailService;
+    private final HazelcastInstance hazelcastInstance;
+
+    @Autowired
+    private GenericResponseTracker<DisputeResponseDto> disputeDetailResponseTracker;
+
+    @Autowired
+    private GenericResponseTracker<DisputeLookupResponseDto> disputeLookupResponseTracker;
     /**
-     * Registriert eine erwartete Antwort mit Korrelations-ID.
+     * Constructor with required service injection.
+     *
+     * @param disputeService the service used to look up disputes
+     * @param disputeDetailService the service used to retrieve detailed dispute information
      */
-    public <T> void register(String correlationId) {
-        pending.put(correlationId, new CompletableFuture<T>());
+    public DisputeUiModule(HazelcastInstance hazelcastInstance,
+                           DisputeService disputeService,
+                           DisputeDetailService disputeDetailService
+                           ) {
+        this.disputeService = disputeService;
+        this.disputeDetailService = disputeDetailService;
+        this.hazelcastInstance = hazelcastInstance;
     }
 
     /**
-     * Markiert eine Antwort als abgeschlossen.
+     * UI Service to check if a dispute folder exists and retrieve its reference.
+     *
+     * @param issuerId Issuer ID
+     * @param cardReference Card reference
+     * @return JSON string containing DisputeLookupResponseDto
      */
-    public <T> void complete(String correlationId, T response) {
-        @SuppressWarnings("unchecked")
-        CompletableFuture<T> future = (CompletableFuture<T>) pending.remove(correlationId);
-        if (future != null) {
-            future.complete(response);
+    @UiService(value = "disputeLookup", method = MethodType.GET, requiresAuthentication = false)
+    public String lookupDisputeFolder(
+            @ServiceParam("issuerId") String issuerId,
+            @ServiceParam("cardReference") String cardReference) {
+
+        LOGGER.info("Received lookupDisputeFolder request for issuerId={} and cardReference={}", issuerId, cardReference);
+
+        DisputeLookupResponseDto dto = disputeService.lookupDisputeFolder(issuerId, cardReference);
+
+        return ProtobufJsonUtil.printProtoToJson(dto);
+    }
+
+
+    /**
+     * UI Service to get detailed information about a specific dispute folder.
+     *
+     * @param issuerId Issuer ID
+     * @param disputeFolderReference Dispute folder reference
+     * @param embed Comma-separated embed options (e.g., "events,documents")
+     * @return JSON string with complete folder details
+     */
+    @UiService(value = "disputeDetails", method = MethodType.GET, requiresAuthentication = false)
+    public String getDisputeDetails(
+            @ServiceParam("issuerId") String issuerId,
+            @ServiceParam("disputeFolderReference") String disputeFolderReference,
+            @ServiceParam(value = "embed") String embed) {
+
+        LOGGER.info("Fetching dispute folder details for issuerId={} and folderRef={} with embed={}",
+                issuerId, disputeFolderReference, embed);
+
+        List<String> embedList = (embed != null && !embed.isEmpty())
+                ? Arrays.asList(embed.split(","))
+                : null;
+
+        DisputeResponseDto dto = disputeDetailService.getDisputeFolderDetails(issuerId, disputeFolderReference, embedList);
+
+        return ProtobufJsonUtil.printProtoToJson(dto);
+    }
+
+    // Test Code
+
+    @UiService(value = "publishDisputesLookupRequest", method = MethodType.GET, requiresAuthentication = false)
+    public String publishDisputesLookupRequest(
+            @ServiceParam("issuerId") String issuerId,
+            @ServiceParam("cardReference") String cardReference) {
+
+        try {
+            String correlationId = UUID.randomUUID().toString();
+
+            DisputeLookupRequestMetadataDto metadataDto = DisputeLookupRequestMetadataDto.newBuilder()
+                    .setRequestChannel("APL-UI")
+                    .setMessageType("DISPUTE_LOOKUP")
+                    .setRequestedBy("UI-MANUAL-TEST")
+                    .setBusinessContext("test")
+                    .build();
+
+            DisputeLookupRequestDto disputeLookupRequestDto = DisputeLookupRequestDto.newBuilder()
+                    .setMetadata(metadataDto)
+                    .setIssuerId(issuerId)
+                    .setCardReference(cardReference)
+                    .build();
+
+
+            DisputeLookupRequestWrapperDto wrapper = DisputeLookupRequestWrapperDto.newBuilder()
+                    .setCorrelationId(correlationId)
+                    .setPayload(disputeLookupRequestDto)
+                    .build();
+
+            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic("DisputeLookupRequestReliableTopic");
+            topic.publish(wrapper.toByteArray());
+
+            // Register correlation ID and await response
+            disputeLookupResponseTracker.register(correlationId);
+            CompletableFuture<DisputeLookupResponseDto> future = disputeLookupResponseTracker.await(correlationId);
+
+            DisputeLookupResponseDto response = future.get(5, TimeUnit.SECONDS); // Wait max 5s
+            return ProtobufJsonUtil.printProtoToJson(response);
+
+        } catch (TimeoutException te) {
+            return "{ \"status\": \"timeout\", \"message\": \"No response in 5 seconds\" }";
+        } catch (Exception e) {
+            LOGGER.error("Failed to process publishDisputeRequest", e);
+            return "{ \"status\": \"error\", \"message\": \"" + e.getMessage() + "\" }";
         }
     }
 
-    /**
-     * Gibt das Future-Objekt zurück, um auf die Antwort zu warten.
-     */
-    @SuppressWarnings("unchecked")
-    public <T> CompletableFuture<T> await(String correlationId) {
-        return (CompletableFuture<T>) pending.get(correlationId);
-    }
-}
+    @UiService(value = "publishDisputeDetailRequest", method = MethodType.GET, requiresAuthentication = false)
+    public String publishDisputeDetailRequest(
+            @ServiceParam("issuerId") String issuerId,
+            @ServiceParam("disputeFolderReference") String disputeFolderReference,
+            @ServiceParam(value = "embed") String embed) {
 
----------
+        try {
+            String correlationId = UUID.randomUUID().toString();
 
-            import com.google.protobuf.Message;
-import com.google.protobuf.Parser;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.topic.ITopic;
-import org.slf4j.Logger;
+            // Build MetaData
+            DisputeDetailRequestMetadataDto.Builder metadataDtoBuilder = DisputeDetailRequestMetadataDto.newBuilder();
 
-import java.util.function.BiConsumer;
-import java.util.function.Function;
+            metadataDtoBuilder.setRequestChannel("APL-UI");
+            metadataDtoBuilder.setMessageType("DISPUTE_FOLDER_DETAIL");
+            metadataDtoBuilder.setRequestedBy("UI-MANUAL-TEST");
+            metadataDtoBuilder.setBusinessContext("test");
 
-/**
- * Dienstprogrammklasse zur Registrierung generischer Hazelcast-Listener,
- * die Protobuf-Nachrichten empfangen und in Wrapper- und Antwortobjekte extrahieren.
- */
-public class HazelcastListenerUtils {
-
-    /**
-     * Registriert einen generischen MessageListener auf einem Hazelcast Topic für Protobuf-Nachrichten.
-     *
-     * @param hazelcastInstance        Hazelcast-Instanz
-     * @param topicName                Name des Topics
-     * @param parser                   Protobuf-Parser zum Parsen des Wrappers
-     * @param correlationIdExtractor   Funktion zum Extrahieren der Korrelations-ID aus dem Wrapper
-     * @param responseExtractor        Funktion zum Extrahieren der Antwort aus dem Wrapper
-     * @param responseConsumer         Logik zur Weitergabe der extrahierten Antwort
-     * @param logger                   Logger-Instanz
-     * @param <W>                      Protobuf Wrapper-Typ
-     * @param <R>                      Antwort-Typ
-     */
-    public static <W extends Message, R> void registerGenericResponseListener(
-            HazelcastInstance hazelcastInstance,
-            String topicName,
-            Parser<W> parser,
-            Function<W, String> correlationIdExtractor,
-            Function<W, R> responseExtractor,
-            BiConsumer<String, R> responseConsumer,
-            Logger logger) {
-
-        ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);  // ✅ Explicit typing
-        topic.addMessageListener(message -> {
-            try {
-                byte[] messageBytes = message.getMessageObject();
-                W wrapper = parser.parseFrom(messageBytes);
-                String correlationId = correlationIdExtractor.apply(wrapper);
-                R response = responseExtractor.apply(wrapper);
-                responseConsumer.accept(correlationId, response);
-            } catch (Exception e) {
-                logger.error("Fehler beim Verarbeiten der Antwort von Topic '{}'", topicName, e);
+            List<String> embedList = new ArrayList<>();
+            if(embed != null && !embed.isBlank()) {
+                embedList = Arrays.asList(embed.split("\\s*,\\s*"));
+                if(!embedList.isEmpty()) {
+                    for(String embedValue: embedList) {
+                        metadataDtoBuilder.addEmbed(embedValue);
+                    }
+                }
             }
-        });
 
-        logger.info("Antwort-Listener auf Topic '{}' registriert.", topicName);
+            DisputeDetailRequestMetadataDto metadataDto = metadataDtoBuilder.build();
+
+            // Build Request DTO
+            DisputeDetailRequestDto disputeLookupRequestDto = DisputeDetailRequestDto.newBuilder()
+                    .setMetadata(metadataDto)
+                    .setIssuerId(issuerId)
+                    .setDisputeFolderReference(disputeFolderReference)
+                    .build();
+
+
+            // Build Wrapper DTO
+            DisputeDetailRequestWrapperDto wrapper = DisputeDetailRequestWrapperDto.newBuilder()
+                    .setCorrelationId(correlationId)
+                    .setPayload(disputeLookupRequestDto)
+                    .build();
+
+            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic("DisputeDetailRequestReliableTopic");
+            topic.publish(wrapper.toByteArray());
+
+            // Register correlation ID and await response
+
+            disputeDetailResponseTracker.register(correlationId);
+            CompletableFuture<DisputeResponseDto> future = disputeDetailResponseTracker.await(correlationId);
+
+            DisputeResponseDto response = future.get(5, TimeUnit.SECONDS); // Wait max 5s
+            return ProtobufJsonUtil.printProtoToJson(response);
+
+        } catch (TimeoutException te) {
+            return "{ \"status\": \"timeout\", \"message\": \"No response in 5 seconds\" }";
+        } catch (Exception e) {
+            LOGGER.error("Failed to process publishDisputeRequest", e);
+            return "{ \"status\": \"error\", \"message\": \"" + e.getMessage() + "\" }";
+        }
     }
+
+    @PostConstruct
+    public void initResponseListeners() {
+
+        HazelcastListenerUtils.registerGenericResponseListener(
+                hazelcastInstance,
+                "DisputeDetailResponseReliableTopic",
+                DisputeDetailResponseWrapperDto.parser(),
+                DisputeDetailResponseWrapperDto::getCorrelationId,
+                DisputeDetailResponseWrapperDto::getResponse,
+                DisputeDetailResponseWrapperDto::<DisputeDetailResponseWrapperDto>complete,
+                LOGGER
+        );
+
+        HazelcastListenerUtils.registerGenericResponseListener(
+                hazelcastInstance,
+                "DisputeLookupResponseReliableTopic",
+                DisputeLookupResponseWrapperDto.parser(),
+                DisputeLookupResponseWrapperDto::getCorrelationId,
+                DisputeLookupResponseWrapperDto::getResponse,
+                GenericResponseTracker::<DisputeLookupResponseDto>complete,
+                LOGGER
+        );
+    }
+
 }
-
-
-
-------------
-
-@PostConstruct
-public void initResponseListeners() {
-
-    HazelcastListenerUtils.registerGenericResponseListener(
-        hazelcastInstance,
-        "DisputeDetailResponseReliableTopic",
-        DisputeDetailResponseWrapperDto.parser(),
-        DisputeDetailResponseWrapperDto::getCorrelationId,
-        DisputeDetailResponseWrapperDto::getResponse,
-        DisputeDetailResponseTracker::complete,
-        LOGGER
-    );
-
-    HazelcastListenerUtils.registerGenericResponseListener(
-        hazelcastInstance,
-        "DisputeLookupResponseReliableTopic",
-        DisputeLookupResponseWrapperDto.parser(),
-        DisputeLookupResponseWrapperDto::getCorrelationId,
-        DisputeLookupResponseWrapperDto::getResponse,
-        DisputeLookupResponseTracker::complete,
-        LOGGER
-    );
-}
-
