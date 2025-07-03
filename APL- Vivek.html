@@ -1,57 +1,36 @@
-package osplus.pkptuna.flows.bootstrap;
+package osplus.pkptuna.flows;
 
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import osplus.apl.core.api.validation.NotBlank;
-import osplus.apl.core.api.validation.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import osplus.pkptuna.flows.bootstrap.HazelcastFlowConfigs;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
-/**
- * Konfigurationsklasse für Hazelcast-Flows.
- * Wird verwendet, um über application.yml oder application.properties eine Liste von Flow-Konfigurationen
- * bereitzustellen, die in das Spring-Kontext geladen werden.
- */
-@ConfigurationProperties(prefix = "hazelcast")
-public record HazelcastFlowConfigs(
+@Configuration
+@EnableConfigurationProperties(HazelcastFlowConfigs.class)
+public class FlowsModuleConfiguration {
 
-        /**
-         * Liste aller definierten Hazelcast-Flows.
-         * Jeder Flow wird über einen Namen, Topic-Namen und eine Map-Basis identifiziert.
-         */
-        @NotNull List<FlowConfig> flows) {
+    private static final Logger LOGGER = LoggerFactory.getLogger(FlowsModuleConfiguration.class);
 
-    /**
-     * Interne Record-Klasse zur Definition eines einzelnen Hazelcast-Flows.
-     * Enthält Metadaten, die für die Einrichtung von Request-/Response-Handling
-     * über Topics und verteilte Maps erforderlich sind.
-     */
-    public record FlowConfig(
+    @Bean
+    public List<FlowConfig> hazelcastFlowConfigs(HazelcastFlowConfigs external) {
+        List<FlowConfig> flowConfigList = external.flows().stream()
+                .map(c -> new FlowConfig(
+                        c.name(),
+                        c.requestTopic(),
+                        c.responseTopic(),
+                        c.mapBase(),
+                        c.partitions()
+                ))
+                .collect(Collectors.toList());
 
-            /**
-             * Eindeutiger Name des Flows. Wird u. a. zur Identifikation des zugehörigen Handlers verwendet.
-             */
-            @NotBlank String name,
-
-            /**
-             * Name des Hazelcast ReliableTopic, auf dem Anfragen empfangen werden.
-             */
-            @NotBlank String requestTopic,
-
-            /**
-             * Name des Hazelcast ReliableTopic, auf dem Antworten gesendet werden.
-             */
-            @NotBlank String responseTopic,
-
-            /**
-             * Basisname für die Partitionierten IMaps, in die Anfragen zur Verarbeitung verteilt werden.
-             * Z. B. „my-flow-map-“ → es entstehen „my-flow-map-0“, „my-flow-map-1“, etc.
-             */
-            @NotBlank String mapBase,
-
-            /**
-             * Anzahl der Partitionen (also Maps), auf die Requests verteilt werden.
-             * Wird für Load Balancing zwischen mehreren Konsumenten verwendet.
-             */
-            int partitions) {
+        LOGGER.info("Loaded hazelcast flow configs: {}", flowConfigList);
+        return flowConfigList;
     }
+
 }
