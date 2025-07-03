@@ -4,11 +4,24 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import com.google.protobuf.util.JsonFormat;
 
+/**
+ * Hilfsklasse zur Konvertierung zwischen JSON und Protobuf-Nachrichten.
+ * Unterstützt sowohl Serialisierung als auch Deserialisierung von Protobuf-Datenstrukturen.
+ */
 public class ProtobufJsonUtil {
 
+    // Privater Konstruktor verhindert Instanziierung
     private ProtobufJsonUtil() {
     }
 
+    /**
+     * Parst einen JSON-String in ein Protobuf-Builder-Objekt.
+     * Unbekannte Felder im JSON werden ignoriert.
+     *
+     * @param json    JSON-String
+     * @param builder Protobuf-Builder
+     * @return Gefüllter Protobuf-Builder
+     */
     public static <T extends Message.Builder> T parseJsonToProto(String json, T builder) {
         try {
             JsonFormat.parser()
@@ -16,10 +29,16 @@ public class ProtobufJsonUtil {
                     .merge(json, builder);
             return builder;
         } catch (InvalidProtocolBufferException e) {
-            throw new IllegalArgumentException("Failed to parse JSON into protobuf DTO", e);
+            throw new IllegalArgumentException("Fehler beim Parsen von JSON in Protobuf DTO", e);
         }
     }
 
+    /**
+     * Formatiert Zeitstempel im JSON-Format korrekt, indem Trennzeichen in Zeitzonen ergänzt werden.
+     *
+     * @param json JSON-String mit Zeitstempeln
+     * @return Reformatiertes JSON
+     */
     public static String fixTimestamps(String json) {
         return json.replaceAll(
                 "(\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3})([+-])(\\d{2})(\\d{2})",
@@ -27,41 +46,108 @@ public class ProtobufJsonUtil {
         );
     }
 
+    /**
+     * Konvertiert eine Protobuf-Nachricht in einen JSON-String.
+     * Auch Standardwerte werden berücksichtigt.
+     *
+     * @param protoMessage Protobuf-Nachricht
+     * @return JSON-String
+     */
     public static String printProtoToJson(Message protoMessage) {
         try {
             return JsonFormat.printer()
                     .includingDefaultValueFields()
                     .print(protoMessage);
         } catch (InvalidProtocolBufferException e) {
-            throw new IllegalStateException("Failed to serialize protobuf DTO to JSON", e);
+            throw new IllegalStateException("Fehler beim Serialisieren von Protobuf DTO zu JSON", e);
         }
     }
-
 }
 
 
--------------------------------
+-----------
+
+
+package osplus.pkptuna.dispute.util;
+
+import org.junit.jupiter.api.Test;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestDto;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Unit-Tests für die Hilfsklasse {@link ProtobufJsonUtil}.
+ */
+class ProtobufJsonUtilTest {
+
+    @Test
+    void shouldConvertProtoToJsonAndBack() {
+        // Protobuf-Objekt erzeugen
+        DisputeLookupRequestDto original = DisputeLookupRequestDto.newBuilder()
+                .setIssuerId("issuer-001")
+                .setCardReference("card-XYZ")
+                .build();
+
+        // In JSON konvertieren
+        String json = ProtobufJsonUtil.printProtoToJson(original);
+        assertTrue(json.contains("issuerId"));
+        assertTrue(json.contains("cardReference"));
+
+        // Zurück in Protobuf parsen
+        DisputeLookupRequestDto.Builder builder = DisputeLookupRequestDto.newBuilder();
+        ProtobufJsonUtil.parseJsonToProto(json, builder);
+        DisputeLookupRequestDto parsed = builder.build();
+
+        assertEquals(original, parsed);
+    }
+
+    @Test
+    void shouldFixTimestampsInJson() {
+        String raw = "{\"timestamp\":\"2024-12-10T15:30:00.000+0200\"}";
+        String fixed = ProtobufJsonUtil.fixTimestamps(raw);
+        assertTrue(fixed.contains("+02:00"));
+    }
+
+    @Test
+    void shouldThrowExceptionOnInvalidJson() {
+        DisputeLookupRequestDto.Builder builder = DisputeLookupRequestDto.newBuilder();
+        assertThrows(IllegalArgumentException.class, () ->
+                ProtobufJsonUtil.parseJsonToProto("{invalid_json}", builder)
+        );
+    }
+}
+
+
+-----------
 
 package osplus.pkptuna.dispute.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/**
+ * Konfigurationsdaten für den Zugriff auf den Dispute-Service.
+ * Wird über application.yml (Prefix "dispute") geladen.
+ */
 @ConfigurationProperties(prefix = "dispute")
 public record DisputeServiceProperties(
         Auth auth,
         Paths paths,
         String baseUrl
 ) {
+    /**
+     * Authentifizierungsinformationen (Benutzername und Passwort).
+     */
+    public record Auth(String username, String password) {}
 
-    public record Auth(String username, String password) {
-    }
-
-    public record Paths(String lookupDisputes, String disputeDetails) {
-    }
+    /**
+     * Endpunkte für Lookup- und Detailabfragen.
+     */
+    public record Paths(String lookupDisputes, String disputeDetails) {}
 }
 
 
------------------------
+------------
+
 
 package osplus.pkptuna.dispute.config;
 
@@ -75,10 +161,17 @@ import osplus.pkptuna.dispute.service.DisputeService;
 import osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImpl;
 import osplus.pkptuna.dispute.service.impl.DisputeServiceImpl;
 
+/**
+ * Spring-Konfiguration zur Initialisierung der Dispute-Services.
+ * Baut WebClient-Instanzen auf Basis der konfigurierten Eigenschaften.
+ */
 @Configuration
 @EnableConfigurationProperties(DisputeServiceProperties.class)
 public class DisputeConfig {
 
+    /**
+     * Erstellt den konfigurierten {@link WebClient} für HTTP-Zugriffe.
+     */
     @Bean
     public WebClient disputeWebClient(DisputeServiceProperties props) {
         return WebClient.builder()
@@ -87,14 +180,20 @@ public class DisputeConfig {
                 .build();
     }
 
+    /**
+     * Initialisiert den {@link DisputeService}.
+     */
     @Bean
     public DisputeService disputeService(WebClient disputeWebClient, DisputeServiceProperties props) {
         return new DisputeServiceImpl(disputeWebClient, props);
     }
 
+    /**
+     * Initialisiert den {@link DisputeDetailService}.
+     */
     @Bean
     public DisputeDetailService disputeDetailService(WebClient disputeWebClient, DisputeServiceProperties props) {
         return new DisputeDetailServiceImpl(disputeWebClient, props);
     }
-
 }
+
