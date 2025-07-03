@@ -41,12 +41,32 @@ public class CentralResponseTracker {
 
             import com.google.protobuf.Message;
 import com.google.protobuf.Parser;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.topic.ITopic;
+import org.slf4j.Logger;
 
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
+/**
+ * Dienstprogrammklasse zur Registrierung generischer Hazelcast-Listener,
+ * die Protobuf-Nachrichten empfangen und in Wrapper- und Antwortobjekte extrahieren.
+ */
 public class HazelcastListenerUtils {
 
+    /**
+     * Registriert einen generischen MessageListener auf einem Hazelcast Topic für Protobuf-Nachrichten.
+     *
+     * @param hazelcastInstance        Hazelcast-Instanz
+     * @param topicName                Name des Topics
+     * @param parser                   Protobuf-Parser zum Parsen des Wrappers
+     * @param correlationIdExtractor   Funktion zum Extrahieren der Korrelations-ID aus dem Wrapper
+     * @param responseExtractor        Funktion zum Extrahieren der Antwort aus dem Wrapper
+     * @param responseConsumer         Logik zur Weitergabe der extrahierten Antwort
+     * @param logger                   Logger-Instanz
+     * @param <W>                      Protobuf Wrapper-Typ
+     * @param <R>                      Antwort-Typ
+     */
     public static <W extends Message, R> void registerGenericResponseListener(
             HazelcastInstance hazelcastInstance,
             String topicName,
@@ -56,7 +76,8 @@ public class HazelcastListenerUtils {
             BiConsumer<String, R> responseConsumer,
             Logger logger) {
 
-        hazelcastInstance.getReliableTopic(topicName).addMessageListener(message -> {
+        ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);  // ✅ Explicit typing
+        topic.addMessageListener(message -> {
             try {
                 byte[] messageBytes = message.getMessageObject();
                 W wrapper = parser.parseFrom(messageBytes);
@@ -71,6 +92,7 @@ public class HazelcastListenerUtils {
         logger.info("Antwort-Listener auf Topic '{}' registriert.", topicName);
     }
 }
+
 
 
 ------------
