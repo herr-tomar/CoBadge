@@ -2,21 +2,51 @@ package osplus.pkptuna.hazelcast.protobuf;
 
 import java.io.IOException;
 
-public interface SimpleDeserializer <T> {
+/**
+ * Schnittstelle zur Deserialisierung eines Objekts vom Typ {@code T}
+ * aus einem Byte-Array.
+ *
+ * @param <T> der Zieltyp nach der Deserialisierung
+ */
+public interface SimpleDeserializer<T> {
+    /**
+     * Wandelt ein Byte-Array in ein Objekt des Typs {@code T} um.
+     *
+     * @param data das zu deserialisierende Byte-Array
+     * @return das rekonstruierte Objekt
+     * @throws IOException wenn die Deserialisierung fehlschlägt
+     */
     T deserialize(byte[] data) throws IOException;
 }
 
+
+    -----
 
     package osplus.pkptuna.hazelcast.protobuf;
 
 import java.io.IOException;
 
-public interface SimpleSerializer <T> {
+/**
+ * Schnittstelle zur Serialisierung eines Objekts vom Typ {@code T}
+ * in ein Byte-Array.
+ *
+ * @param <T> der Typ des zu serialisierenden Objekts
+ */
+public interface SimpleSerializer<T> {
+    /**
+     * Serialisiert ein Objekt des Typs {@code T} in ein Byte-Array.
+     *
+     * @param message das zu serialisierende Objekt
+     * @return ein Byte-Array, das das Objekt darstellt
+     * @throws IOException wenn die Serialisierung fehlschlägt
+     */
     byte[] serialize(T message) throws IOException;
 }
 
 
-package osplus.pkptuna.hazelcast.protobuf.impl;
+    -----
+
+    package osplus.pkptuna.hazelcast.protobuf.impl;
 
 import com.google.protobuf.Message;
 import com.google.protobuf.Parser;
@@ -24,30 +54,54 @@ import osplus.pkptuna.hazelcast.protobuf.SimpleDeserializer;
 
 import java.io.IOException;
 
+/**
+ * Implementierung von {@link SimpleDeserializer}, die ein Google Protobuf-Parser
+ * verwendet, um ein Byte-Array in ein Protobuf-Message-Objekt zu deserialisieren.
+ *
+ * @param <T> der konkrete Protobuf-Typ, der geparst wird
+ */
 public class ProtobufDeserializer<T extends Message> implements SimpleDeserializer<T> {
+
     private final Parser<T> parser;
 
+    /**
+     * Konstruktor mit übergebenem {@link Parser} für den Protobuf-Typ.
+     *
+     * @param parser der Parser für den konkreten Protobuf-Typ
+     */
     public ProtobufDeserializer(Parser<T> parser) {
         this.parser = parser;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public T deserialize(byte[] bytes) throws IOException {
         return parser.parseFrom(bytes);
     }
-
 }
 
+----
 
 package osplus.pkptuna.hazelcast.protobuf.impl;
 
 import com.google.protobuf.Message;
 import osplus.pkptuna.hazelcast.protobuf.SimpleSerializer;
 
+/**
+ * Implementierung von {@link SimpleSerializer}, die ein Google Protobuf-Objekt
+ * in ein Byte-Array serialisiert, basierend auf der internen toByteArray()-Methode.
+ *
+ * @param <T> der konkrete Protobuf-Message-Typ
+ */
 public class ProtobufSerializer<T extends Message> implements SimpleSerializer<T> {
+
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public byte[] serialize(T message) {
         return message.toByteArray();
     }
-
 }
