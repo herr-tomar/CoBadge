@@ -1,6 +1,46 @@
-[ERROR]   GenericHazelcastRouterTest.testMessageRoutedSuccessfully:72 InvalidUseOfMatchers 
-Invalid use of argument matchers!
-2 matchers expected, 1 recorded:
--> at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully(GenericHazelcastRouterTest.java:72)
+package osplus.pkptuna.hazelcast.pubsub;
 
-This exception may occur if matchers a
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.topic.ITopic;
+import osplus.apl.core.pubsub.api.SimplePublisherApi;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.hazelcast.protobuf.SimpleSerializer;
+
+import java.io.Serializable;
+import java.util.List;
+
+public class ReliableTopicPublisher<V extends Serializable> implements SimplePublisherApi {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ReliableTopicPublisher.class);
+
+    private final HazelcastInstance hazelcastInstance;
+    private final SimpleSerializer<V> serializer;
+
+    public ReliableTopicPublisher(HazelcastInstance hazelcastInstance,
+                                  SimpleSerializer<V> serializer) {
+        this.hazelcastInstance = hazelcastInstance;
+        this.serializer = serializer;
+    }
+
+    @Override
+    public void sendMessage(String topicName, String traceCode, Serializable payload) {
+        try {
+            V typedPayload = (V) payload;
+            byte[] bytes = serializer.serialize(typedPayload);
+            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
+            topic.publish(bytes);
+            LOGGER.info("Published to topic [" + topicName + "] for trace " + traceCode);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to publish to topic " + topicName, e);
+        }
+    }
+
+    @Override
+    public <V extends Serializable> void sendMessages(String topicName, String traceCode, List<V> payloads) {
+        for (V payload : payloads) {
+            sendMessage(topicName, traceCode, payload);
+        }
+    }
+
+}
