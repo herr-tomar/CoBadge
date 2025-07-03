@@ -1,13 +1,24 @@
 package osplus.pkptuna.hazelcast.config;
 
-public record FlowConfig (String name,
-                          String requestTopic,
-                          String responseTopic,
-                          String mapBase,
-                          int partitions) {
+/**
+ * Konfigurationsobjekt für einen einzelnen Nachrichtenfluss (Flow).
+ * Enthält alle Metadaten, die zum Routen und Verarbeiten eines Flows benötigt werden.
+ *
+ * @param name           Name des Flows (eindeutig)
+ * @param requestTopic   Hazelcast-Topic für eingehende Nachrichten
+ * @param responseTopic  Hazelcast-Topic für Antworten
+ * @param mapBase        Basisname der Partitionen-Map
+ * @param partitions     Anzahl der Map-Partitionen
+ */
+public record FlowConfig(
+        String name,
+        String requestTopic,
+        String responseTopic,
+        String mapBase,
+        int partitions) {
 }
 
-----
+-----
 
 package osplus.pkptuna.hazelcast.config;
 
@@ -19,6 +30,10 @@ import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Initialisiert alle {@link FlowHandler}-Instanzen anhand von {@link FlowConfig}.
+ * Registriert sie zur Laufzeit im {@link FlowHandlerRegistry}.
+ */
 @AplComponent
 public class FlowHandlerInitializer {
 
@@ -35,6 +50,12 @@ public class FlowHandlerInitializer {
         this.registry = registry;
     }
 
+    /**
+     * Durchläuft alle Flow-Konfigurationen und registriert die zugehörigen Handler
+     * im zentralen {@link FlowHandlerRegistry}. Wird beim Start automatisch ausgeführt.
+     *
+     * @throws IllegalArgumentException wenn ein konfigurierter Flow keinen Handler besitzt
+     */
     @PostConstruct
     public void registerHandlers() {
         for (FlowConfig config : configs) {
@@ -47,7 +68,7 @@ public class FlowHandlerInitializer {
     }
 }
 
-------
+---------
 
 package osplus.pkptuna.hazelcast.config;
 
@@ -56,6 +77,10 @@ import osplus.apl.core.api.AplComponent;
 import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
 import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
 
+/**
+ * Bootstrap-Klasse zur Initialisierung der Hazelcast-Komponenten beim Start.
+ * Ruft nach dem Start {@code initRouters()} und {@code startPolling()} auf.
+ */
 @AplComponent
 public class HazelcastFlowBootstrap {
 
@@ -68,6 +93,10 @@ public class HazelcastFlowBootstrap {
         this.consumer = consumer;
     }
 
+    /**
+     * Wird nach Initialisierung automatisch aufgerufen.
+     * Startet das Routing und Polling für alle konfigurierten Flows.
+     */
     @PostConstruct
     public void startFlowInfra() {
         router.initRouters();
@@ -75,7 +104,8 @@ public class HazelcastFlowBootstrap {
     }
 }
 
--------
+
+--------------
 
 package osplus.pkptuna.hazelcast.config;
 
@@ -84,8 +114,17 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
+/**
+ * Konfiguriert einen dedizierten TaskScheduler für periodisches Hazelcast-Polling.
+ */
 @Configuration
 public class HazelcastSchedulingConfig {
+
+    /**
+     * Erstellt einen ThreadPoolTaskScheduler mit zwei Threads und einem spezifischen Namenspräfix.
+     *
+     * @return konfigurierter {@link TaskScheduler}
+     */
     @Bean("flowTaskScheduler")
     public TaskScheduler flowTaskScheduler() {
         ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
@@ -95,3 +134,59 @@ public class HazelcastSchedulingConfig {
         return scheduler;
     }
 }
+
+
+-----------
+
+package osplus.pkptuna.hazelcast.config;
+
+import org.junit.jupiter.api.Test;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+class FlowHandlerInitializerTest {
+
+    /**
+     * Positiver Test: Handler wird korrekt registriert.
+     */
+    @Test
+    void testRegisterHandlers_successfulRegistration() {
+        FlowHandler handler = mock(FlowHandler.class);
+        FlowHandlerRegistry<String, FlowHandler> registry = spy(new FlowHandlerRegistry<>());
+
+        FlowConfig config = new FlowConfig("myFlow", "req", "res", "map-", 1);
+        Map<String, FlowHandler> handlerMap = Map.of("myFlow", handler);
+
+        FlowHandlerInitializer initializer = new FlowHandlerInitializer(
+                List.of(config), handlerMap, registry
+        );
+
+        assertDoesNotThrow(initializer::registerHandlers);
+        assertTrue(registry.contains("myFlow"));
+    }
+
+    /**
+     * Negativer Test: Kein Handler für Flow vorhanden → Exception.
+     */
+    @Test
+    void testRegisterHandlers_missingHandlerThrowsException() {
+        FlowConfig config = new FlowConfig("missingFlow", "req", "res", "map-", 1);
+        Map<String, FlowHandler> handlerMap = Map.of(); // leer
+
+        FlowHandlerRegistry<String, FlowHandler> registry = new FlowHandlerRegistry<>();
+        FlowHandlerInitializer initializer = new FlowHandlerInitializer(
+                List.of(config), handlerMap, registry
+        );
+
+        Exception ex = assertThrows(IllegalArgumentException.class, initializer::registerHandlers);
+        assertTrue(ex.getMessage().contains("No FlowHandler registered for flow: missingFlow"));
+    }
+}
+
+              
