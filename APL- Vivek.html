@@ -6,12 +6,52 @@ import osplus.apl.core.api.validation.NotNull;
 
 import java.util.List;
 
-@ConfigurationProperties(prefix="hazelcast")
-public record HazelcastFlowConfigs(@NotNull List<FlowConfig> flows) {
+/**
+ * Konfigurationsklasse für Hazelcast-Flows.
+ * Wird verwendet, um über application.yml oder application.properties eine Liste von Flow-Konfigurationen
+ * bereitzustellen, die in das Spring-Kontext geladen werden.
+ */
+@ConfigurationProperties(prefix = "hazelcast")
+public record HazelcastFlowConfigs(
 
-    public record FlowConfig(@NotBlank String name,
-                             @NotBlank String requestTopic,
-                             @NotBlank String responseTopic,
-                             @NotBlank String mapBase,
-                             int partitions) {}
+        /**
+         * Liste aller definierten Hazelcast-Flows.
+         * Jeder Flow wird über einen Namen, Topic-Namen und eine Map-Basis identifiziert.
+         */
+        @NotNull List<FlowConfig> flows) {
+
+    /**
+     * Interne Record-Klasse zur Definition eines einzelnen Hazelcast-Flows.
+     * Enthält Metadaten, die für die Einrichtung von Request-/Response-Handling
+     * über Topics und verteilte Maps erforderlich sind.
+     */
+    public record FlowConfig(
+
+            /**
+             * Eindeutiger Name des Flows. Wird u. a. zur Identifikation des zugehörigen Handlers verwendet.
+             */
+            @NotBlank String name,
+
+            /**
+             * Name des Hazelcast ReliableTopic, auf dem Anfragen empfangen werden.
+             */
+            @NotBlank String requestTopic,
+
+            /**
+             * Name des Hazelcast ReliableTopic, auf dem Antworten gesendet werden.
+             */
+            @NotBlank String responseTopic,
+
+            /**
+             * Basisname für die Partitionierten IMaps, in die Anfragen zur Verarbeitung verteilt werden.
+             * Z. B. „my-flow-map-“ → es entstehen „my-flow-map-0“, „my-flow-map-1“, etc.
+             */
+            @NotBlank String mapBase,
+
+            /**
+             * Anzahl der Partitionen (also Maps), auf die Requests verteilt werden.
+             * Wird für Load Balancing zwischen mehreren Konsumenten verwendet.
+             */
+            int partitions) {
+    }
 }
