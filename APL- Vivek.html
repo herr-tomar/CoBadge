@@ -1,107 +1,51 @@
-package osplus.pkptuna.hazelcast.protobuf;
+package osplus.pkptuna.hazelcast.flows;
 
-import java.io.IOException;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.hazelcast.core.HazelcastInstance;
 
-/**
- * Schnittstelle zur Deserialisierung eines Objekts vom Typ {@code T}
- * aus einem Byte-Array.
- *
- * @param <T> der Zieltyp nach der Deserialisierung
- */
-public interface SimpleDeserializer<T> {
-    /**
-     * Wandelt ein Byte-Array in ein Objekt des Typs {@code T} um.
-     *
-     * @param data das zu deserialisierende Byte-Array
-     * @return das rekonstruierte Objekt
-     * @throws IOException wenn die Deserialisierung fehlschlägt
-     */
-    T deserialize(byte[] data) throws IOException;
+public interface FlowHandler<Req, Res> {
+
+    Req deserializeRequest(byte[] data) throws InvalidProtocolBufferException;
+
+    String extractCorrelationId(Req request);
+
+    Res handleRequest(Req request);
+
+    Object wrapResponse(String correlationId, Res result);
+
+    void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Object response );
+
+    String getFlowName();
+
 }
-
 
     -----
 
-    package osplus.pkptuna.hazelcast.protobuf;
+package osplus.pkptuna.hazelcast.flows;
 
-import java.io.IOException;
+import osplus.apl.core.api.AplComponent;
 
-/**
- * Schnittstelle zur Serialisierung eines Objekts vom Typ {@code T}
- * in ein Byte-Array.
- *
- * @param <T> der Typ des zu serialisierenden Objekts
- */
-public interface SimpleSerializer<T> {
-    /**
-     * Serialisiert ein Objekt des Typs {@code T} in ein Byte-Array.
-     *
-     * @param message das zu serialisierende Objekt
-     * @return ein Byte-Array, das das Objekt darstellt
-     * @throws IOException wenn die Serialisierung fehlschlägt
-     */
-    byte[] serialize(T message) throws IOException;
-}
+import java.util.HashMap;
+import java.util.Map;
 
+@AplComponent
+public class FlowHandlerRegistry<T,R> {
 
-    -----
+    private final Map<String, FlowHandler<T, R>> handlerMap = new HashMap<>();
 
-    package osplus.pkptuna.hazelcast.protobuf.impl;
-
-import com.google.protobuf.Message;
-import com.google.protobuf.Parser;
-import osplus.pkptuna.hazelcast.protobuf.SimpleDeserializer;
-
-import java.io.IOException;
-
-/**
- * Implementierung von {@link SimpleDeserializer}, die ein Google Protobuf-Parser
- * verwendet, um ein Byte-Array in ein Protobuf-Message-Objekt zu deserialisieren.
- *
- * @param <T> der konkrete Protobuf-Typ, der geparst wird
- */
-public class ProtobufDeserializer<T extends Message> implements SimpleDeserializer<T> {
-
-    private final Parser<T> parser;
-
-    /**
-     * Konstruktor mit übergebenem {@link Parser} für den Protobuf-Typ.
-     *
-     * @param parser der Parser für den konkreten Protobuf-Typ
-     */
-    public ProtobufDeserializer(Parser<T> parser) {
-        this.parser = parser;
+    public void register(String flowName, FlowHandler<T, R> handler) {
+        handlerMap.put(flowName, handler);
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public T deserialize(byte[] bytes) throws IOException {
-        return parser.parseFrom(bytes);
+    public FlowHandler<T, R> getHandler(String flowName) {
+        FlowHandler<T, R> handler = handlerMap.get(flowName);
+        if (handler == null) {
+            throw new IllegalArgumentException("No FlowHandler registered for flow: " + flowName);
+        }
+        return handler;
     }
-}
 
-----
-
-package osplus.pkptuna.hazelcast.protobuf.impl;
-
-import com.google.protobuf.Message;
-import osplus.pkptuna.hazelcast.protobuf.SimpleSerializer;
-
-/**
- * Implementierung von {@link SimpleSerializer}, die ein Google Protobuf-Objekt
- * in ein Byte-Array serialisiert, basierend auf der internen toByteArray()-Methode.
- *
- * @param <T> der konkrete Protobuf-Message-Typ
- */
-public class ProtobufSerializer<T extends Message> implements SimpleSerializer<T> {
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public byte[] serialize(T message) {
-        return message.toByteArray();
+    public boolean contains(String flowName) {
+        return handlerMap.containsKey(flowName);
     }
 }
