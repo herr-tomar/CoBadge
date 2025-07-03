@@ -35,12 +35,19 @@ public class GenericHazelcastConsumer {
         this.handlerRegistry = handlerRegistry;
     }
 
+    /**
+     * Startet das Polling nach Anfragen aus Hazelcast-Maps im festen Zeitintervall.
+     */
     @PostConstruct
     public void startPolling() {
         taskScheduler.scheduleAtFixedRate(this::pollRequestMaps, Duration.ofMillis(200));
         LOGGER.info("Scheduled Hazelcast consumer polling with fixed rate.");
     }
 
+    /**
+     * Liest Anfragen aus den konfigurierten Maps, verarbeitet sie mit dem entsprechenden FlowHandler,
+     * sendet Antworten und entfernt die Einträge nach erfolgreicher Verarbeitung.
+     */
     public void pollRequestMaps() {
         for (FlowConfig config : flowConfigs) {
             String flowName = config.name();
@@ -76,5 +83,119 @@ public class GenericHazelcastConsumer {
                 }
             }
         }
+    }
+}
+-----
+
+                            package osplus.pkptuna.hazelcast.pubsub;
+
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.scheduling.TaskScheduler;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+
+import java.util.*;
+
+import static org.mockito.Mockito.*;
+
+public class GenericHazelcastConsumerTest {
+
+    private HazelcastInstance hazelcastInstance;
+    private TaskScheduler taskScheduler;
+    private FlowHandlerRegistry handlerRegistry;
+    private FlowHandler<Object, Object> mockHandler;
+    private IMap<String, Object> mockMap;
+
+    private GenericHazelcastConsumer consumer;
+
+    @BeforeEach
+    public void setup() {
+        hazelcastInstance = mock(HazelcastInstance.class);
+        taskScheduler = mock(TaskScheduler.class);
+        handlerRegistry = mock(FlowHandlerRegistry.class);
+        mockHandler = mock(FlowHandler.class);
+        mockMap = mock(IMap.class);
+    }
+
+    /**
+     * Positiver Test: Überprüft, ob ein gültiger Flow korrekt verarbeitet wird.
+     */
+    @Test
+    public void testPollRequestMaps_PositiveFlow() {
+        FlowConfig config = mock(FlowConfig.class);
+        when(config.name()).thenReturn("testFlow");
+        when(config.mapBase()).thenReturn("map");
+        when(config.partitions()).thenReturn(1);
+        when(config.responseTopic()).thenReturn("responseTopic");
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("corrId1", "request1");
+
+        when(hazelcastInstance.getMap("map0")).thenReturn(mockMap);
+        when(mockMap.entrySet()).thenReturn(data.entrySet());
+        when(handlerRegistry.getHandler("testFlow")).thenReturn(mockHandler);
+        when(mockHandler.handleRequest("request1")).thenReturn("response1");
+        when(mockHandler.wrapResponse("corrId1", "response1")).thenReturn("wrappedResponse");
+
+        consumer = new GenericHazelcastConsumer(hazelcastInstance, taskScheduler, List.of(config), handlerRegistry);
+        consumer.pollRequestMaps();
+
+        verify(mockHandler).sendResponse(hazelcastInstance, "responseTopic", "wrappedResponse");
+        verify(mockMap).remove("corrId1");
+    }
+
+    /**
+     * Negativer Test: Kein Handler für den Flow vorhanden.
+     */
+    @Test
+    public void testPollRequestMaps_NoHandlerFound() {
+        FlowConfig config = mock(FlowConfig.class);
+        when(config.name()).thenReturn("invalidFlow");
+        when(config.mapBase()).thenReturn("map");
+        when(config.partitions()).thenReturn(1);
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("id1", "request");
+
+        when(hazelcastInstance.getMap("map0")).thenReturn(mockMap);
+        when(mockMap.entrySet()).thenReturn(data.entrySet());
+        when(handlerRegistry.getHandler("invalidFlow")).thenReturn(null);
+
+        consumer = new GenericHazelcastConsumer(hazelcastInstance, taskScheduler, List.of(config), handlerRegistry);
+        consumer.pollRequestMaps();
+
+        verify(mockHandler, never()).handleRequest(any());
+        verify(mockMap, never()).remove(any());
+    }
+
+    /**
+     * Negativer Test: Exception beim Verarbeiten der Anfrage.
+     */
+    @Test
+    public void testPollRequestMaps_HandlerThrowsException() {
+        FlowConfig config = mock(FlowConfig.class);
+        when(config.name()).thenReturn("errorFlow");
+        when(config.mapBase()).thenReturn("map");
+        when(config.partitions()).thenReturn(1);
+        when(config.responseTopic()).thenReturn("responseTopic");
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("id123", "faultyRequest");
+
+        when(hazelcastInstance.getMap("map0")).thenReturn(mockMap);
+        when(mockMap.entrySet()).thenReturn(data.entrySet());
+        when(handlerRegistry.getHandler("errorFlow")).thenReturn(mockHandler);
+        when(mockHandler.handleRequest("faultyRequest")).thenThrow(new RuntimeException("Processing error"));
+
+        consumer = new GenericHazelcastConsumer(hazelcastInstance, taskScheduler, List.of(config), handlerRegistry);
+        consumer.pollRequestMaps();
+
+        verify(mockHandler, times(1)).handleRequest("faultyRequest");
+        verify(mockMap, never()).remove("id123");
     }
 }
