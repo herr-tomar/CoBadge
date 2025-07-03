@@ -230,7 +230,7 @@ public class DisputeUiModule {
                 DisputeDetailResponseWrapperDto.parser(),
                 DisputeDetailResponseWrapperDto::getCorrelationId,
                 DisputeDetailResponseWrapperDto::getResponse,
-                DisputeDetailResponseWrapperDto::<DisputeDetailResponseWrapperDto>complete,
+                disputeDetailResponseTracker::complete,
                 LOGGER
         );
 
@@ -240,9 +240,110 @@ public class DisputeUiModule {
                 DisputeLookupResponseWrapperDto.parser(),
                 DisputeLookupResponseWrapperDto::getCorrelationId,
                 DisputeLookupResponseWrapperDto::getResponse,
-                GenericResponseTracker::<DisputeLookupResponseDto>complete,
+                disputeLookupResponseTracker::complete,
                 LOGGER
         );
     }
 
+}
+-----
+
+package osplus.pkptuna.util;
+
+import osplus.apl.core.api.AplComponent;
+
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Zentraler, generischer Tracker für mehrere Antworttypen basierend auf Korrelations-ID und Typ.
+ */
+@AplComponent
+public class GenericResponseTracker<T> {
+
+    private final Map<String, CompletableFuture<?>> pending = new ConcurrentHashMap<>();
+
+    /**
+     * Registriert eine erwartete Antwort mit Korrelations-ID.
+     */
+    public <T> void register(String correlationId) {
+        pending.put(correlationId, new CompletableFuture<T>());
+    }
+
+    /**
+     * Markiert eine Antwort als abgeschlossen.
+     */
+    public <T> void complete(String correlationId, T response) {
+        @SuppressWarnings("unchecked")
+        CompletableFuture<T> future = (CompletableFuture<T>) pending.remove(correlationId);
+        if (future != null) {
+            future.complete(response);
+        }
+    }
+
+    /**
+     * Gibt das Future-Objekt zurück, um auf die Antwort zu warten.
+     */
+    @SuppressWarnings("unchecked")
+    public <T> CompletableFuture<T> await(String correlationId) {
+        return (CompletableFuture<T>) pending.get(correlationId);
+    }
+}
+
+--------
+
+package osplus.pkptuna.util;
+
+import com.google.protobuf.Message;
+import com.google.protobuf.Parser;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.topic.ITopic;
+import osplus.fi.core.logging.api.Logger;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
+
+/**
+ * Dienstprogrammklasse zur Registrierung generischer Hazelcast-Listener,
+ * die Protobuf-Nachrichten empfangen und in Wrapper- und Antwortobjekte extrahieren.
+ */
+public class HazelcastListenerUtils {
+
+    /**
+     * Registriert einen generischen MessageListener auf einem Hazelcast Topic für Protobuf-Nachrichten.
+     *
+     * @param hazelcastInstance        Hazelcast-Instanz
+     * @param topicName                Name des Topics
+     * @param parser                   Protobuf-Parser zum Parsen des Wrappers
+     * @param correlationIdExtractor   Funktion zum Extrahieren der Korrelations-ID aus dem Wrapper
+     * @param responseExtractor        Funktion zum Extrahieren der Antwort aus dem Wrapper
+     * @param responseConsumer         Logik zur Weitergabe der extrahierten Antwort
+     * @param logger                   Logger-Instanz
+     * @param <W>                      Protobuf Wrapper-Typ
+     * @param <R>                      Antwort-Typ
+     */
+    public static <W extends Message, R> void registerGenericResponseListener(
+            HazelcastInstance hazelcastInstance,
+            String topicName,
+            Parser<W> parser,
+            Function<W, String> correlationIdExtractor,
+            Function<W, R> responseExtractor,
+            BiConsumer<String, R> responseConsumer,
+            Logger logger) {
+
+        ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
+        topic.addMessageListener(message -> {
+            try {
+                byte[] messageBytes = message.getMessageObject();
+                W wrapper = parser.parseFrom(messageBytes);
+                String correlationId = correlationIdExtractor.apply(wrapper);
+                R response = responseExtractor.apply(wrapper);
+                responseConsumer.accept(correlationId, response);
+            } catch (Exception e) {
+                logger.error("Fehler beim Verarbeiten der Antwort von Topic '{}'", topicName, e);
+            }
+        });
+
+        logger.info("Antwort-Listener auf Topic '{}' registriert.", topicName);
+    }
 }
