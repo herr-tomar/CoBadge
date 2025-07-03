@@ -6,11 +6,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import osplus.pkptuna.dispute.model.DisputeDetailRequestDto;
-import osplus.pkptuna.dispute.model.DisputeDetailRequestMetadataDto;
-import osplus.pkptuna.dispute.model.DisputeDetailRequestWrapperDto;
-import osplus.pkptuna.dispute.model.DisputeDetailResponseWrapperDto;
-import osplus.pkptuna.dispute.model.DisputeResponseDto;
+import osplus.pkptuna.dispute.model.*;
+
 import osplus.pkptuna.dispute.service.DisputeDetailService;
 
 import java.util.List;
@@ -19,6 +16,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
+/**
+ * Testklasse für {@link DisputeDetailFlowHandler}.
+ * Überprüft das Extrahieren der Korrelation-ID, den Aufruf des Service und das Verpacken der Antwort.
+ */
 @ExtendWith(MockitoExtension.class)
 class DisputeDetailFlowHandlerTest {
 
@@ -35,6 +36,9 @@ class DisputeDetailFlowHandlerTest {
         handler = new DisputeDetailFlowHandler(disputeDetailService);
     }
 
+    /**
+     * Testet die Extraktion der Korrelation-ID aus dem Request.
+     */
     @Test
     void shouldExtractCorrelationId() {
         DisputeDetailRequestWrapperDto request = DisputeDetailRequestWrapperDto.newBuilder()
@@ -46,6 +50,9 @@ class DisputeDetailFlowHandlerTest {
         assertEquals("12345", result);
     }
 
+    /**
+     * Testet, ob der Handler den Service mit korrekten Parametern aufruft.
+     */
     @Test
     void shouldHandleRequestAndCallService() {
         DisputeDetailRequestDto payload = DisputeDetailRequestDto.newBuilder()
@@ -67,6 +74,9 @@ class DisputeDetailFlowHandlerTest {
         assertEquals(expectedResponse, response);
     }
 
+    /**
+     * Testet, ob das Response-Objekt korrekt verpackt wird.
+     */
     @Test
     void shouldWrapResponseCorrectly() {
         DisputeResponseDto response = DisputeResponseDto.newBuilder().build();
@@ -77,8 +87,7 @@ class DisputeDetailFlowHandlerTest {
     }
 }
 
--------------------
-
+-----------------
 
 package osplus.pkptuna.flows.handlers;
 
@@ -88,16 +97,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseWrapperDto;
+import osplus.pkptuna.dispute.lookup.model.*;
 import osplus.pkptuna.dispute.service.DisputeService;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
+/**
+ * Testklasse für {@link DisputeLookupFlowHandler}.
+ * Validiert das Extrahieren der Korrelation-ID, den Lookup-Aufruf sowie das Verpacken der Antwort.
+ */
 @ExtendWith(MockitoExtension.class)
 class DisputeLookupFlowHandlerTest {
 
@@ -114,6 +124,9 @@ class DisputeLookupFlowHandlerTest {
         handler = new DisputeLookupFlowHandler(disputeService);
     }
 
+    /**
+     * Testet die Extraktion der Korrelation-ID aus dem Wrapper.
+     */
     @Test
     void shouldExtractCorrelationId() {
         DisputeLookupRequestWrapperDto request = DisputeLookupRequestWrapperDto.newBuilder()
@@ -125,6 +138,9 @@ class DisputeLookupFlowHandlerTest {
         assertEquals("lookup-001", result);
     }
 
+    /**
+     * Testet, ob der Lookup-Service korrekt aufgerufen wird.
+     */
     @Test
     void shouldCallLookupService() {
         DisputeLookupRequestDto dto = DisputeLookupRequestDto.newBuilder()
@@ -144,6 +160,9 @@ class DisputeLookupFlowHandlerTest {
         assertEquals(expected, actual);
     }
 
+    /**
+     * Testet das korrekte Verpacken des Lookup-Antwortobjekts.
+     */
     @Test
     void shouldWrapResponseCorrectly() {
         DisputeLookupResponseDto response = DisputeLookupResponseDto.newBuilder().build();
