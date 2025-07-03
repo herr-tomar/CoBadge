@@ -1,192 +1,149 @@
-package osplus.pkptuna.hazelcast.config;
+package osplus.pkptuna.flows.handlers;
 
-/**
- * Konfigurationsobjekt für einen einzelnen Nachrichtenfluss (Flow).
- * Enthält alle Metadaten, die zum Routen und Verarbeiten eines Flows benötigt werden.
- *
- * @param name           Name des Flows (eindeutig)
- * @param requestTopic   Hazelcast-Topic für eingehende Nachrichten
- * @param responseTopic  Hazelcast-Topic für Antworten
- * @param mapBase        Basisname der Partitionen-Map
- * @param partitions     Anzahl der Map-Partitionen
- */
-public record FlowConfig(
-        String name,
-        String requestTopic,
-        String responseTopic,
-        String mapBase,
-        int partitions) {
-}
-
------
-
-package osplus.pkptuna.hazelcast.config;
-
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.hazelcast.core.HazelcastInstance;
 import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import osplus.apl.core.api.AplComponent;
+import osplus.pkptuna.dispute.model.DisputeDetailRequestDto;
+import osplus.pkptuna.dispute.model.DisputeDetailRequestMetadataDto;
+import osplus.pkptuna.dispute.model.DisputeDetailRequestWrapperDto;
+import osplus.pkptuna.dispute.model.DisputeDetailResponseWrapperDto;
+import osplus.pkptuna.dispute.model.DisputeResponseDto;
+import osplus.pkptuna.dispute.service.DisputeDetailService;
 import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufSerializer;
+import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
 
 import java.util.List;
-import java.util.Map;
 
-/**
- * Initialisiert alle {@link FlowHandler}-Instanzen anhand von {@link FlowConfig}.
- * Registriert sie zur Laufzeit im {@link FlowHandlerRegistry}.
- */
-@AplComponent
-public class FlowHandlerInitializer {
+@AplComponent("dispute-detail")
+public class DisputeDetailFlowHandler implements FlowHandler<DisputeDetailRequestWrapperDto, DisputeResponseDto> {
 
-    private final List<FlowConfig> configs;
-    private final Map<String, FlowHandler> flowHandlers;
-    private final FlowHandlerRegistry<String, FlowHandler> registry;
+    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeDetailFlowHandler.class);
 
-    public FlowHandlerInitializer(
-            List<FlowConfig> configs,
-            Map<String, FlowHandler> flowHandlers,
-            FlowHandlerRegistry<String, FlowHandler> registry) {
-        this.configs = configs;
-        this.flowHandlers = flowHandlers;
-        this.registry = registry;
+    public static final String DISPUTE_DETAIL = "dispute-detail";
+    private final DisputeDetailService disputeDetailService;
+
+    public DisputeDetailFlowHandler(DisputeDetailService disputeService) {
+        this.disputeDetailService = disputeService;
     }
 
-    /**
-     * Durchläuft alle Flow-Konfigurationen und registriert die zugehörigen Handler
-     * im zentralen {@link FlowHandlerRegistry}. Wird beim Start automatisch ausgeführt.
-     *
-     * @throws IllegalArgumentException wenn ein konfigurierter Flow keinen Handler besitzt
-     */
+    @Override
+    public DisputeDetailRequestWrapperDto deserializeRequest(byte[] data) throws InvalidProtocolBufferException {
+        return DisputeDetailRequestWrapperDto.parseFrom(data);
+    }
+
+    @Override
+    public String extractCorrelationId(DisputeDetailRequestWrapperDto request) {
+        return request.getCorrelationId();
+    }
+
+    @Override
+    public DisputeResponseDto handleRequest(DisputeDetailRequestWrapperDto request) {
+        DisputeDetailRequestDto disputeLookupRequestDto = request.getPayload();
+        DisputeDetailRequestMetadataDto disputeDetailRequestMetadataDto = disputeLookupRequestDto.getMetadata();
+        List<String> embeds = disputeDetailRequestMetadataDto.getEmbedList();
+        return disputeDetailService.getDisputeFolderDetails(disputeLookupRequestDto.getIssuerId(), disputeLookupRequestDto.getDisputeFolderReference(), embeds);
+    }
+
+    @Override
+    public Object wrapResponse(String correlationId, DisputeResponseDto result) {
+        return DisputeDetailResponseWrapperDto.newBuilder()
+                .setCorrelationId(correlationId)
+                .setResponse(result)
+                .build();
+    }
+
+    @Override
+    public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Object response) {
+        DisputeDetailResponseWrapperDto dto = (DisputeDetailResponseWrapperDto) response;
+        new ReliableTopicPublisher<>(hazelcastInstance, new ProtobufSerializer<>()).sendMessage(topicName, "DISPUTE_ROUTER", dto);
+    }
+
+    @Override
+    public String getFlowName(){
+        return DISPUTE_DETAIL;
+    }
+
     @PostConstruct
-    public void registerHandlers() {
-        for (FlowConfig config : configs) {
-            FlowHandler handler = flowHandlers.get(config.name());
-            if (handler == null) {
-                throw new IllegalArgumentException("No FlowHandler registered for flow: " + config.name());
-            }
-            registry.register(config.name(), handler);
-        }
+    public void init() {
+        LOGGER.info("Loaded DisputeDetailFlowHandler code ...........");
     }
+
 }
 
----------
+                ---------------------
 
-package osplus.pkptuna.hazelcast.config;
 
+                package osplus.pkptuna.flows.handlers;
+
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.hazelcast.core.HazelcastInstance;
 import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import osplus.apl.core.api.AplComponent;
-import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
-import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
-
-/**
- * Bootstrap-Klasse zur Initialisierung der Hazelcast-Komponenten beim Start.
- * Ruft nach dem Start {@code initRouters()} und {@code startPolling()} auf.
- */
-@AplComponent
-public class HazelcastFlowBootstrap {
-
-    private final GenericHazelcastRouter router;
-    private final GenericHazelcastConsumer consumer;
-
-    public HazelcastFlowBootstrap(GenericHazelcastRouter router,
-                                  GenericHazelcastConsumer consumer) {
-        this.router = router;
-        this.consumer = consumer;
-    }
-
-    /**
-     * Wird nach Initialisierung automatisch aufgerufen.
-     * Startet das Routing und Polling für alle konfigurierten Flows.
-     */
-    @PostConstruct
-    public void startFlowInfra() {
-        router.initRouters();
-        consumer.startPolling();
-    }
-}
-
-
---------------
-
-package osplus.pkptuna.hazelcast.config;
-
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.scheduling.TaskScheduler;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
-
-/**
- * Konfiguriert einen dedizierten TaskScheduler für periodisches Hazelcast-Polling.
- */
-@Configuration
-public class HazelcastSchedulingConfig {
-
-    /**
-     * Erstellt einen ThreadPoolTaskScheduler mit zwei Threads und einem spezifischen Namenspräfix.
-     *
-     * @return konfigurierter {@link TaskScheduler}
-     */
-    @Bean("flowTaskScheduler")
-    public TaskScheduler flowTaskScheduler() {
-        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
-        scheduler.setPoolSize(2);
-        scheduler.setThreadNamePrefix("hazelcast-poll-");
-        scheduler.initialize();
-        return scheduler;
-    }
-}
-
-
------------
-
-package osplus.pkptuna.hazelcast.config;
-
-import org.junit.jupiter.api.Test;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseWrapperDto;
+import osplus.pkptuna.dispute.service.DisputeService;
 import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufSerializer;
+import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
 
-import java.util.List;
-import java.util.Map;
+@AplComponent("dispute-lookup")
+public class DisputeLookupFlowHandler implements FlowHandler<DisputeLookupRequestWrapperDto, DisputeLookupResponseDto> {
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeLookupFlowHandler.class);
 
-class FlowHandlerInitializerTest {
+    public static final String DISPUTE_LOOKUP = "dispute-lookup";
+    private final DisputeService disputeService;
 
-    /**
-     * Positiver Test: Handler wird korrekt registriert.
-     */
-    @Test
-    void testRegisterHandlers_successfulRegistration() {
-        FlowHandler handler = mock(FlowHandler.class);
-        FlowHandlerRegistry<String, FlowHandler> registry = spy(new FlowHandlerRegistry<>());
-
-        FlowConfig config = new FlowConfig("myFlow", "req", "res", "map-", 1);
-        Map<String, FlowHandler> handlerMap = Map.of("myFlow", handler);
-
-        FlowHandlerInitializer initializer = new FlowHandlerInitializer(
-                List.of(config), handlerMap, registry
-        );
-
-        assertDoesNotThrow(initializer::registerHandlers);
-        assertTrue(registry.contains("myFlow"));
+    public DisputeLookupFlowHandler(DisputeService disputeService) {
+        this.disputeService = disputeService;
     }
 
-    /**
-     * Negativer Test: Kein Handler für Flow vorhanden → Exception.
-     */
-    @Test
-    void testRegisterHandlers_missingHandlerThrowsException() {
-        FlowConfig config = new FlowConfig("missingFlow", "req", "res", "map-", 1);
-        Map<String, FlowHandler> handlerMap = Map.of(); // leer
-
-        FlowHandlerRegistry<String, FlowHandler> registry = new FlowHandlerRegistry<>();
-        FlowHandlerInitializer initializer = new FlowHandlerInitializer(
-                List.of(config), handlerMap, registry
-        );
-
-        Exception ex = assertThrows(IllegalArgumentException.class, initializer::registerHandlers);
-        assertTrue(ex.getMessage().contains("No FlowHandler registered for flow: missingFlow"));
+    @Override
+    public DisputeLookupRequestWrapperDto deserializeRequest(byte[] data) throws InvalidProtocolBufferException {
+        return DisputeLookupRequestWrapperDto.parseFrom(data);
     }
+
+    @Override
+    public String extractCorrelationId(DisputeLookupRequestWrapperDto request) {
+        return request.getCorrelationId();
+    }
+
+    @Override
+    public DisputeLookupResponseDto handleRequest(DisputeLookupRequestWrapperDto request) {
+        DisputeLookupRequestDto disputeLookupRequestDto = request.getPayload();
+        return disputeService.lookupDisputeFolder(disputeLookupRequestDto.getIssuerId(), disputeLookupRequestDto.getCardReference());
+    }
+
+    @Override
+    public Object wrapResponse(String correlationId, DisputeLookupResponseDto result) {
+        return DisputeLookupResponseWrapperDto.newBuilder()
+                .setCorrelationId(correlationId)
+                .setResponse(result)
+                .build();
+    }
+
+    @Override
+    public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Object response) {
+        DisputeLookupResponseWrapperDto dto = (DisputeLookupResponseWrapperDto) response;
+        new ReliableTopicPublisher<>(hazelcastInstance, new ProtobufSerializer<>()).sendMessage(topicName, "DISPUTE_ROUTER", dto);
+    }
+
+    @Override
+    public String getFlowName(){
+        return DISPUTE_LOOKUP;
+    }
+
+    @PostConstruct
+    public void init() {
+        LOGGER.info("Loaded DisputeLookupFlowHandler code ...........");
+    }
+
 }
-
-              
