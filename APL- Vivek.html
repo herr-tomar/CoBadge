@@ -36,3 +36,66 @@ public class CentralResponseTracker {
         return (CompletableFuture<T>) pending.get(correlationId);
     }
 }
+
+---------
+
+            import com.google.protobuf.Message;
+import com.google.protobuf.Parser;
+
+import java.util.function.BiConsumer;
+import java.util.function.Function;
+
+public class HazelcastListenerUtils {
+
+    public static <W extends Message, R> void registerGenericResponseListener(
+            HazelcastInstance hazelcastInstance,
+            String topicName,
+            Parser<W> parser,
+            Function<W, String> correlationIdExtractor,
+            Function<W, R> responseExtractor,
+            BiConsumer<String, R> responseConsumer,
+            Logger logger) {
+
+        hazelcastInstance.getReliableTopic(topicName).addMessageListener(message -> {
+            try {
+                byte[] messageBytes = message.getMessageObject();
+                W wrapper = parser.parseFrom(messageBytes);
+                String correlationId = correlationIdExtractor.apply(wrapper);
+                R response = responseExtractor.apply(wrapper);
+                responseConsumer.accept(correlationId, response);
+            } catch (Exception e) {
+                logger.error("Fehler beim Verarbeiten der Antwort von Topic '{}'", topicName, e);
+            }
+        });
+
+        logger.info("Antwort-Listener auf Topic '{}' registriert.", topicName);
+    }
+}
+
+
+------------
+
+@PostConstruct
+public void initResponseListeners() {
+
+    HazelcastListenerUtils.registerGenericResponseListener(
+        hazelcastInstance,
+        "DisputeDetailResponseReliableTopic",
+        DisputeDetailResponseWrapperDto.parser(),
+        DisputeDetailResponseWrapperDto::getCorrelationId,
+        DisputeDetailResponseWrapperDto::getResponse,
+        DisputeDetailResponseTracker::complete,
+        LOGGER
+    );
+
+    HazelcastListenerUtils.registerGenericResponseListener(
+        hazelcastInstance,
+        "DisputeLookupResponseReliableTopic",
+        DisputeLookupResponseWrapperDto.parser(),
+        DisputeLookupResponseWrapperDto::getCorrelationId,
+        DisputeLookupResponseWrapperDto::getResponse,
+        DisputeLookupResponseTracker::complete,
+        LOGGER
+    );
+}
+
