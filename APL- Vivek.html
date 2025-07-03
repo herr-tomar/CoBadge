@@ -1,187 +1,97 @@
-package osplus.pkptuna.hazelcast.flows;
+package osplus.pkptuna.hazelcast.config;
 
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.hazelcast.core.HazelcastInstance;
-
-/**
- * Diese Schnittstelle definiert den vollständigen Verarbeitungszyklus eines
- * Nachrichtenflusses (Flow) in einem verteilten System mit Hazelcast.
- *
- * @param <Req> der Typ der eingehenden Anfrage (Deserialisiert)
- * @param <Res> der Typ der Antwort
- */
-public interface FlowHandler<Req, Res> {
-
-    /**
-     * Deserialisiert die empfangenen Daten in ein Anfrageobjekt.
-     *
-     * @param data das empfangene Byte-Array
-     * @return deserialisierte Anfrage
-     * @throws InvalidProtocolBufferException bei Deserialisierungsfehlern
-     */
-    Req deserializeRequest(byte[] data) throws InvalidProtocolBufferException;
-
-    /**
-     * Extrahiert die eindeutige Korrelations-ID aus einer Anfrage.
-     *
-     * @param request das Anfrageobjekt
-     * @return Korrelations-ID als String
-     */
-    String extractCorrelationId(Req request);
-
-    /**
-     * Führt die fachliche Verarbeitung einer Anfrage durch.
-     *
-     * @param request die eingehende Anfrage
-     * @return Ergebnis der Verarbeitung
-     */
-    Res handleRequest(Req request);
-
-    /**
-     * Verpackt das Antwortobjekt gemeinsam mit der Korrelations-ID.
-     *
-     * @param correlationId eindeutige ID der Anfrage
-     * @param result        das Antwortobjekt
-     * @return eingepackte Antwort (z. B. DTO oder MessageEnvelope)
-     */
-    Object wrapResponse(String correlationId, Res result);
-
-    /**
-     * Sendet die verarbeitete Antwort über Hazelcast Reliable Topic.
-     *
-     * @param hazelcastInstance Hazelcast-Instanz
-     * @param topicName         Zieltopic
-     * @param response          die gesendete Antwort
-     */
-    void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Object response);
-
-    /**
-     * Gibt den Namen des Flows zurück (z. B. für Registrierung oder Logging).
-     *
-     * @return Flow-Name
-     */
-    String getFlowName();
+public record FlowConfig (String name,
+                          String requestTopic,
+                          String responseTopic,
+                          String mapBase,
+                          int partitions) {
 }
-
-
--------
-
-
-package osplus.pkptuna.hazelcast.flows;
-
-import osplus.apl.core.api.AplComponent;
-
-import java.util.HashMap;
-import java.util.Map;
-
-/**
- * Registry zur Verwaltung von {@link FlowHandler}-Instanzen nach Flow-Name.
- * Ermöglicht das Registrieren und Abrufen typisierter Handler zur Laufzeit.
- *
- * @param <T> Typ der Anfrage
- * @param <R> Typ der Antwort
- */
-@AplComponent
-public class FlowHandlerRegistry<T, R> {
-
-    private final Map<String, FlowHandler<T, R>> handlerMap = new HashMap<>();
-
-    /**
-     * Registriert einen {@link FlowHandler} unter einem eindeutigen Namen.
-     *
-     * @param flowName eindeutiger Name des Flows
-     * @param handler  die zugehörige Handler-Instanz
-     */
-    public void register(String flowName, FlowHandler<T, R> handler) {
-        handlerMap.put(flowName, handler);
-    }
-
-    /**
-     * Gibt den registrierten Handler für den angegebenen Flow zurück.
-     *
-     * @param flowName der gesuchte Flow-Name
-     * @return zugehöriger Handler
-     * @throws IllegalArgumentException wenn kein Handler vorhanden ist
-     */
-    public FlowHandler<T, R> getHandler(String flowName) {
-        FlowHandler<T, R> handler = handlerMap.get(flowName);
-        if (handler == null) {
-            throw new IllegalArgumentException("No FlowHandler registered for flow: " + flowName);
-        }
-        return handler;
-    }
-
-    /**
-     * Prüft, ob ein Handler für den gegebenen Flow registriert ist.
-     *
-     * @param flowName Flow-Name
-     * @return {@code true}, wenn ein Handler vorhanden ist
-     */
-    public boolean contains(String flowName) {
-        return handlerMap.containsKey(flowName);
-    }
-}
-
 
 ----
 
+package osplus.pkptuna.hazelcast.config;
 
-package osplus.pkptuna.hazelcast.flows;
+import jakarta.annotation.PostConstruct;
+import osplus.apl.core.api.AplComponent;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import java.util.List;
+import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+@AplComponent
+public class FlowHandlerInitializer {
 
-class FlowHandlerRegistryTest {
+    private final List<FlowConfig> configs;
+    private final Map<String, FlowHandler> flowHandlers;
+    private final FlowHandlerRegistry<String, FlowHandler> registry;
 
-    private FlowHandlerRegistry<String, String> registry;
-    private FlowHandler<String, String> mockHandler;
-
-    @BeforeEach
-    void setUp() {
-        registry = new FlowHandlerRegistry<>();
-        mockHandler = mock(FlowHandler.class);
+    public FlowHandlerInitializer(
+            List<FlowConfig> configs,
+            Map<String, FlowHandler> flowHandlers,
+            FlowHandlerRegistry<String, FlowHandler> registry) {
+        this.configs = configs;
+        this.flowHandlers = flowHandlers;
+        this.registry = registry;
     }
 
-    /**
-     * Positiver Test: Handler wird registriert und erfolgreich zurückgegeben.
-     */
-    @Test
-    void testRegisterAndRetrieveHandler() {
-        registry.register("myFlow", mockHandler);
-        FlowHandler<String, String> result = registry.getHandler("myFlow");
+    @PostConstruct
+    public void registerHandlers() {
+        for (FlowConfig config : configs) {
+            FlowHandler handler = flowHandlers.get(config.name());
+            if (handler == null) {
+                throw new IllegalArgumentException("No FlowHandler registered for flow: " + config.name());
+            }
+            registry.register(config.name(), handler);
+        }
+    }
+}
 
-        assertNotNull(result);
-        assertEquals(mockHandler, result);
+------
+
+package osplus.pkptuna.hazelcast.config;
+
+import jakarta.annotation.PostConstruct;
+import osplus.apl.core.api.AplComponent;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
+
+@AplComponent
+public class HazelcastFlowBootstrap {
+
+    private final GenericHazelcastRouter router;
+    private final GenericHazelcastConsumer consumer;
+
+    public HazelcastFlowBootstrap(GenericHazelcastRouter router,
+                                  GenericHazelcastConsumer consumer) {
+        this.router = router;
+        this.consumer = consumer;
     }
 
-    /**
-     * Positiver Test: contains() gibt true zurück für registrierten Handler.
-     */
-    @Test
-    void testContainsReturnsTrue() {
-        registry.register("myFlow", mockHandler);
-        assertTrue(registry.contains("myFlow"));
+    @PostConstruct
+    public void startFlowInfra() {
+        router.initRouters();
+        consumer.startPolling();
     }
+}
 
-    /**
-     * Negativer Test: contains() gibt false zurück für nicht registrierten Flow.
-     */
-    @Test
-    void testContainsReturnsFalse() {
-        assertFalse(registry.contains("unknownFlow"));
-    }
+-------
 
-    /**
-     * Negativer Test: Zugriff auf nicht registrierten Handler wirft Exception.
-     */
-    @Test
-    void testGetHandlerThrowsWhenNotFound() {
-        Exception exception = assertThrows(IllegalArgumentException.class, () ->
-                registry.getHandler("unregisteredFlow")
-        );
-        assertTrue(exception.getMessage().contains("No FlowHandler registered for flow"));
+package osplus.pkptuna.hazelcast.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+
+@Configuration
+public class HazelcastSchedulingConfig {
+    @Bean("flowTaskScheduler")
+    public TaskScheduler flowTaskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(2);
+        scheduler.setThreadNamePrefix("hazelcast-poll-");
+        scheduler.initialize();
+        return scheduler;
     }
 }
