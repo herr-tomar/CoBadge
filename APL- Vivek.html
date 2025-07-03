@@ -1,15 +1,9 @@
-[INFO] Running osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest
-OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
-OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
-[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.205 s -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest
-[ERROR] Tests run: 3, Failures: 0, Errors: 2, Skipped: 0, Time elapsed: 1.236 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest
-[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testDuplicateMessageNotProcessed -- Time elapsed: 1.168 s <<< ERROR!
+ERROR] Tests run: 3, Failures: 0, Errors: 2, Skipped: 0, Time elapsed: 1.247 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest
+[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testDuplicateMessageNotProcessed -- Time elapsed: 1.173 s <<< ERROR!
 org.mockito.exceptions.misusing.InvalidUseOfMatchersException: 
-
 Invalid use of argument matchers!
 2 matchers expected, 1 recorded:
 -> at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testDuplicateMessageNotProcessed(GenericHazelcastRouterTest.java:99)
-
 This exception may occur if matchers are combined with raw values:
     //incorrect:
     someMethod(any(), "raw String");
@@ -17,27 +11,11 @@ When using matchers, all arguments have to be provided by matchers.
 For example:
     //correct:
     someMethod(any(), eq("String by matcher"));
-
 For more info see javadoc for Matchers class.
-
 	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testDuplicateMessageNotProcessed(GenericHazelcastRouterTest.java:99)
 	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
 	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
 	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-
-[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully -- Time elapsed: 0.006 s <<< ERROR!
+[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully -- Time elapsed: 0.008 s <<< ERROR!
 org.mockito.exceptions.misusing.InvalidUseOfMatchersException: 
-
 Invalid use of argument matchers!
-2 matchers expected, 1 recorded:
--> at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully(GenericHazelcastRouterTest.java:72)
-
-This exception may occur if matchers are combined with raw values:
-    //incorrect:
-    someMethod(any(), "raw String");
-When using matchers, all arguments have to be provided by matchers.
-For example:
-    //correct:
-    someMethod(any(), eq("String by matcher"));
-
-For more info see javadoc for Matchers class.
