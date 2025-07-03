@@ -1,39 +1,38 @@
 package osplus.pkptuna.util;
 
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.Map;
+import java.util.concurrent.*;
 
 /**
- * Generischer Tracker für asynchrone Antworten basierend auf Korrelations-IDs.
- *
- * @param <T> Typ des Antwortobjekts (z. B. DTO)
+ * Zentraler, generischer Tracker für mehrere Antworttypen basierend auf Korrelations-ID und Typ.
  */
-public class GenericResponseTracker<T> {
+public class CentralResponseTracker {
 
-    private final ConcurrentMap<String, CompletableFuture<T>> pending = new ConcurrentHashMap<>();
+    private final Map<String, CompletableFuture<?>> pending = new ConcurrentHashMap<>();
 
     /**
-     * Registriert eine neue erwartete Antwort mit gegebener Korrelations-ID.
+     * Registriert eine erwartete Antwort mit Korrelations-ID.
      */
-    public void register(String correlationId) {
-        pending.put(correlationId, new CompletableFuture<>());
+    public <T> void register(String correlationId) {
+        pending.put(correlationId, new CompletableFuture<T>());
     }
 
     /**
-     * Markiert eine Antwort als vollständig und entfernt sie aus der Warteschlange.
+     * Markiert eine Antwort als abgeschlossen.
      */
-    public void complete(String correlationId, T response) {
-        CompletableFuture<T> future = pending.remove(correlationId);
+    public <T> void complete(String correlationId, T response) {
+        @SuppressWarnings("unchecked")
+        CompletableFuture<T> future = (CompletableFuture<T>) pending.remove(correlationId);
         if (future != null) {
             future.complete(response);
         }
     }
 
     /**
-     * Gibt die `CompletableFuture` für eine bestimmte Korrelations-ID zurück.
+     * Gibt das Future-Objekt zurück, um auf die Antwort zu warten.
      */
-    public CompletableFuture<T> await(String correlationId) {
-        return pending.get(correlationId);
+    @SuppressWarnings("unchecked")
+    public <T> CompletableFuture<T> await(String correlationId) {
+        return (CompletableFuture<T>) pending.get(correlationId);
     }
 }
