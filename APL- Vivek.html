@@ -1,162 +1,53 @@
-package osplus.pkptuna.hazelcast.pubsub;
+package osplus.pkptuna.hazelcast.protobuf;
 
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.topic.ITopic;
-import osplus.apl.core.pubsub.api.SimplePublisherApi;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkptuna.hazelcast.protobuf.SimpleSerializer;
+import java.io.IOException;
 
-import java.io.Serializable;
-import java.util.List;
-
-/**
- * Ein zuverlässiger Publisher für Hazelcast Reliable Topics,
- * der Nutzdaten serialisiert und als byte[] versendet.
- *
- * @param <V> der Typ der Nutzdaten (Serializable)
- */
-public class ReliableTopicPublisher<V extends Serializable> implements SimplePublisherApi {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(ReliableTopicPublisher.class);
-
-    private final HazelcastInstance hazelcastInstance;
-    private final SimpleSerializer<V> serializer;
-
-    public ReliableTopicPublisher(HazelcastInstance hazelcastInstance,
-                                  SimpleSerializer<V> serializer) {
-        this.hazelcastInstance = hazelcastInstance;
-        this.serializer = serializer;
-    }
-
-    /**
-     * Sendet eine einzelne Nachricht an das angegebene Topic.
-     * Die Nachricht wird serialisiert und als byte[] veröffentlicht.
-     *
-     * @param topicName Name des Hazelcast-Topics
-     * @param traceCode Tracing-Code für Logging-Zwecke
-     * @param payload   die Nachricht (muss Serializable sein)
-     */
-    @Override
-    public void sendMessage(String topicName, String traceCode, Serializable payload) {
-        try {
-            V typedPayload = (V) payload;
-            byte[] bytes = serializer.serialize(typedPayload);
-            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
-            topic.publish(bytes);
-            LOGGER.info("Published to topic [" + topicName + "] for trace " + traceCode);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to publish to topic " + topicName, e);
-        }
-    }
-
-    /**
-     * Sendet eine Liste von Nachrichten an das angegebene Topic.
-     * Intern wird jede Nachricht einzeln über {@code sendMessage} verarbeitet.
-     *
-     * @param topicName Name des Hazelcast-Topics
-     * @param traceCode Tracing-Code
-     * @param payloads  Liste von serialisierbaren Nachrichten
-     */
-    @Override
-    public <V extends Serializable> void sendMessages(String topicName, String traceCode, List<V> payloads) {
-        for (V payload : payloads) {
-            sendMessage(topicName, traceCode, payload);
-        }
-    }
+public interface SimpleDeserializer <T> {
+    T deserialize(byte[] data) throws IOException;
 }
 
 
-        ----------
+    package osplus.pkptuna.hazelcast.protobuf;
+
+import java.io.IOException;
+
+public interface SimpleSerializer <T> {
+    byte[] serialize(T message) throws IOException;
+}
 
 
-        package osplus.pkptuna.hazelcast.pubsub;
+package osplus.pkptuna.hazelcast.protobuf.impl;
 
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.topic.ITopic;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import com.google.protobuf.Message;
+import com.google.protobuf.Parser;
+import osplus.pkptuna.hazelcast.protobuf.SimpleDeserializer;
+
+import java.io.IOException;
+
+public class ProtobufDeserializer<T extends Message> implements SimpleDeserializer<T> {
+    private final Parser<T> parser;
+
+    public ProtobufDeserializer(Parser<T> parser) {
+        this.parser = parser;
+    }
+
+    @Override
+    public T deserialize(byte[] bytes) throws IOException {
+        return parser.parseFrom(bytes);
+    }
+
+}
+
+
+package osplus.pkptuna.hazelcast.protobuf.impl;
+
+import com.google.protobuf.Message;
 import osplus.pkptuna.hazelcast.protobuf.SimpleSerializer;
 
-import java.io.Serializable;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
-
-class ReliableTopicPublisherTest {
-
-    private HazelcastInstance hazelcastInstance;
-    private SimpleSerializer<Serializable> serializer;
-    private ITopic<byte[]> topic;
-    private ReliableTopicPublisher<Serializable> publisher;
-
-    @BeforeEach
-    void setUp() {
-        hazelcastInstance = mock(HazelcastInstance.class);
-        serializer = mock(SimpleSerializer.class);
-        topic = mock(ITopic.class);
-        publisher = new ReliableTopicPublisher<>(hazelcastInstance, serializer);
+public class ProtobufSerializer<T extends Message> implements SimpleSerializer<T> {
+    @Override
+    public byte[] serialize(T message) {
+        return message.toByteArray();
     }
 
-    /**
-     * Positiver Test: Sicherstellen, dass die Nachricht serialisiert und veröffentlicht wird.
-     */
-    @Test
-    void testSendMessageSuccessfully() throws Exception {
-        String topicName = "my-topic";
-        String traceCode = "trace123";
-        Serializable payload = "Hello World";
-        byte[] serialized = new byte[]{1, 2, 3};
-
-        when(serializer.serialize(payload)).thenReturn(serialized);
-        when(hazelcastInstance.getReliableTopic(topicName)).thenReturn(topic);
-
-        publisher.sendMessage(topicName, traceCode, payload);
-
-        verify(serializer).serialize(payload);
-        verify(topic).publish(serialized);
-    }
-
-    /**
-     * Negativer Test: Serialisierung schlägt fehl.
-     */
-    @Test
-    void testSendMessageThrowsExceptionWhenSerializationFails() throws Exception {
-        String topicName = "my-topic";
-        String traceCode = "trace123";
-        Serializable payload = "Broken";
-
-        when(serializer.serialize(payload)).thenThrow(new RuntimeException("Serialization failed"));
-
-        RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                publisher.sendMessage(topicName, traceCode, payload)
-        );
-
-        assertTrue(exception.getMessage().contains("Failed to publish to topic"));
-        verify(serializer).serialize(payload);
-        verify(topic, never()).publish(any());
-    }
-
-    /**
-     * Positiver Test: Mehrere Nachrichten werden korrekt gesendet.
-     */
-    @Test
-    void testSendMessagesSuccessfully() throws Exception {
-        String topicName = "batch-topic";
-        String traceCode = "batch-trace";
-        List<Serializable> payloads = List.of("msg1", "msg2");
-        byte[] bytes1 = new byte[]{11};
-        byte[] bytes2 = new byte[]{22};
-
-        when(serializer.serialize("msg1")).thenReturn(bytes1);
-        when(serializer.serialize("msg2")).thenReturn(bytes2);
-        when(hazelcastInstance.getReliableTopic(topicName)).thenReturn(topic);
-
-        publisher.sendMessages(topicName, traceCode, payloads);
-
-        verify(serializer).serialize("msg1");
-        verify(serializer).serialize("msg2");
-        verify(topic, times(2)).publish(any());
-    }
 }
