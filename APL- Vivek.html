@@ -1,218 +1,32 @@
-@AplComponent
-public class GenericHazelcastRouter {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastRouter.class);
-
-    private final HazelcastInstance hazelcastInstance;
-    private final List<FlowConfig> flowConfigs;
-    private final FlowHandlerRegistry handlerRegistry;
-
-    private final Map<String, AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
-
-    public GenericHazelcastRouter(HazelcastInstance hazelcastInstance,
-                                  List<FlowConfig> flowConfigs,
-                                  FlowHandlerRegistry handlerRegistry) {
-        this.hazelcastInstance = hazelcastInstance;
-        this.flowConfigs = flowConfigs;
-        this.handlerRegistry = handlerRegistry;
-    }
-
-    /**
-     * Initialisiert die Routing-Konfigurationen nach dem Start.
-     * Abonniert sich auf konfigurierten Hazelcast-Themen und registriert Listener.
-     */
-    @PostConstruct
-    public void initRouters() {
-        if (flowConfigs == null || flowConfigs.isEmpty()) {
-            LOGGER.warn("No Hazelcast flow configurations found.");
-            return;
-        }
-
-        for (FlowConfig config : flowConfigs) {
-            String flowName = config.name();
-            roundRobinCounters.putIfAbsent(flowName, new AtomicInteger(0));
-
-            @SuppressWarnings("unchecked")
-            FlowHandler<Object, Object> handler = (FlowHandler<Object, Object>) handlerRegistry.getHandler(flowName);
-
-            if (handler == null) {
-                LOGGER.warn("No FlowHandler registered for flow: {}", flowName);
-                continue;
-            }
-
-            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(config.requestTopic());
-            topic.addMessageListener(new RoutingListener(flowName, config, handler));
-            LOGGER.info("Listening on topic={} for flow={}", config.requestTopic(), flowName);
-        }
-    }
-
-    /**
-     * Listener-Klasse, die Nachrichten verarbeitet und sie dem korrekten Map-Partition zuweist.
-     * Implementiert eine einfache Round-Robin-Strategie und einmalige Routing-Sicherung per Lock.
-     */
-    private class RoutingListener<T> implements MessageListener<byte[]> {
-
-        private final String flowName;
-        private final FlowConfig config;
-        private final FlowHandler<T, ?> handler;
-
-        RoutingListener(String flowName, FlowConfig config, FlowHandler<T, ?> handler) {
-            this.flowName = flowName;
-            this.config = config;
-            this.handler = handler;
-        }
-
-        /**
-         * Verarbeitet eingehende Nachrichten, extrahiert Korrelation-ID,
-         * prüft auf Doppelausführung und routet sie zur passenden Map-Partition.
-         */
-        @Override
-        public void onMessage(Message<byte[]> message) {
-            try {
-                T request = handler.deserializeRequest(message.getMessageObject());
-                String correlationId = handler.extractCorrelationId(request);
-                String lockKey = "route-lock-" + correlationId;
-
-                IMap<String, String> routerMap = hazelcastInstance.getMap("router-claim-map");
-                String uniqueId = UUID.randomUUID().toString();
-
-                String existing = routerMap.putIfAbsent(lockKey, uniqueId);
-                if (existing != null) {
-                    LOGGER.info("Skipped duplicate routing for correlationId={}", correlationId);
-                    return;
-                }
-
-                int index = roundRobinCounters.get(flowName).getAndIncrement() % config.partitions();
-                String mapKey = config.mapBase() + index;
-
-                hazelcastInstance.getMap(mapKey).put(correlationId, request);
-                LOGGER.info("Routed correlationId='{}' to map '{}'", correlationId, mapKey);
-
-            } catch (Exception e) {
-                LOGGER.error("Routing failure for flow '{}': {}", flowName, e.getMessage(), e);
-            }
-        }
-    }
-}
-
--------
-
-package osplus.pkptuna.hazelcast.pubsub;
-
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.map.IMap;
-import com.hazelcast.topic.ITopic;
-import com.hazelcast.topic.Message;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import osplus.pkptuna.hazelcast.config.FlowConfig;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
-
-import java.util.List;
-import java.util.UUID;
-
-import static org.mockito.Mockito.*;
-
-public class GenericHazelcastRouterTest {
-
-    private HazelcastInstance hazelcastInstance;
-    private FlowHandlerRegistry handlerRegistry;
-    private FlowHandler<Object, Object> handler;
-    private ITopic<byte[]> topic;
-    private IMap<String, String> routerMap;
-    private IMap<String, Object> targetMap;
-
-    private FlowConfig config;
-
-    private GenericHazelcastRouter router;
-
-    @BeforeEach
-    public void setup() {
-        hazelcastInstance = mock(HazelcastInstance.class);
-        handlerRegistry = mock(FlowHandlerRegistry.class);
-        handler = mock(FlowHandler.class);
-        topic = mock(ITopic.class);
-        routerMap = mock(IMap.class);
-        targetMap = mock(IMap.class);
-
-        config = mock(FlowConfig.class);
-        when(config.name()).thenReturn("myFlow");
-        when(config.requestTopic()).thenReturn("topic1");
-        when(config.mapBase()).thenReturn("map-");
-        when(config.partitions()).thenReturn(2);
-
-        when(handlerRegistry.getHandler("myFlow")).thenReturn(handler);
-        when(hazelcastInstance.getReliableTopic("topic1")).thenReturn(topic);
-        when(hazelcastInstance.getMap("router-claim-map")).thenReturn(routerMap);
-        when(hazelcastInstance.getMap(startsWith("map-"))).thenReturn(targetMap);
-    }
-
-    /**
-     * Positiver Test: Nachricht wird korrekt verarbeitet und geroutet.
-     */
-    @Test
-    public void testMessageRoutedSuccessfully() {
-        router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry);
-        router.initRouters();
-
-        byte[] rawMessage = "data".getBytes();
-        Object deserialized = new Object();
-        String corrId = UUID.randomUUID().toString();
-
-        when(handler.deserializeRequest(rawMessage)).thenReturn(deserialized);
-        when(handler.extractCorrelationId(deserialized)).thenReturn(corrId);
-        when(routerMap.putIfAbsent("route-lock-" + corrId, anyString())).thenReturn(null);
-
-        // simulate listener manually
-        ArgumentCaptor<com.hazelcast.topic.MessageListener<byte[]>> captor = ArgumentCaptor.forClass(com.hazelcast.topic.MessageListener.class);
-        verify(topic).addMessageListener(captor.capture());
-        captor.getValue().onMessage(new Message<>("topic1", rawMessage, System.currentTimeMillis()));
-
-        verify(targetMap).put(eq(corrId), eq(deserialized));
-    }
-
-    /**
-     * Negativer Test: Doppelte Nachricht sollte nicht verarbeitet werden.
-     */
-    @Test
-    public void testDuplicateMessageNotProcessed() {
-        router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry);
-        router.initRouters();
-
-        byte[] rawMessage = "data".getBytes();
-        Object deserialized = new Object();
-        String corrId = "duplicate-id";
-
-        when(handler.deserializeRequest(rawMessage)).thenReturn(deserialized);
-        when(handler.extractCorrelationId(deserialized)).thenReturn(corrId);
-        when(routerMap.putIfAbsent("route-lock-" + corrId, anyString())).thenReturn("alreadyExists");
-
-        ArgumentCaptor<com.hazelcast.topic.MessageListener<byte[]>> captor = ArgumentCaptor.forClass(com.hazelcast.topic.MessageListener.class);
-        verify(topic).addMessageListener(captor.capture());
-        captor.getValue().onMessage(new Message<>("topic1", rawMessage, System.currentTimeMillis()));
-
-        verify(targetMap, never()).put(anyString(), any());
-    }
-
-    /**
-     * Negativer Test: Exception beim Verarbeiten wird protokolliert.
-     */
-    @Test
-    public void testRoutingHandlerThrowsException() {
-        router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry);
-        router.initRouters();
-
-        byte[] message = "data".getBytes();
-        when(handler.deserializeRequest(message)).thenThrow(new RuntimeException("Test Exception"));
-
-        ArgumentCaptor<com.hazelcast.topic.MessageListener<byte[]>> captor = ArgumentCaptor.forClass(com.hazelcast.topic.MessageListener.class);
-        verify(topic).addMessageListener(captor.capture());
-
-        captor.getValue().onMessage(new Message<>("topic1", message, System.currentTimeMillis()));
-
-        verify(routerMap, never()).putIfAbsent(any(), any());
-        verify(targetMap, never()).put(any(), any());
-    }
-}
+[INFO] -------------------------------------------------------------
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  5.667 s
+[INFO] Finished at: 2025-07-03T11:03:31+02:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.14.0:testCompile (default-testCompile) on project pkptuna-hazelcast: Compilation failure: Compilation failure: 
+[ERROR] /C:/DEV/pkptuna-mkp/pkptuna-hazelcast/src/test/java/osplus/pkptuna/hazelcast/pubsub/GenericHazelcastRouterTest.java:[48,59] Methode für thenReturn(com.hazelcast.topic.ITopic<byte[]>) nicht geeignet
+[ERROR]     Methode org.mockito.stubbing.OngoingStubbing.thenReturn(com.hazelcast.topic.ITopic<java.lang.Object>) ist nicht anwendbar
+[ERROR]       (Keine übereinstimmenden Argumente, com.hazelcast.topic.ITopic<byte[]> kann nicht in com.hazelcast.topic.ITopic<java.lang.Object> konvertiert werden)
+[ERROR]     Methode org.mockito.stubbing.OngoingStubbing.thenReturn(com.hazelcast.topic.ITopic<java.lang.Object>,com.hazelcast.topic.ITopic<java.lang.Object>...) ist nicht anwendbar
+[ERROR]       (Keine übereinstimmenden Argumente, com.hazelcast.topic.ITopic<byte[]> kann nicht in com.hazelcast.topic.ITopic<java.lang.Object> konvertiert werden)
+[ERROR] /C:/DEV/pkptuna-mkp/pkptuna-hazelcast/src/test/java/osplus/pkptuna/hazelcast/pubsub/GenericHazelcastRouterTest.java:[49,59] Methode für thenReturn(com.hazelcast.map.IMap<java.lang.String,java.lang.String>) nicht geeignet
+[ERROR]     Methode org.mockito.stubbing.OngoingStubbing.thenReturn(com.hazelcast.map.IMap<java.lang.Object,java.lang.Object>) ist nicht anwendbar
+[ERROR]       (Keine übereinstimmenden Argumente, com.hazelcast.map.IMap<java.lang.String,java.lang.String> kann nicht in com.hazelcast.map.IMap<java.lang.Object,java.lang.Object> konvertiert werden)
+[ERROR]     Methode org.mockito.stubbing.OngoingStubbing.thenReturn(com.hazelcast.map.IMap<java.lang.Object,java.lang.Object>,com.hazelcast.map.IMap<java.lang.Object,java.lang.Object>...) ist nicht anwendbar
+[ERROR]       (Keine übereinstimmenden Argumente, com.hazelcast.map.IMap<java.lang.String,java.lang.String> kann nicht in com.hazelcast.map.IMap<java.lang.Object,java.lang.Object> konvertiert werden)
+[ERROR] /C:/DEV/pkptuna-mkp/pkptuna-hazelcast/src/test/java/osplus/pkptuna/hazelcast/pubsub/GenericHazelcastRouterTest.java:[50,59] Methode für thenReturn(com.hazelcast.map.IMap<java.lang.String,java.lang.Object>) nicht geeignet
+[ERROR]     Methode org.mockito.stubbing.OngoingStubbing.thenReturn(com.hazelcast.map.IMap<java.lang.Object,java.lang.Object>) ist nicht anwendbar
+[ERROR]       (Keine übereinstimmenden Argumente, com.hazelcast.map.IMap<java.lang.String,java.lang.Object> kann nicht in com.hazelcast.map.IMap<java.lang.Object,java.lang.Object> konvertiert werden)
+[ERROR]     Methode org.mockito.stubbing.OngoingStubbing.thenReturn(com.hazelcast.map.IMap<java.lang.Object,java.lang.Object>,com.hazelcast.map.IMap<java.lang.Object,java.lang.Object>...) ist nicht anwendbar
+[ERROR]       (Keine übereinstimmenden Argumente, com.hazelcast.map.IMap<java.lang.String,java.lang.Object> kann nicht in com.hazelcast.map.IMap<java.lang.Object,java.lang.Object> konvertiert werden)
+[ERROR] /C:/DEV/pkptuna-mkp/pkptuna-hazelcast/src/test/java/osplus/pkptuna/hazelcast/pubsub/GenericHazelcastRouterTest.java:[72,37] Typargumente für com.hazelcast.topic.Message<> können nicht abgeleitet werden
+[ERROR]   Grund: Typvariable(n) E nicht ableitbar
+[ERROR]     (Liste der tatsächlichen Argumente hat eine andere Länge als die der formalen Argumente)
+[ERROR] /C:/DEV/pkptuna-mkp/pkptuna-hazelcast/src/test/java/osplus/pkptuna/hazelcast/pubsub/GenericHazelcastRouterTest.java:[95,37] Typargumente für com.hazelcast.topic.Message<> können nicht abgeleitet werden
+[ERROR]   Grund: Typvariable(n) E nicht ableitbar
+[ERROR]     (Liste der tatsächlichen Argumente hat eine andere Länge als die der formalen Argumente)
+[ERROR] /C:/DEV/pkptuna-mkp/pkptuna-hazelcast/src/test/java/osplus/pkptuna/hazelcast/pubsub/GenericHazelcastRouterTest.java:[114,37] Typargumente für com.hazelcast.topic.Message<> können nicht abgeleitet werden
+[ERROR]   Grund: Typvariable(n) E nicht ableitbar
+[ERROR]     (Liste der tatsächlichen Argumente hat eine andere Länge als die der formalen Argumente)
