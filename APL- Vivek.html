@@ -1,149 +1,116 @@
-package osplus.pkptuna.flows.handlers;
+@ExtendWith(MockitoExtension.class)
+class DisputeDetailFlowHandlerTest {
 
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.hazelcast.core.HazelcastInstance;
-import jakarta.annotation.PostConstruct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import osplus.apl.core.api.AplComponent;
-import osplus.pkptuna.dispute.model.DisputeDetailRequestDto;
-import osplus.pkptuna.dispute.model.DisputeDetailRequestMetadataDto;
-import osplus.pkptuna.dispute.model.DisputeDetailRequestWrapperDto;
-import osplus.pkptuna.dispute.model.DisputeDetailResponseWrapperDto;
-import osplus.pkptuna.dispute.model.DisputeResponseDto;
-import osplus.pkptuna.dispute.service.DisputeDetailService;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufSerializer;
-import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
+    @Mock
+    private DisputeDetailService disputeDetailService;
 
-import java.util.List;
+    @Mock
+    private HazelcastInstance hazelcastInstance;
 
-@AplComponent("dispute-detail")
-public class DisputeDetailFlowHandler implements FlowHandler<DisputeDetailRequestWrapperDto, DisputeResponseDto> {
+    private DisputeDetailFlowHandler handler;
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeDetailFlowHandler.class);
-
-    public static final String DISPUTE_DETAIL = "dispute-detail";
-    private final DisputeDetailService disputeDetailService;
-
-    public DisputeDetailFlowHandler(DisputeDetailService disputeService) {
-        this.disputeDetailService = disputeService;
+    @BeforeEach
+    void setUp() {
+        handler = new DisputeDetailFlowHandler(disputeDetailService);
     }
 
-    @Override
-    public DisputeDetailRequestWrapperDto deserializeRequest(byte[] data) throws InvalidProtocolBufferException {
-        return DisputeDetailRequestWrapperDto.parseFrom(data);
-    }
-
-    @Override
-    public String extractCorrelationId(DisputeDetailRequestWrapperDto request) {
-        return request.getCorrelationId();
-    }
-
-    @Override
-    public DisputeResponseDto handleRequest(DisputeDetailRequestWrapperDto request) {
-        DisputeDetailRequestDto disputeLookupRequestDto = request.getPayload();
-        DisputeDetailRequestMetadataDto disputeDetailRequestMetadataDto = disputeLookupRequestDto.getMetadata();
-        List<String> embeds = disputeDetailRequestMetadataDto.getEmbedList();
-        return disputeDetailService.getDisputeFolderDetails(disputeLookupRequestDto.getIssuerId(), disputeLookupRequestDto.getDisputeFolderReference(), embeds);
-    }
-
-    @Override
-    public Object wrapResponse(String correlationId, DisputeResponseDto result) {
-        return DisputeDetailResponseWrapperDto.newBuilder()
-                .setCorrelationId(correlationId)
-                .setResponse(result)
+    @Test
+    void shouldExtractCorrelationId() {
+        DisputeDetailRequestWrapperDto request = DisputeDetailRequestWrapperDto.newBuilder()
+                .setCorrelationId("12345")
                 .build();
+
+        String result = handler.extractCorrelationId(request);
+
+        assertEquals("12345", result);
     }
 
-    @Override
-    public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Object response) {
-        DisputeDetailResponseWrapperDto dto = (DisputeDetailResponseWrapperDto) response;
-        new ReliableTopicPublisher<>(hazelcastInstance, new ProtobufSerializer<>()).sendMessage(topicName, "DISPUTE_ROUTER", dto);
+    @Test
+    void shouldHandleRequestAndCallService() {
+        DisputeDetailRequestDto payload = DisputeDetailRequestDto.newBuilder()
+                .setIssuerId("issuer")
+                .setDisputeFolderReference("ref")
+                .setMetadata(DisputeDetailRequestMetadataDto.newBuilder().addEmbed("x"))
+                .build();
+
+        DisputeDetailRequestWrapperDto request = DisputeDetailRequestWrapperDto.newBuilder()
+                .setPayload(payload)
+                .build();
+
+        DisputeResponseDto expectedResponse = DisputeResponseDto.newBuilder().build();
+        when(disputeDetailService.getDisputeFolderDetails("issuer", "ref", List.of("x")))
+                .thenReturn(expectedResponse);
+
+        DisputeResponseDto response = handler.handleRequest(request);
+
+        assertEquals(expectedResponse, response);
     }
 
-    @Override
-    public String getFlowName(){
-        return DISPUTE_DETAIL;
-    }
+    @Test
+    void shouldWrapResponseCorrectly() {
+        DisputeResponseDto response = DisputeResponseDto.newBuilder().build();
+        Object wrapped = handler.wrapResponse("abc", response);
 
-    @PostConstruct
-    public void init() {
-        LOGGER.info("Loaded DisputeDetailFlowHandler code ...........");
+        assertTrue(wrapped instanceof DisputeDetailResponseWrapperDto);
+        assertEquals("abc", ((DisputeDetailResponseWrapperDto) wrapped).getCorrelationId());
     }
-
 }
 
-                ---------------------
 
+---------
 
-                package osplus.pkptuna.flows.handlers;
+@ExtendWith(MockitoExtension.class)
+class DisputeLookupFlowHandlerTest {
 
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.hazelcast.core.HazelcastInstance;
-import jakarta.annotation.PostConstruct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import osplus.apl.core.api.AplComponent;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseWrapperDto;
-import osplus.pkptuna.dispute.service.DisputeService;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufSerializer;
-import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
+    @Mock
+    private DisputeService disputeService;
 
-@AplComponent("dispute-lookup")
-public class DisputeLookupFlowHandler implements FlowHandler<DisputeLookupRequestWrapperDto, DisputeLookupResponseDto> {
+    @Mock
+    private HazelcastInstance hazelcastInstance;
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeLookupFlowHandler.class);
+    private DisputeLookupFlowHandler handler;
 
-    public static final String DISPUTE_LOOKUP = "dispute-lookup";
-    private final DisputeService disputeService;
-
-    public DisputeLookupFlowHandler(DisputeService disputeService) {
-        this.disputeService = disputeService;
+    @BeforeEach
+    void setUp() {
+        handler = new DisputeLookupFlowHandler(disputeService);
     }
 
-    @Override
-    public DisputeLookupRequestWrapperDto deserializeRequest(byte[] data) throws InvalidProtocolBufferException {
-        return DisputeLookupRequestWrapperDto.parseFrom(data);
-    }
-
-    @Override
-    public String extractCorrelationId(DisputeLookupRequestWrapperDto request) {
-        return request.getCorrelationId();
-    }
-
-    @Override
-    public DisputeLookupResponseDto handleRequest(DisputeLookupRequestWrapperDto request) {
-        DisputeLookupRequestDto disputeLookupRequestDto = request.getPayload();
-        return disputeService.lookupDisputeFolder(disputeLookupRequestDto.getIssuerId(), disputeLookupRequestDto.getCardReference());
-    }
-
-    @Override
-    public Object wrapResponse(String correlationId, DisputeLookupResponseDto result) {
-        return DisputeLookupResponseWrapperDto.newBuilder()
-                .setCorrelationId(correlationId)
-                .setResponse(result)
+    @Test
+    void shouldExtractCorrelationId() {
+        DisputeLookupRequestWrapperDto request = DisputeLookupRequestWrapperDto.newBuilder()
+                .setCorrelationId("lookup-001")
                 .build();
+
+        String result = handler.extractCorrelationId(request);
+
+        assertEquals("lookup-001", result);
     }
 
-    @Override
-    public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Object response) {
-        DisputeLookupResponseWrapperDto dto = (DisputeLookupResponseWrapperDto) response;
-        new ReliableTopicPublisher<>(hazelcastInstance, new ProtobufSerializer<>()).sendMessage(topicName, "DISPUTE_ROUTER", dto);
+    @Test
+    void shouldCallLookupService() {
+        DisputeLookupRequestDto dto = DisputeLookupRequestDto.newBuilder()
+                .setIssuerId("issuer")
+                .setCardReference("cardRef")
+                .build();
+
+        DisputeLookupRequestWrapperDto request = DisputeLookupRequestWrapperDto.newBuilder()
+                .setPayload(dto)
+                .build();
+
+        DisputeLookupResponseDto expected = DisputeLookupResponseDto.newBuilder().build();
+        when(disputeService.lookupDisputeFolder("issuer", "cardRef")).thenReturn(expected);
+
+        DisputeLookupResponseDto actual = handler.handleRequest(request);
+
+        assertEquals(expected, actual);
     }
 
-    @Override
-    public String getFlowName(){
-        return DISPUTE_LOOKUP;
-    }
+    @Test
+    void shouldWrapResponseCorrectly() {
+        DisputeLookupResponseDto response = DisputeLookupResponseDto.newBuilder().build();
+        Object wrapped = handler.wrapResponse("corr-id", response);
 
-    @PostConstruct
-    public void init() {
-        LOGGER.info("Loaded DisputeLookupFlowHandler code ...........");
+        assertTrue(wrapped instanceof DisputeLookupResponseWrapperDto);
+        assertEquals("corr-id", ((DisputeLookupResponseWrapperDto) wrapped).getCorrelationId());
     }
-
 }
