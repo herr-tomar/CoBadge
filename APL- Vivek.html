@@ -1,73 +1,34 @@
-private String packageName;
+    package osplus.pkptuna.dispute.lookup.model;
 
-public String getPackageName() {
-    return packageName;
-}
+public class DisputeLookupRequestDtoDto {
 
-public void setPackageName(String packageName) {
-    this.packageName = packageName;
-}
+    private  DisputeLookupRequestMetadataDto;
+    private  string;
+    private  string;
 
------
 
-public static List<ProtoMessageModel> parse(File protoFile) {
-    List<ProtoMessageModel> messageModels = new ArrayList<>();
-
-    try (BufferedReader reader = new BufferedReader(new FileReader(protoFile))) {
-        String line;
-        String packageName = null;
-        ProtoMessageModel currentMessage = null;
-
-        while ((line = reader.readLine()) != null) {
-            line = line.trim();
-
-            // Extract package name
-            if (line.startsWith("package ")) {
-                String[] parts = line.split("\\s+");
-                if (parts.length >= 2) {
-                    packageName = parts[1].replace(";", "").trim();
-                }
-                continue;
-            }
-
-            // Start of message
-            if (line.startsWith("message ")) {
-                String messageName = line.split("\\s+")[1].replace("{", "").trim();
-                currentMessage = new ProtoMessageModel(messageName);
-                currentMessage.setPackageName(packageName);  // Set package name
-                continue;
-            }
-
-            // End of message
-            if (line.startsWith("}")) {
-                if (currentMessage != null) {
-                    messageModels.add(currentMessage);
-                    currentMessage = null;
-                }
-                continue;
-            }
-
-            // Fields inside a message
-            if (currentMessage != null && !line.isEmpty() && line.contains(";")) {
-                String[] parts = line.split("\\s+");
-                if (parts.length >= 3) {
-                    String type = parts[0];
-                    String name = parts[1].replace(";", "");
-                    currentMessage.addField(new ProtoFieldModel(type, name));
-                }
-            }
-        }
-
-    } catch (Exception e) {
-        System.err.println("Failed to parse proto file: " + protoFile.getName());
-        e.printStackTrace();
+    public  getDisputeLookupRequestMetadataDto() {
+    return DisputeLookupRequestMetadataDto;
     }
 
-    return messageModels;
+    public void setDisputeLookupRequestMetadataDto( DisputeLookupRequestMetadataDto) {
+    this.DisputeLookupRequestMetadataDto = DisputeLookupRequestMetadataDto;
+    }
+
+    public  getString() {
+    return string;
+    }
+
+    public void setString( string) {
+    this.string = string;
+    }
+
+    public  getString() {
+    return string;
+    }
+
+    public void setString( string) {
+    this.string = string;
+    }
+
 }
-
-----------
-
-<#if packageName??>
-package ${packageName};
-</#if>
