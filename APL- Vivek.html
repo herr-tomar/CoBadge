@@ -129,7 +129,7 @@
                 <executions>
                     <execution>
                         <id>generate-rest-dtos</id>
-                        <phase>process-classes</phase>
+                        <phase>compile</phase>
                         <goals>
                             <goal>java</goal>
                         </goals>
@@ -152,7 +152,7 @@
                 <executions>
                     <execution>
                         <id>add-rest-dto-sources</id>
-                        <phase>process-classes</phase>
+                        <phase>generate-sources</phase>
                         <goals><goal>add-source</goal></goals>
                         <configuration>
                             <sources>
