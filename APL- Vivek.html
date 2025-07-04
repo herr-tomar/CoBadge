@@ -1,6 +1,11 @@
-<#-- Handle timestamp imports -->
-<#list fields?map(f -> f.javaType)?unique as type>
-<#if type == "Instant">
+<#-- Import Instant only if any field uses it -->
+<#assign hasInstant = false>
+<#list fields as field>
+  <#if field.javaType == "Instant">
+    <#assign hasInstant = true>
+  </#if>
+</#list>
+
+<#if hasInstant>
 import java.time.Instant;
 </#if>
-</#list>
