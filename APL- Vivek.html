@@ -1,39 +1,18 @@
-<plugin>
-  <groupId>io.protostuff</groupId>
-  <artifactId>protostuff-maven-plugin</artifactId>
-  <version>2.1.17</version>
-  <executions>
-    <execution>
-      <id>generate-rest-dtos</id>
-      <phase>generate-sources</phase>
-      <goals>
-        <goal>generate</goal>
-      </goals>
-      <configuration>
-        <template>java_bean</template>
-        <inputDirectory>${project.basedir}/src/main/proto</inputDirectory>
-        <outputDirectory>${project.build.directory}/generated-sources/rest-pojos</outputDirectory>
-      </configuration>
-    </execution>
-  </executions>
-</plugin>
+package ${javaPackage};
 
+public class ${message.name}Dto {
 
+<#list message.fields as field>
+    private ${field.javaType} ${field.name};
+</#list>
 
-----
+<#list message.fields as field>
+    public ${field.javaType} get${field.capName}() {
+        return ${field.name};
+    }
 
-<dependency>
-  <groupId>io.protostuff</groupId>
-  <artifactId>protostuff-core</artifactId>
-  <version>1.7.4</version>
-</dependency>
-<dependency>
-  <groupId>io.protostuff</groupId>
-  <artifactId>protostuff-parser</artifactId>
-  <version>1.7.4</version>
-</dependency>
-<dependency>
-  <groupId>io.protostuff</groupId>
-  <artifactId>protostuff-generator</artifactId>
-  <version>1.7.4</version>
-</dependency>
+    public void set${field.capName}(${field.javaType} ${field.name}) {
+        this.${field.name} = ${field.name};
+    }
+</#list>
+}
