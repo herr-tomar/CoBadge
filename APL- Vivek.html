@@ -95,31 +95,22 @@ public class RestDtoGeneratorPlugin {
                   ---------
 
                   <plugin>
-  <groupId>io.github.ascopes</groupId>
+  <groupId>com.github.os72</groupId>
   <artifactId>protobuf-maven-plugin</artifactId>
-  <version>3.4.1</version>
+  <version>0.6.1</version>
   <executions>
     <execution>
-      <id>generate-protobuf</id>
-      <phase>generate-sources</phase>
       <goals>
-        <goal>generate</goal>
+        <goal>compile</goal>
+        <goal>compile-custom</goal>
       </goals>
     </execution>
   </executions>
   <configuration>
-    <protocVersion>${protobuf-java.version}</protocVersion>
-    <outputDirectory>${project.build.directory}/generated-sources/protobuf</outputDirectory>
-
-    <!-- Register your plugin -->
-    <protocPlugins>
-      <protocPlugin>
-        <id>restdto</id>
-        <executable>${project.build.directory}/pkptuna-protobuf-1.0-SNAPSHOT.jar</executable>
-      </protocPlugin>
-    </protocPlugins>
-
+    <protocArtifact>com.google.protobuf:protoc:3.24.4:exe:${os.detected.classifier}</protocArtifact>
     <pluginId>restdto</pluginId>
+    <pluginArtifact>osplus.pkptuna:pkptuna-protobuf:0.0.1-SNAPSHOT:jar</pluginArtifact>
+    <outputDirectory>${project.build.directory}/generated-sources/rest-dtos</outputDirectory>
   </configuration>
 </plugin>
 
