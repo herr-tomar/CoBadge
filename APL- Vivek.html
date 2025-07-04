@@ -41,13 +41,19 @@ public class RestDtoGeneratorPlugin {
             cfg.setDefaultEncoding("UTF-8");
             cfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
 
-            // 2. For each .proto file, parse and generate DTOs (pseudo code)
+            // 2. Parse proto messages
             List<ProtoMessageModel> messageModels = ProtoParserUtil.parseAll(protoDir);
 
             for (ProtoMessageModel model : messageModels) {
+                // Transform original packageName (from .proto) to REST version
+                String originalPkg = model.getPackageName();
+                String restPkg = originalPkg.replaceFirst("^osplus\\.pkptuna", "osplus.pkptuna.rest");
+                model.setPackageName(restPkg); // Update to transformed REST package
+
+                // Generate class using FreeMarker
                 Template template = cfg.getTemplate("rest-dto.ftl");
-                // Before writing the file
-                String relPath = model.getPackageName().replace('.', '/');
+
+                String relPath = restPkg.replace('.', '/');
                 File packageDir = new File(outputDir, relPath);
                 packageDir.mkdirs();
 
