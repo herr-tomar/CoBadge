@@ -1,2 +1,8 @@
-<#assign finalClassName = className?ends_with("Dto")?then(className, className + "Dto")>
-public class ${finalClassName} {
+String originalName = message.getName();  // e.g., "DisputeLookupRequestDto"
+String className;
+
+if (originalName.endsWith("Dto")) {
+    className = originalName.replaceFirst("Dto$", "ModelDto"); // Safe replacement
+} else {
+    className = originalName + "ModelDto"; // fallback
+}
