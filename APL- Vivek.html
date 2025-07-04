@@ -1,38 +1,73 @@
-INFO] --- exec:3.1.0:java (generate-rest-dtos) @ pkptuna-protobuf ---
-Juli 04, 2025 3:38:42 PM freemarker.log._JULLoggerFactory$JULLogger error
-SCHWERWIEGEND: Error executing FreeMarker template
-FreeMarker template error:
-The following has evaluated to null or missing:
-==> packageName  [in template "rest-dto.ftl" at line 1, column 11]
+private String packageName;
 
-----
-Tip: If the failing expression is known to legally refer to something that's sometimes null or missing, either specify a default value like myOptionalVar!myDefault, or use <#if myOptionalVar??>when-present<#else>when-missing</#if>. (These only cover the last step of the expression; to cover the whole expression, use parenthesis: (myOptionalVar.foo)!myDefault, (myOptionalVar.foo)??
-----
+public String getPackageName() {
+    return packageName;
+}
 
-----
-FTL stack trace ("~" means nesting-related):
-	- Failed at: ${packageName}  [in template "rest-dto.ftl" at line 1, column 9]
-----
+public void setPackageName(String packageName) {
+    this.packageName = packageName;
+}
 
-Java stack trace (for programmers):
-----
-freemarker.core.InvalidReferenceException: [... Exception message was already printed; see it above ...]
-	at freemarker.core.InvalidReferenceException.getInstance(InvalidReferenceException.java:134)
-	at freemarker.core.EvalUtil.coerceModelToTextualCommon(EvalUtil.java:481)
-	at freemarker.core.EvalUtil.coerceModelToStringOrMarkup(EvalUtil.java:401)
-	at freemarker.core.EvalUtil.coerceModelToStringOrMarkup(EvalUtil.java:370)
-	at freemarker.core.DollarVariable.calculateInterpolatedStringOrMarkup(DollarVariable.java:104)
-	at freemarker.core.DollarVariable.accept(DollarVariable.java:63)
-	at freemarker.core.Environment.visit(Environment.java:335)
-	at freemarker.core.Environment.visit(Environment.java:341)
-	at freemarker.core.Environment.process(Environment.java:314)
-	at freemarker.template.Template.process(Template.java:383)
-	at osplus.pkptuna.protobuf.util.TemplateWriterUtil.writeTemplate(TemplateWriterUtil.java:14)
-	at osplus.pkptuna.protobuf.plugin.RestDtoGeneratorPlugin.main(RestDtoGeneratorPlugin.java:46)
-	at org.codehaus.mojo.exec.ExecJavaMojo$1.run(ExecJavaMojo.java:279)
-	at java.base/java.lang.Thread.run(Thread.java:1583)
+-----
 
-Failed to write file: DisputeLookupRequestWrapperDto.java
-FreeMarker template error:
-The following has evaluated to null or missing:
-==> packageName  [in template "rest-dto.ftl" at line 1, column 11]
+public static List<ProtoMessageModel> parse(File protoFile) {
+    List<ProtoMessageModel> messageModels = new ArrayList<>();
+
+    try (BufferedReader reader = new BufferedReader(new FileReader(protoFile))) {
+        String line;
+        String packageName = null;
+        ProtoMessageModel currentMessage = null;
+
+        while ((line = reader.readLine()) != null) {
+            line = line.trim();
+
+            // Extract package name
+            if (line.startsWith("package ")) {
+                String[] parts = line.split("\\s+");
+                if (parts.length >= 2) {
+                    packageName = parts[1].replace(";", "").trim();
+                }
+                continue;
+            }
+
+            // Start of message
+            if (line.startsWith("message ")) {
+                String messageName = line.split("\\s+")[1].replace("{", "").trim();
+                currentMessage = new ProtoMessageModel(messageName);
+                currentMessage.setPackageName(packageName);  // Set package name
+                continue;
+            }
+
+            // End of message
+            if (line.startsWith("}")) {
+                if (currentMessage != null) {
+                    messageModels.add(currentMessage);
+                    currentMessage = null;
+                }
+                continue;
+            }
+
+            // Fields inside a message
+            if (currentMessage != null && !line.isEmpty() && line.contains(";")) {
+                String[] parts = line.split("\\s+");
+                if (parts.length >= 3) {
+                    String type = parts[0];
+                    String name = parts[1].replace(";", "");
+                    currentMessage.addField(new ProtoFieldModel(type, name));
+                }
+            }
+        }
+
+    } catch (Exception e) {
+        System.err.println("Failed to parse proto file: " + protoFile.getName());
+        e.printStackTrace();
+    }
+
+    return messageModels;
+}
+
+----------
+
+<#if packageName??>
+package ${packageName};
+</#if>
