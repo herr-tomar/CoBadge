@@ -1,16 +1,17 @@
 <plugin>
-  <groupId>com.github.osmose</groupId>
-  <artifactId>protoc-gen-javalite-pojo</artifactId>
-  <version>1.0.0</version>
+  <groupId>io.protostuff</groupId>
+  <artifactId>protostuff-maven-plugin</artifactId>
+  <version>1.7.4</version>
   <executions>
     <execution>
-      <id>generate-pojos</id>
-      <phase>generate-sources</phase>
+      <id>generate-rest-dtos</id>
       <goals>
-        <goal>generate</goal>
+        <goal>compile</goal>
       </goals>
       <configuration>
-        <outputDirectory>${project.build.directory}/generated-sources/pojos</outputDirectory>
+        <template>java_bean</template>
+        <protoSourceRoot>src/main/proto</protoSourceRoot>
+        <outputDirectory>${project.build.directory}/generated-sources/rest-pojos</outputDirectory>
       </configuration>
     </execution>
   </executions>
