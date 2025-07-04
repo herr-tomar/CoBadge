@@ -1,83 +1,25 @@
-package com.example.plugin;
+<plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals><goal>shade</goal></goals>
+                        <configuration>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>osplus.pkptuna.protobuf.plugin.RestDtoGeneratorPlugin</mainClass>
+                                </transformer>
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
 
-import com.google.protobuf.compiler.PluginProtos.CodeGeneratorRequest;
-import com.google.protobuf.compiler.PluginProtos.CodeGeneratorResponse;
+            -----
 
-import java.io.*;
-
-public class RestDtoGeneratorPlugin {
-    public static void main(String[] args) throws Exception {
-        // Read CodeGeneratorRequest from stdin
-        CodeGeneratorRequest request = CodeGeneratorRequest.parseFrom(System.in);
-        CodeGeneratorResponse.Builder responseBuilder = CodeGeneratorResponse.newBuilder();
-
-        for (var file : request.getProtoFileList()) {
-            if (!request.getFileToGenerateList().contains(file.getName())) continue;
-
-            for (var message : file.getMessageTypeList()) {
-                String className = message.getName() + "Dto";
-                StringBuilder content = new StringBuilder();
-
-                content.append("package com.example.dto;\n\n");
-                content.append("public class ").append(className).append(" {\n");
-
-                for (var field : message.getFieldList()) {
-                    String javaType = mapType(field.getType().name());
-                    content.append("    private ").append(javaType)
-                           .append(" ").append(field.getName()).append(";\n");
-                }
-
-                content.append("}\n");
-
-                // Build a file output entry
-                responseBuilder.addFile(CodeGeneratorResponse.File.newBuilder()
-                        .setName("com/example/dto/" + className + ".java")
-                        .setContent(content.toString()));
-            }
-        }
-
-        // Write CodeGeneratorResponse to stdout
-        responseBuilder.build().writeTo(System.out);
-    }
-
-    private static String mapType(String protoType) {
-        return switch (protoType) {
-            case "TYPE_STRING" -> "String";
-            case "TYPE_INT32" -> "int";
-            case "TYPE_INT64" -> "long";
-            case "TYPE_BOOL" -> "boolean";
-            case "TYPE_DOUBLE" -> "double";
-            case "TYPE_FLOAT" -> "float";
-            default -> "Object";
-        };
-    }
-}
---------
-
-<build>
-  <plugins>
-    <plugin>
-      <groupId>org.apache.maven.plugins</groupId>
-      <artifactId>maven-shade-plugin</artifactId>
-      <version>3.4.1</version>
-      <executions>
-        <execution>
-          <phase>package</phase>
-          <goals><goal>shade</goal></goals>
-          <configuration>
-            <transformers>
-              <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                <mainClass>com.example.plugin.RestDtoGeneratorPlugin</mainClass>
-              </transformer>
-            </transformers>
-          </configuration>
-        </execution>
-      </executions>
-    </plugin>
-  </plugins>
-</build>
-
-----
-
-WARNING] [protoc - stderr pid=20056] C:/DEV/pkptuna-mkp/pkptuna-protobuf/src/main/proto/dispute_lookup_model.proto:60:3: Expected "required", "optional", or "repeated".
-[WARNING] [protoc - stderr pid=20056] C:/DEV/pkptuna-mkp/pkptuna-protobuf/src/main/proto/dispute_lookup_model.proto:64:3: Expected "required", "optional", or "repeated".
+16:04+02:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-shade-plugin:3.6.0:shade (default) on project pkptuna-protobuf: Unable to parse configuration of mojo org.apache.maven.plugins:maven-shade-plugin:3.6.0:shade for parameter resource: Cannot find 'resource' in class org.apache.maven.plugins.shade.resource.ManifestResourceTransformer -> [Help 1]
+[ERROR] 
