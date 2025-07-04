@@ -1,34 +1,48 @@
-    package osplus.pkptuna.dispute.lookup.model;
+// Inside the message parsing block
+if (currentMessage != null && !line.isEmpty() && line.contains(";")) {
+    // Remove field tags like 'optional', 'repeated', 'required'
+    line = line.replaceAll("^(optional|required|repeated)\\s+", "");
 
-public class DisputeLookupRequestDtoDto {
+    // Now match: type name = number;
+    String[] parts = line.split("\\s+");
+    if (parts.length >= 2) {
+        String type = parts[0];
+        String name = parts[1];
 
-    private  DisputeLookupRequestMetadataDto;
-    private  string;
-    private  string;
+        // Remove equals sign and trailing semicolon if present
+        if (name.contains("=")) {
+            name = name.substring(0, name.indexOf("=")).trim();
+        }
+        name = name.replace(";", "").trim();
 
-
-    public  getDisputeLookupRequestMetadataDto() {
-    return DisputeLookupRequestMetadataDto;
+        currentMessage.addField(new ProtoFieldModel(type, name));
     }
-
-    public void setDisputeLookupRequestMetadataDto( DisputeLookupRequestMetadataDto) {
-    this.DisputeLookupRequestMetadataDto = DisputeLookupRequestMetadataDto;
-    }
-
-    public  getString() {
-    return string;
-    }
-
-    public void setString( string) {
-    this.string = string;
-    }
-
-    public  getString() {
-    return string;
-    }
-
-    public void setString( string) {
-    this.string = string;
-    }
-
 }
+
+-----
+
+public String getJavaType() {
+    return switch (type) {
+        case "string" -> "String";
+        case "int32", "int64" -> "Integer";
+        case "bool" -> "Boolean";
+        case "double", "float" -> "Double";
+        default -> capitalizeFirstLetter(type); // Assume message type
+    };
+}
+
+private String capitalizeFirstLetter(String str) {
+    return (str == null || str.isEmpty()) ? str
+        : Character.toUpperCase(str.charAt(0)) + str.substring(1);
+}
+
+
+---------
+
+// Before writing the file
+String relPath = model.getPackageName().replace('.', '/');
+File packageDir = new File(outputDir, relPath);
+packageDir.mkdirs();
+
+File outFile = new File(packageDir, model.getClassName() + ".java");
+TemplateWriterUtil.writeTemplate(template, model, outFile);
