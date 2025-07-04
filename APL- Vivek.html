@@ -1,190 +1,53 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+package osplus.pkptuna.protobuf.plugin;
 
-    <modelVersion>4.0.0</modelVersion>
+import java.io.File;
+import java.io.IOException;
+import java.util.List;
 
-    <artifactId>pkptuna-protobuf</artifactId>
-    <packaging>jar</packaging>
+import freemarker.template.Configuration;
+import freemarker.template.Template;
+import freemarker.template.TemplateExceptionHandler;
+import freemarker.template.Version;
 
-    <parent>
-        <groupId>osplus.pkptuna</groupId>
-        <artifactId>pkptuna-parent</artifactId>
-        <version>0.0.1-SNAPSHOT</version>
-    </parent>
+public class RestDtoGeneratorPlugin {
 
-    <properties>
-        <protobuf-java.version>4.31.1</protobuf-java.version>
-    </properties>
+    public static void main(String[] args) {
+        if (args.length < 2) {
+            System.err.println("Usage: RestDtoGeneratorPlugin <protoInputDir> <restDtoOutputDir>");
+            System.exit(1);
+        }
 
-    <dependencies>
+        File protoDir = new File(args[0]);
+        File outputDir = new File(args[1]);
 
-        <!-- Protobuf -->
-        <dependency>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java</artifactId>
-            <version>${protobuf-java.version}</version>
-        </dependency>
+        if (!protoDir.exists() || !protoDir.isDirectory()) {
+            System.err.println("Invalid proto input directory: " + protoDir.getAbsolutePath());
+            System.exit(2);
+        }
 
-        <dependency>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java-util</artifactId>
-            <version>${protobuf-java.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.google.code.gson</groupId>
-                    <artifactId>gson</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
+        outputDir.mkdirs();
 
-        <dependency>
-            <groupId>com.google.code.gson</groupId>
-            <artifactId>gson</artifactId>
-            <version>2.12.1</version>
-        </dependency>
+        try {
+            // 1. Set up Freemarker
+            Configuration cfg = new Configuration(new Version("2.3.32"));
+            cfg.setClassForTemplateLoading(RestDtoGeneratorPlugin.class, "/templates");
+            cfg.setDefaultEncoding("UTF-8");
+            cfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
 
-        <!-- Freemarker for REST DTO generation -->
-        <dependency>
-            <groupId>org.freemarker</groupId>
-            <artifactId>freemarker</artifactId>
-            <version>2.3.32</version>
-        </dependency>
+            // 2. For each .proto file, parse and generate DTOs (pseudo code)
+            List<ProtoMessageModel> messageModels = ProtoParserUtil.parseAll(protoDir);
 
-        <!-- OS detection for platform-specific protoc -->
-        <dependency>
-            <groupId>kr.motd.maven</groupId>
-            <artifactId>os-maven-plugin</artifactId>
-            <version>1.7.0</version>
-        </dependency>
+            for (ProtoMessageModel model : messageModels) {
+                Template template = cfg.getTemplate("rest-dto.ftl");
+                File outFile = new File(outputDir, model.getClassName() + ".java");
+                TemplateWriterUtil.writeTemplate(template, model, outFile);
+            }
 
-        <!-- Test Dependencies -->
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>3.8.1</version>
-            <scope>test</scope>
-        </dependency>
+            System.out.println("REST DTO generation completed successfully.");
 
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.junit.vintage</groupId>
-                    <artifactId>junit-vintage-engine</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
-        <dependency>
-            <groupId>com.squareup.okhttp3</groupId>
-            <artifactId>mockwebserver</artifactId>
-            <version>4.11.0</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.assertj</groupId>
-            <artifactId>assertj-core</artifactId>
-            <scope>test</scope>
-        </dependency>
-
-    </dependencies>
-
-    <build>
-        <plugins>
-
-            <!-- Protobuf Java DTO generation -->
-            <plugin>
-                <groupId>org.xolstice.maven.plugins</groupId>
-                <artifactId>protobuf-maven-plugin</artifactId>
-                <version>0.6.1</version>
-                <executions>
-                    <execution>
-                        <id>generate-proto</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>compile</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <protocArtifact>com.google.protobuf:protoc:${protobuf-java.version}:exe:${os.detected.classifier}</protocArtifact>
-                </configuration>
-            </plugin>
-
-            <!-- Exec plugin to run RestDtoGeneratorPlugin -->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>3.1.0</version>
-                <executions>
-                    <execution>
-                        <id>generate-rest-dtos</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>java</goal>
-                        </goals>
-                        <configuration>
-                            <mainClass>osplus.pkptuna.protobuf.plugin.RestDtoGeneratorPlugin</mainClass>
-                            <arguments>
-                                <argument>${project.basedir}/src/main/proto</argument>
-                                <argument>${project.build.directory}/generated-sources/rest-dtos</argument>
-                            </arguments>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <!-- Include generated REST DTOs in the compile path -->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>build-helper-maven-plugin</artifactId>
-                <version>3.4.0</version>
-                <executions>
-                    <execution>
-                        <id>add-rest-dto-sources</id>
-                        <phase>generate-sources</phase>
-                        <goals><goal>add-source</goal></goals>
-                        <configuration>
-                            <sources>
-                                <source>${project.build.directory}/generated-sources/rest-dtos</source>
-                            </sources>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <!-- OS detection plugin for protoc -->
-            <plugin>
-                <groupId>kr.motd.maven</groupId>
-                <artifactId>os-maven-plugin</artifactId>
-                <version>1.7.0</version>
-                <executions>
-                    <execution>
-                        <goals><goal>detect</goal></goals>
-                        <phase>initialize</phase>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <!-- Add main class for your plugin -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-jar-plugin</artifactId>
-                <version>3.3.0</version>
-                <configuration>
-                    <archive>
-                        <manifest>
-                            <addClasspath>true</addClasspath>
-                            <mainClass>osplus.pkptuna.protobuf.plugin.RestDtoGeneratorPlugin</mainClass>
-                        </manifest>
-                    </archive>
-                </configuration>
-            </plugin>
-
-        </plugins>
-    </build>
-</project>
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.exit(3);
+        }
+    }
+}
