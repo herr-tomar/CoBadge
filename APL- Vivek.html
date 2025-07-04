@@ -1,8 +1,6 @@
-String originalName = message.getName();  // e.g., "DisputeLookupRequestDto"
-String className;
-
-if (originalName.endsWith("Dto")) {
-    className = originalName.replaceFirst("Dto$", "ModelDto"); // Safe replacement
-} else {
-    className = originalName + "ModelDto"; // fallback
-}
+<#-- Handle timestamp imports -->
+<#list fields?map(f -> f.javaType)?unique as type>
+<#if type == "Instant">
+import java.time.Instant;
+</#if>
+</#list>
