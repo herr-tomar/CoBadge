@@ -1,38 +1,50 @@
-[INFO]   from pom.xml
-[INFO] --------------------------------[ jar ]---------------------------------
-[INFO] 
-[INFO] --- enforcer:3.5.0:enforce (enforce-no-apl-snapshots-in-release-build) @ pkptuna-protobuf ---
-[INFO] Rule 0: org.apache.maven.enforcer.rules.dependency.RequireReleaseDeps passed
-[INFO] 
-[INFO] --- dependency:3.8.1:properties (default) @ pkptuna-protobuf ---
-[INFO] 
-[INFO] --- jacoco:0.8.12:prepare-agent (prepare-agent) @ pkptuna-protobuf ---
-[INFO] Skipping JaCoCo execution because property jacoco.skip is set.
-[INFO] surefireArgLine set to empty
-[INFO] 
-[INFO] --- apl:251.0.0-M7:set-build-properties (set-build-properties) @ pkptuna-protobuf ---
-[INFO] Build is Snapshot-Build. Maven-Variable apl.isSnapshotBuild is true
-[INFO] 
-[INFO] --- os:1.7.0:detect (default) @ pkptuna-protobuf ---
-[INFO] ------------------------------------------------------------------------
-[INFO] Detecting the operating system and CPU architecture
-[INFO] ------------------------------------------------------------------------
-[INFO] os.detected.name: windows
-[INFO] os.detected.arch: x86_64
-[INFO] os.detected.bitness: 64
-[INFO] os.detected.version: 10.0
-[INFO] os.detected.version.major: 10
-[INFO] os.detected.version.minor: 0
-[INFO] os.detected.classifier: windows-x86_64
-[INFO] 
-[INFO] --- build-helper:3.4.0:add-source (add-protobuf-sources) @ pkptuna-protobuf ---
-[INFO] Source directory: C:\DEV\pkptuna-mkp\pkptuna-protobuf\target\generated-sources\protobuf added.
-[INFO] 
-[INFO] --- protobuf:3.4.1:generate (generate-protobuf) @ pkptuna-protobuf ---
-[INFO] Ignoring provided path C:\DEV\pkptuna-mkp\pkptuna-protobuf\src\main\protobuf as it does not appear to actually exist
-[INFO] Ignoring provided path C:\DEV\pkptuna-mkp\pkptuna-protobuf\src\main\proto as it does not appear to actually exist
-[ERROR] No protobuf sources found. If this is unexpected, check your configuration and try again.
-[ERROR] Generation failed - NO SOURCES: No valid protobuf sources were found. Check the build logs above for more details.
-[INFO] ------------------------------------------------------------------------
-[INFO] BUILD FAILURE
-[INFO] ------------------------------------------------------------------------
+package osplus.pkptuna.util;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.protobuf.Message;
+import com.google.protobuf.util.JsonFormat;
+
+/**
+ * Hilfsklasse zur Umwandlung von Protobuf-Nachrichten in saubere JSON-Darstellungen.
+ */
+public final class CleanProtoJsonUtil {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    private CleanProtoJsonUtil() {
+        // statische Hilfsklasse – kein Konstruktor
+    }
+
+    /**
+     * Konvertiert eine Protobuf-Nachricht in eine JSON-Zeichenkette ohne Escape-Zeichen.
+     *
+     * @param message Protobuf-Nachricht
+     * @return Sauberer JSON-String
+     */
+    public static String toCleanJson(Message message) {
+        try {
+            String rawJson = JsonFormat.printer().print(message);
+            JsonNode tree = OBJECT_MAPPER.readTree(rawJson);  // parse string
+            return OBJECT_MAPPER.writeValueAsString(tree);    // reserialize cleanly
+        } catch (Exception e) {
+            throw new RuntimeException("Fehler beim Konvertieren von Protobuf zu JSON", e);
+        }
+    }
+
+    /**
+     * Optional: Gibt formatierte (pretty) JSON-Ausgabe zurück.
+     *
+     * @param message Protobuf-Nachricht
+     * @return Formatierter JSON-String
+     */
+    public static String toPrettyJson(Message message) {
+        try {
+            String rawJson = JsonFormat.printer().print(message);
+            JsonNode tree = OBJECT_MAPPER.readTree(rawJson);
+            return OBJECT_MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(tree);
+        } catch (Exception e) {
+            throw new RuntimeException("Fehler beim Formatieren von Protobuf als JSON", e);
+        }
+    }
+}
