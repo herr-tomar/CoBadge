@@ -1,3 +1,131 @@
+package ${packageName};
+
+public class ${className}Dto {
+
+<#list fields as field>
+    private ${field.type} ${field.name};
+</#list>
+
+<#list fields as field>
+
+    public ${field.type} get${field.name?cap_first}() {
+        return ${field.name};
+    }
+
+    public void set${field.name?cap_first}(${field.type} ${field.name}) {
+        this.${field.name} = ${field.name};
+    }
+</#list>
+
+}
+
+
+  ----------
+
+  package osplus.pkptuna.protobuf.plugin;
+
+import com.google.protobuf.DescriptorProtos;
+import com.google.protobuf.compiler.PluginProtos;
+import freemarker.template.*;
+
+import java.io.*;
+import java.util.*;
+
+public class RestDtoGeneratorPlugin {
+
+    public static void main(String[] args) throws Exception {
+        PluginProtos.CodeGeneratorRequest request = PluginProtos.CodeGeneratorRequest.parseFrom(System.in);
+        PluginProtos.CodeGeneratorResponse.Builder responseBuilder = PluginProtos.CodeGeneratorResponse.newBuilder();
+
+        Configuration cfg = new Configuration(Configuration.VERSION_2_3_31);
+        cfg.setClassLoaderForTemplateLoading(RestDtoGeneratorPlugin.class.getClassLoader(), "/templates");
+        cfg.setDefaultEncoding("UTF-8");
+
+        for (DescriptorProtos.FileDescriptorProto file : request.getProtoFileList()) {
+            if (!request.getFileToGenerateList().contains(file.getName())) continue;
+
+            String pkg = file.getPackage();
+
+            for (DescriptorProtos.DescriptorProto message : file.getMessageTypeList()) {
+                String className = message.getName();
+
+                List<Map<String, String>> fields = new ArrayList<>();
+                for (DescriptorProtos.FieldDescriptorProto field : message.getFieldList()) {
+                    Map<String, String> fieldMap = new HashMap<>();
+                    fieldMap.put("name", field.getName());
+                    fieldMap.put("type", mapProtoType(field.getType()));
+                    fields.add(fieldMap);
+                }
+
+                Map<String, Object> model = new HashMap<>();
+                model.put("packageName", pkg);
+                model.put("className", className);
+                model.put("fields", fields);
+
+                Template template = cfg.getTemplate("rest-pojo.ftl");
+
+                StringWriter writer = new StringWriter();
+                template.process(model, writer);
+
+                responseBuilder.addFile(PluginProtos.CodeGeneratorResponse.File.newBuilder()
+                        .setName(pkg.replace('.', '/') + "/" + className + "Dto.java")
+                        .setContent(writer.toString())
+                        .build());
+            }
+        }
+
+        PluginProtos.CodeGeneratorResponse response = responseBuilder.build();
+        response.writeTo(System.out);
+    }
+
+    private static String mapProtoType(DescriptorProtos.FieldDescriptorProto.Type type) {
+        switch (type) {
+            case TYPE_STRING: return "String";
+            case TYPE_INT32: return "int";
+            case TYPE_INT64: return "long";
+            case TYPE_BOOL: return "boolean";
+            case TYPE_FLOAT: return "float";
+            case TYPE_DOUBLE: return "double";
+            default: return "Object";
+        }
+    }
+}
+
+
+                  ---------
+
+                  <plugin>
+  <groupId>io.github.ascopes</groupId>
+  <artifactId>protobuf-maven-plugin</artifactId>
+  <version>3.4.1</version>
+  <executions>
+    <execution>
+      <id>generate-protobuf</id>
+      <phase>generate-sources</phase>
+      <goals>
+        <goal>generate</goal>
+      </goals>
+    </execution>
+  </executions>
+  <configuration>
+    <protocVersion>${protobuf-java.version}</protocVersion>
+    <outputDirectory>${project.build.directory}/generated-sources/protobuf</outputDirectory>
+
+    <!-- Register your plugin -->
+    <protocPlugins>
+      <protocPlugin>
+        <id>restdto</id>
+        <executable>${project.build.directory}/pkptuna-protobuf-1.0-SNAPSHOT.jar</executable>
+      </protocPlugin>
+    </protocPlugins>
+
+    <pluginId>restdto</pluginId>
+  </configuration>
+</plugin>
+
+
+---------
+
 <execution>
   <id>add-rest-dto-sources</id>
   <phase>generate-sources</phase>
@@ -10,3 +138,20 @@
     </sources>
   </configuration>
 </execution>
+
+
+-------------
+
+
+<plugin>
+  <groupId>org.apache.maven.plugins</groupId>
+  <artifactId>maven-jar-plugin</artifactId>
+  <version>3.3.0</version>
+  <configuration>
+    <archive>
+      <manifest>
+        <mainClass>osplus.pkptuna.protobuf.plugin.RestDtoGeneratorPlugin</mainClass>
+      </manifest>
+    </archive>
+  </configuration>
+</plugin>
