@@ -1,71 +1,16 @@
-package osplus.pkptuna.protobuf.plugin;
+package osplus.pkptuna.mapper;
 
-import freemarker.template.Configuration;
-import freemarker.template.Template;
-import freemarker.template.TemplateExceptionHandler;
-import freemarker.template.Version;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkptuna.protobuf.model.ProtoMessageModel;
-import osplus.pkptuna.protobuf.util.ProtoParserUtil;
-import osplus.pkptuna.protobuf.util.TemplateWriterUtil;
+import org.mapstruct.Mapper;
+import org.mapstruct.factory.Mappers;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
+import osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseModelDto;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.List;
+@Mapper(componentModel = "spring")
+public interface DisputeLookupMapper {
 
-public class RestDtoGeneratorPlugin {
+    DisputeLookupMapper INSTANCE = Mappers.getMapper(DisputeLookupMapper.class);
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(RestDtoGeneratorPlugin.class);
+    DisputeLookupResponseModelDto toRestDto(DisputeLookupResponseDto protoDto);
 
-    public static void main(String[] args) {
-        if (args.length < 2) {
-            LOGGER.error("Usage: RestDtoGeneratorPlugin <protoInputDir> <restDtoOutputDir>");
-            System.exit(1);
-        }
-
-        File protoDir = new File(args[0]);
-        File outputDir = new File(args[1]);
-
-        if (!protoDir.exists() || !protoDir.isDirectory()) {
-            LOGGER.error("Invalid proto input directory: " + protoDir.getAbsolutePath());
-            System.exit(2);
-        }
-
-        outputDir.mkdirs();
-
-        try {
-            // 1. Set up Freemarker
-            Configuration cfg = new Configuration(new Version("2.3.32"));
-            cfg.setClassForTemplateLoading(RestDtoGeneratorPlugin.class, "/templates");
-            cfg.setDefaultEncoding("UTF-8");
-            cfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
-
-            // 2. Parse proto messages
-            List<ProtoMessageModel> messageModels = ProtoParserUtil.parseAll(protoDir);
-
-            for (ProtoMessageModel model : messageModels) {
-                // Transform original packageName (from .proto) to REST version
-                String originalPkg = model.getPackageName();
-                String restPkg = originalPkg.replaceFirst("^osplus\\.pkptuna", "osplus.pkptuna.rest");
-                model.setPackageName(restPkg); // Update to transformed REST package
-
-                // Generate class using FreeMarker
-                Template template = cfg.getTemplate("rest-dto.ftl");
-
-                String relPath = restPkg.replace('.', '/');
-                File packageDir = new File(outputDir, relPath);
-                packageDir.mkdirs();
-
-                File outFile = new File(packageDir, model.getClassName() + ".java");
-                TemplateWriterUtil.writeTemplate(template, model, outFile);
-            }
-
-            LOGGER.info("REST DTO generation completed successfully.");
-
-        } catch (IOException e) {
-            e.printStackTrace();
-            System.exit(3);
-        }
-    }
+    DisputeLookupResponseDto toProtoDto(DisputeLookupResponseModelDto restDto);
 }
