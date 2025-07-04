@@ -1,162 +1,54 @@
-package ${javaPackage};
+package com.example.plugin;
 
-<#-- Optional: Add Lombok or Jackson annotations here -->
-// import com.fasterxml.jackson.annotation.JsonProperty;
-
-public class ${message.name}Dto {
-
-<#list message.fields as field>
-    // @JsonProperty("${field.name}")
-    private ${field.javaType} ${field.name};
-</#list>
-
-<#list message.fields as field>
-    public ${field.javaType} get${field.capName}() {
-        return ${field.name};
-    }
-
-    public void set${field.capName}(${field.javaType} ${field.name}) {
-        this.${field.name} = ${field.name};
-    }
-</#list>
-}
-
-
----------
-
-package com.example.codegen;
-
-import io.protostuff.compiler.model.Proto;
-import io.protostuff.compiler.model.Message;
-import io.protostuff.compiler.model.Field;
-import io.protostuff.compiler.parser.ProtoContext;
-import io.protostuff.compiler.parser.ProtoParser;
-import freemarker.template.*;
+import com.google.protobuf.compiler.PluginProtos.CodeGeneratorRequest;
+import com.google.protobuf.compiler.PluginProtos.CodeGeneratorResponse;
 
 import java.io.*;
-import java.nio.file.*;
-import java.util.*;
 
-public class ProtoToRestDtoGenerator {
-
-    private static final String PROTO_DIR = "src/main/proto";
-    private static final String TEMPLATE_DIR = "src/main/resources/templates";
-    private static final String OUTPUT_DIR = "target/generated-sources/rest-pojos";
-
+public class RestDtoGeneratorPlugin {
     public static void main(String[] args) throws Exception {
-        new ProtoToRestDtoGenerator().generate();
-    }
+        // Read CodeGeneratorRequest from stdin
+        CodeGeneratorRequest request = CodeGeneratorRequest.parseFrom(System.in);
+        CodeGeneratorResponse.Builder responseBuilder = CodeGeneratorResponse.newBuilder();
 
-    public void generate() throws Exception {
-        Configuration cfg = new Configuration(Configuration.VERSION_2_3_32);
-        cfg.setDirectoryForTemplateLoading(new File(TEMPLATE_DIR));
-        cfg.setDefaultEncoding("UTF-8");
-        cfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
+        for (var file : request.getProtoFileList()) {
+            if (!request.getFileToGenerateList().contains(file.getName())) continue;
 
-        Template template = cfg.getTemplate("dto.ftl");
+            for (var message : file.getMessageTypeList()) {
+                String className = message.getName() + "Dto";
+                StringBuilder content = new StringBuilder();
 
-        Files.createDirectories(Paths.get(OUTPUT_DIR));
+                content.append("package com.example.dto;\n\n");
+                content.append("public class ").append(className).append(" {\n");
 
-        File[] protoFiles = new File(PROTO_DIR).listFiles((dir, name) -> name.endsWith(".proto"));
-        if (protoFiles == null) return;
-
-        for (File protoFile : protoFiles) {
-            ProtoContext context = new ProtoContext();
-            new ProtoParser(context, protoFile).parse();
-
-            Proto proto = context.getProto();
-            String javaPackage = proto.getJavaPackage() != null
-                    ? proto.getJavaPackage()
-                    : proto.getPackage().getValue();
-
-            for (Message msg : proto.getMessages()) {
-                Map<String, Object> dataModel = new HashMap<>();
-                dataModel.put("javaPackage", javaPackage);
-                dataModel.put("message", new MessageModel(msg));
-
-                File outputFile = new File(OUTPUT_DIR, msg.getName() + "Dto.java");
-                try (Writer writer = new FileWriter(outputFile)) {
-                    template.process(dataModel, writer);
+                for (var field : message.getFieldList()) {
+                    String javaType = mapType(field.getType().name());
+                    content.append("    private ").append(javaType)
+                           .append(" ").append(field.getName()).append(";\n");
                 }
-                System.out.println("Generated: " + outputFile.getPath());
+
+                content.append("}\n");
+
+                // Build a file output entry
+                responseBuilder.addFile(CodeGeneratorResponse.File.newBuilder()
+                        .setName("com/example/dto/" + className + ".java")
+                        .setContent(content.toString()));
             }
         }
+
+        // Write CodeGeneratorResponse to stdout
+        responseBuilder.build().writeTo(System.out);
     }
 
-    public static class MessageModel {
-        public final String name;
-        public final List<FieldModel> fields;
-
-        public MessageModel(Message msg) {
-            this.name = msg.getName();
-            this.fields = new ArrayList<>();
-            for (Field<?> f : msg.getFields()) {
-                fields.add(new FieldModel(f));
-            }
-        }
-    }
-
-    public static class FieldModel {
-        public final String name;
-        public final String capName;
-        public final String javaType;
-
-        public FieldModel(Field<?> f) {
-            this.name = f.getName();
-            this.capName = capitalize(f.getName());
-            this.javaType = mapType(f.getType().getName());
-        }
-
-        private static String capitalize(String s) {
-            return s.substring(0, 1).toUpperCase() + s.substring(1);
-        }
-
-        private static String mapType(String protoType) {
-            return switch (protoType) {
-                case "string" -> "String";
-                case "int32" -> "int";
-                case "int64" -> "long";
-                case "bool" -> "boolean";
-                case "double" -> "double";
-                case "float" -> "float";
-                default -> "Object"; // fallback for custom/nested types
-            };
-        }
+    private static String mapType(String protoType) {
+        return switch (protoType) {
+            case "TYPE_STRING" -> "String";
+            case "TYPE_INT32" -> "int";
+            case "TYPE_INT64" -> "long";
+            case "TYPE_BOOL" -> "boolean";
+            case "TYPE_DOUBLE" -> "double";
+            case "TYPE_FLOAT" -> "float";
+            default -> "Object";
+        };
     }
 }
-
-_-------------------
-
-<plugin>
-  <groupId>org.codehaus.mojo</groupId>
-  <artifactId>exec-maven-plugin</artifactId>
-  <version>3.1.0</version>
-  <executions>
-    <execution>
-      <id>generate-rest-dtos</id>
-      <phase>generate-sources</phase>
-      <goals><goal>java</goal></goals>
-      <configuration>
-        <mainClass>com.example.codegen.ProtoToRestDtoGenerator</mainClass>
-      </configuration>
-    </execution>
-  </executions>
-</plugin>
-
-<plugin>
-  <groupId>org.codehaus.mojo</groupId>
-  <artifactId>build-helper-maven-plugin</artifactId>
-  <version>3.4.0</version>
-  <executions>
-    <execution>
-      <id>add-rest-sources</id>
-      <phase>generate-sources</phase>
-      <goals><goal>add-source</goal></goals>
-      <configuration>
-        <sources>
-          <source>${project.build.directory}/generated-sources/rest-pojos</source>
-        </sources>
-      </configuration>
-    </execution>
-  </executions>
-</plugin>
