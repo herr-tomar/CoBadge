@@ -1,50 +1,16 @@
-package osplus.pkptuna.util;
+2025-07-04 11:18:37.671 ERROR 13848 --- [omcat-handler-0] o.a.c.c.C.[.[.[.[dispatcherServlet]     : Servlet.service() for servlet [dispatcherServlet] in context with path [/pkptuna] threw exception [Request processing failed: org.springframework.http.converter.HttpMessageConversionException: Type definition error: [simple type, class com.google.protobuf.UnknownFieldSet]] with root cause
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.protobuf.Message;
-import com.google.protobuf.util.JsonFormat;
-
-/**
- * Hilfsklasse zur Umwandlung von Protobuf-Nachrichten in saubere JSON-Darstellungen.
- */
-public final class CleanProtoJsonUtil {
-
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
-    private CleanProtoJsonUtil() {
-        // statische Hilfsklasse – kein Konstruktor
-    }
-
-    /**
-     * Konvertiert eine Protobuf-Nachricht in eine JSON-Zeichenkette ohne Escape-Zeichen.
-     *
-     * @param message Protobuf-Nachricht
-     * @return Sauberer JSON-String
-     */
-    public static String toCleanJson(Message message) {
-        try {
-            String rawJson = JsonFormat.printer().print(message);
-            JsonNode tree = OBJECT_MAPPER.readTree(rawJson);  // parse string
-            return OBJECT_MAPPER.writeValueAsString(tree);    // reserialize cleanly
-        } catch (Exception e) {
-            throw new RuntimeException("Fehler beim Konvertieren von Protobuf zu JSON", e);
-        }
-    }
-
-    /**
-     * Optional: Gibt formatierte (pretty) JSON-Ausgabe zurück.
-     *
-     * @param message Protobuf-Nachricht
-     * @return Formatierter JSON-String
-     */
-    public static String toPrettyJson(Message message) {
-        try {
-            String rawJson = JsonFormat.printer().print(message);
-            JsonNode tree = OBJECT_MAPPER.readTree(rawJson);
-            return OBJECT_MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(tree);
-        } catch (Exception e) {
-            throw new RuntimeException("Fehler beim Formatieren von Protobuf als JSON", e);
-        }
-    }
-}
+com.fasterxml.jackson.databind.exc.InvalidDefinitionException: Direct self-reference leading to cycle (through reference chain: osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto["unknownFields"]->com.google.protobuf.UnknownFieldSet["defaultInstanceForType"])
+	at com.fasterxml.jackson.databind.exc.InvalidDefinitionException.from(InvalidDefinitionException.java:77) ~[jackson-databind-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.databind.SerializerProvider.reportBadDefinition(SerializerProvider.java:1359) ~[jackson-databind-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.databind.ser.BeanPropertyWriter._handleSelfReference(BeanPropertyWriter.java:953) ~[jackson-databind-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.databind.ser.BeanPropertyWriter.serializeAsField(BeanPropertyWriter.java:726) ~[jackson-databind-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.databind.ser.std.BeanSerializerBase.serializeFields(BeanSerializerBase.java:760) ~[jackson-databind-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.databind.ser.BeanSerializer.serialize(BeanSerializer.java:183) ~[jackson-databind-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.databind.ser.BeanPropertyWriter.serializeAsField(BeanPropertyWriter.java:732) ~[jackson-databind-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.databind.ser.std.BeanSerializerBase.serializeFields(BeanSerializerBase.java:760) ~[jackson-databind-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.databind.ser.BeanSerializer.serialize(BeanSerializer.java:183) ~[jackson-databind-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.databind.SerializerProvider.defaultSerializeValue(SerializerProvider.java:1185) ~[jackson-databind-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.databind.node.POJONode.serialize(POJONode.java:117) ~[jackson-databind-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.databind.node.ObjectNode.serialize(ObjectNode.java:509) ~[jackson-databind-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.databind.ser.std.SerializableSerializer.serialize(SerializableSerializer.java:39) ~[jackson-databind-2.19.1.jar:2.19.1]
