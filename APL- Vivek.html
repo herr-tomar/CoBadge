@@ -1,26 +1,23 @@
 <plugin>
-      <groupId>io.protostuff</groupId>
-      <artifactId>protostuff-maven-plugin</artifactId>
-      <version>3.1.40</version>
+  <groupId>io.protostuff</groupId>
+  <artifactId>protostuff-maven-plugin</artifactId>
+  <version>2.1.17</version>
+  <executions>
+    <execution>
+      <id>generate-rest-dtos</id>
+      <phase>generate-sources</phase>
+      <goals>
+        <goal>generate</goal>
+      </goals>
       <configuration>
-        <protoModules>
-          <protoModule>
-            <source>src/main/proto</source>
-            <outputDir>${project.build.directory}/generated-sources/proto-java</outputDir>
-            <output>java_bean</output>
-          </protoModule>
-        </protoModules>
+        <template>java_bean</template>
+        <inputDirectory>${project.basedir}/src/main/proto</inputDirectory>
+        <outputDirectory>${project.build.directory}/generated-sources/rest-pojos</outputDirectory>
       </configuration>
-      <executions>
-        <execution>
-          <id>generate-rest-dtos</id>
-          <phase>generate-sources</phase>
-          <goals>
-            <goal>compile</goal>
-          </goals>
-        </execution>
-      </executions>
-    </plugin>
+    </execution>
+  </executions>
+</plugin>
+
 
 
 ----
