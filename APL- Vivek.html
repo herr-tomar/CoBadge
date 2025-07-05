@@ -1,109 +1,12 @@
-<build>
-    <plugins>
-
-        <!-- Protobuf Java DTO generation -->
-        <plugin>
-            <groupId>io.github.ascopes</groupId>
-            <artifactId>protobuf-maven-plugin</artifactId>
-            <version>3.4.1</version>
-            <executions>
-                <execution>
-                    <id>generate-protobuf</id>
-                    <goals>
-                        <goal>generate</goal>
-                    </goals>
-                    <phase>generate-sources</phase>
-                </execution>
-            </executions>
-            <configuration>
-                <protocVersion>${protobuf-java.version}</protocVersion>
-                <outputDirectory>${project.build.directory}/generated-sources/protobuf</outputDirectory>
-            </configuration>
-        </plugin>
-
-        <!-- Exec plugin to run RestDtoGeneratorPlugin -->
-        <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>exec-maven-plugin</artifactId>
-            <version>3.1.0</version>
-            <executions>
-                <execution>
-                    <id>generate-rest-dtos</id>
-                    <phase>process-classes</phase>
-                    <goals>
-                        <goal>java</goal>
-                    </goals>
-                    <configuration>
-                        <mainClass>osplus.pkptuna.protobuf.plugin.RestDtoGeneratorPlugin</mainClass>
-                        <arguments>
-                            <argument>${project.basedir}/src/main/proto</argument>
-                            <argument>${project.build.directory}/generated-sources/rest-dtos</argument>
-                        </arguments>
-                    </configuration>
-                </execution>
-            </executions>
-        </plugin>
-
-        <!-- Include generated REST DTOs and Protobuf DTOs in compilation -->
-        <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>build-helper-maven-plugin</artifactId>
-            <version>3.4.0</version>
-            <executions>
-                <execution>
-                    <id>add-protobuf-sources</id>
-                    <phase>generate-sources</phase>
-                    <goals>
-                        <goal>add-source</goal>
-                    </goals>
-                    <configuration>
-                        <sources>
-                            <source>${project.build.directory}/generated-sources/protobuf</source>
-                        </sources>
-                    </configuration>
-                </execution>
-                <execution>
-                    <id>add-rest-dto-sources</id>
-                    <phase>process-classes</phase>
-                    <goals>
-                        <goal>add-source</goal>
-                    </goals>
-                    <configuration>
-                        <sources>
-                            <source>${project.build.directory}/generated-sources/rest-dtos</source>
-                        </sources>
-                    </configuration>
-                </execution>
-            </executions>
-        </plugin>
-
-        <!-- OS detection plugin -->
-        <plugin>
-            <groupId>kr.motd.maven</groupId>
-            <artifactId>os-maven-plugin</artifactId>
-            <version>1.7.0</version>
-            <executions>
-                <execution>
-                    <goals><goal>detect</goal></goals>
-                    <phase>initialize</phase>
-                </execution>
-            </executions>
-        </plugin>
-
-        <!-- Ensure manifest points to the generator main class -->
-        <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-jar-plugin</artifactId>
-            <version>3.3.0</version>
-            <configuration>
-                <archive>
-                    <manifest>
-                        <addClasspath>true</addClasspath>
-                        <mainClass>osplus.pkptuna.protobuf.plugin.RestDtoGeneratorPlugin</mainClass>
-                    </manifest>
-                </archive>
-            </configuration>
-        </plugin>
-
-    </plugins>
-</build>
+[INFO] 
+[INFO] --- exec:3.1.0:java (generate-rest-dtos) @ pkptuna-protobuf ---
+SLF4J(W): No SLF4J providers were found.
+SLF4J(W): Defaulting to no-operation (NOP) logger implementation
+SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
+freemarker.template.TemplateNotFoundException: Template not found for name "rest-dto.ftl".
+The name was interpreted by this TemplateLoader: ClassTemplateLoader(resourceLoaderClass=osplus.pkp.dto.plugin.RestDtoGeneratorPlugin, basePackagePath="/templates/").
+	at freemarker.template.Configuration.getTemplate(Configuration.java:3029)
+	at freemarker.template.Configuration.getTemplate(Configuration.java:2831)
+	at osplus.pkp.dto.plugin.RestDtoGeneratorPlugin.main(RestDtoGeneratorPlugin.java:48)
+	at org.codehaus.mojo.exec.ExecJavaMojo$1.run(ExecJavaMojo.java:279)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
