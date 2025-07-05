@@ -1,3 +1,82 @@
+package ${packageName};
+
+public class ${className} {
+
+<#list fields as field>
+    private ${field.javaType} ${field.name};
+</#list>
+
+<#list fields as field>
+    public ${field.javaType} get${field.name?cap_first}() {
+        return ${field.name};
+    }
+
+    public void set${field.name?cap_first}(${field.javaType} ${field.name}) {
+        this.${field.name} = ${field.name};
+    }
+</#list>
+
+}
+
+---------
+
+package osplus.pkptuna.protobuf.model;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class ProtoMessageModel {
+    private String className;
+    private String packageName;
+    private String mapperPackage;
+    private List<ProtoFieldModel> fields = new ArrayList<>();
+
+    public ProtoMessageModel(String className) {
+        this.className = className;
+    }
+
+    // DTO class name
+    public String getClassName() {
+        return className;
+    }
+
+    public void setClassName(String className) {
+        this.className = className;
+    }
+
+    // DTO package
+    public String getPackageName() {
+        return packageName;
+    }
+
+    public void setPackageName(String packageName) {
+        this.packageName = packageName;
+    }
+
+    // Mapper package (derived inside generator)
+    public String getMapperPackage() {
+        return mapperPackage;
+    }
+
+    public void setMapperPackage(String mapperPackage) {
+        this.mapperPackage = mapperPackage;
+    }
+
+    public List<ProtoFieldModel> getFields() {
+        return fields;
+    }
+
+    public void setFields(List<ProtoFieldModel> fields) {
+        this.fields = fields;
+    }
+
+    public void addField(ProtoFieldModel field) {
+        this.fields.add(field);
+    }
+}
+
+-------
+
 package osplus.pkptuna.protobuf.plugin;
 
 import freemarker.template.Configuration;
