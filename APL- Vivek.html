@@ -1,3 +1,52 @@
+
+package osplus.pkp.dto.model;
+
+public class ProtoFieldModel {
+    private final String protoType;
+    private final String fieldName;
+
+    public ProtoFieldModel(String protoType, String fieldName) {
+        this.protoType = protoType;
+        this.fieldName = fieldName;
+    }
+
+    public String getProtoType() {
+        return protoType;
+    }
+
+    public String getFieldName() {
+        return fieldName;
+    }
+
+    public String getJavaType() {
+        switch (protoType) {
+            case "int32":
+            case "sint32":
+            case "fixed32":
+                return "Integer";
+            case "int64":
+            case "sint64":
+            case "fixed64":
+                return "Long";
+            case "float":
+                return "Float";
+            case "double":
+                return "Double";
+            case "bool":
+                return "Boolean";
+            case "string":
+                return "String";
+            case "google.protobuf.Timestamp":
+                return "java.time.Instant";
+            default:
+                // For message types
+                return protoType.contains(".") ? protoType.substring(protoType.lastIndexOf('.') + 1) : protoType;
+        }
+    }
+}
+
+-----------
+
 package ${mapperPackage};
 
 import org.mapstruct.Mapper;
