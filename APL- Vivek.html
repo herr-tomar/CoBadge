@@ -218,91 +218,72 @@ public class ProtoMessageModel {
 }
 -------
 
-package osplus.pkptuna.protobuf.plugin;
+package osplus.pkp.dto.plugin;
 
-import freemarker.template.Configuration;
-import freemarker.template.Template;
-import freemarker.template.TemplateExceptionHandler;
-import freemarker.template.Version;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkptuna.protobuf.model.ProtoMessageModel;
-import osplus.pkptuna.protobuf.util.ProtoParserUtil;
-import osplus.pkptuna.protobuf.util.TemplateWriterUtil;
+import freemarker.template.*;
+import osplus.pkp.dto.model.ProtoMessageModel;
+import osplus.pkp.dto.util.ProtoParserUtil;
+import osplus.pkp.dto.util.TemplateWriterUtil;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.List;
+import java.util.*;
 
 public class RestDtoGeneratorPlugin {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(RestDtoGeneratorPlugin.class);
-
     public static void main(String[] args) {
         if (args.length < 2) {
-            LOGGER.error("Usage: RestDtoGeneratorPlugin <protoInputDir> <restDtoOutputDir>");
+            System.err.println("Usage: RestDtoGeneratorPlugin <protoInputDir> <restDtoOutputDir>");
             System.exit(1);
         }
 
         File protoDir = new File(args[0]);
         File outputDir = new File(args[1]);
 
-        if (!protoDir.exists() || !protoDir.isDirectory()) {
-            LOGGER.error("Invalid proto input directory: " + protoDir.getAbsolutePath());
+        if (!protoDir.exists()) {
+            System.err.println("Invalid proto input directory: " + protoDir.getAbsolutePath());
             System.exit(2);
         }
 
         outputDir.mkdirs();
 
         try {
-            // 1. Freemarker setup
-            Configuration cfg = new Configuration(new Version("2.3.32"));
+            Configuration cfg = new Configuration(Configuration.VERSION_2_3_32);
             cfg.setClassForTemplateLoading(RestDtoGeneratorPlugin.class, "/templates");
             cfg.setDefaultEncoding("UTF-8");
             cfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
 
             Template dtoTemplate = cfg.getTemplate("rest-dto.ftl");
-            Template mapperTemplate = cfg.getTemplate("rest-dto-mapper.ftl");
+            Template mapperTemplate = cfg.getTemplate("rest-mapper.ftl");
 
-            // 2. Parse proto files
-            List<ProtoMessageModel> messageModels = ProtoParserUtil.parseAll(protoDir);
+            List<ProtoMessageModel> messages = ProtoParserUtil.parseAll(protoDir);
 
-            for (ProtoMessageModel model : messageModels) {
-                // Adjust package name only once
-                String originalPackage = model.getPackageName();
-                if (!originalPackage.contains(".rest.")) {
-                    String base = originalPackage.startsWith("osplus.pkptuna.")
-                            ? originalPackage.substring("osplus.pkptuna.".length())
-                            : originalPackage;
-                    model.setPackageName("osplus.pkptuna.rest." + base);
-                }
+            for (ProtoMessageModel model : messages) {
+                // Generate DTO
+                Map<String, Object> dtoData = new HashMap<>();
+                dtoData.put("model", model);
 
-                // 3a. Generate DTO class
-                String dtoRelPath = model.getPackageName().replace('.', '/');
-                File dtoDir = new File(outputDir, dtoRelPath);
+                File dtoDir = new File(outputDir, model.getRestPackageName().replace('.', '/'));
                 dtoDir.mkdirs();
                 File dtoFile = new File(dtoDir, model.getClassName() + ".java");
-                TemplateWriterUtil.writeTemplate(dtoTemplate, model, dtoFile);
+                TemplateWriterUtil.writeTemplate(dtoTemplate, dtoData, dtoFile);
 
-                // 3b. Generate Mapper interface
-                String mapperPackage = model.getPackageName() + ".mapper";
-                String mapperRelPath = mapperPackage.replace('.', '/');
-                File mapperDir = new File(outputDir, mapperRelPath);
+                // Generate Mapper Interface
+                Map<String, Object> mapperData = new HashMap<>();
+                mapperData.put("model", model);
+
+                File mapperDir = new File(outputDir, model.getMapperPackageName().replace('.', '/'));
                 mapperDir.mkdirs();
-
-                model.setMapperPackage(mapperPackage); // You may need to add this field
                 File mapperFile = new File(mapperDir, model.getClassName() + "Mapper.java");
-                TemplateWriterUtil.writeTemplate(mapperTemplate, model, mapperFile);
-
-                LOGGER.info("Generated: DTO [{}] and Mapper [{}]",
-                        dtoFile.getAbsolutePath(), mapperFile.getAbsolutePath());
+                TemplateWriterUtil.writeTemplate(mapperTemplate, mapperData, mapperFile);
             }
 
-            LOGGER.info("REST DTO + Mapper generation completed successfully.");
+            System.out.println("REST DTOs and Mappers generated successfully.");
 
         } catch (IOException e) {
-            LOGGER.error("DTO/Mapper generation failed", e);
+            e.printStackTrace();
             System.exit(3);
         }
     }
 }
+
