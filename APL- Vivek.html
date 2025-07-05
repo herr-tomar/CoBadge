@@ -1,3 +1,23 @@
+package ${mapperPackage};
+
+import org.mapstruct.Mapper;
+
+@Mapper(componentModel = "spring")
+public interface ${className}Mapper {
+
+    osplus.pkptuna.rest.${packageName?substring("osplus.pkptuna.rest.".length())}.${className} toRestDto(
+        osplus.pkptuna.${packageName?substring("osplus.pkptuna.rest.".length())}.${className} source
+    );
+
+    osplus.pkptuna.${packageName?substring("osplus.pkptuna.rest.".length())}.${className} toProtoDto(
+        osplus.pkptuna.rest.${packageName?substring("osplus.pkptuna.rest.".length())}.${className} source
+    );
+}
+
+
+
+----------
+
 package ${packageName};
 
 public class ${className} {
