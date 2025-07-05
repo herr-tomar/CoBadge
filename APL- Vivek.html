@@ -120,44 +120,36 @@ public class ProtoFieldModel {
 
 -----------
 
-package ${mapperPackage};
+package ${model.mapperPackageName};
 
 import org.mapstruct.Mapper;
 
 @Mapper(componentModel = "spring")
-public interface ${className}Mapper {
-
-    osplus.pkptuna.rest.${packageName?substring("osplus.pkptuna.rest.".length())}.${className} toRestDto(
-        osplus.pkptuna.${packageName?substring("osplus.pkptuna.rest.".length())}.${className} source
-    );
-
-    osplus.pkptuna.${packageName?substring("osplus.pkptuna.rest.".length())}.${className} toProtoDto(
-        osplus.pkptuna.rest.${packageName?substring("osplus.pkptuna.rest.".length())}.${className} source
-    );
+public interface ${model.className}Mapper {
+    ${model.restPackageName}.${model.className} toRestDto(${model.packageName}.${model.className} protoDto);
 }
 
 
 
 ----------
 
-package ${packageName};
+package ${model.restPackageName};
 
-public class ${className} {
+public class ${model.className} {
 
-<#list fields as field>
-    private ${field.javaType} ${field.name};
+<#list model.fields as field>
+    private ${field.javaType} ${field.fieldName};
 </#list>
 
-<#list fields as field>
-    public ${field.javaType} get${field.name?cap_first}() {
-        return ${field.name};
+<#list model.fields as field>
+    public ${field.javaType} get${field.fieldName?cap_first}() {
+        return ${field.fieldName};
     }
 
-    public void set${field.name?cap_first}(${field.javaType} ${field.name}) {
-        this.${field.name} = ${field.name};
+    public void set${field.fieldName?cap_first}(${field.javaType} ${field.fieldName}) {
+        this.${field.fieldName} = ${field.fieldName};
     }
 </#list>
-
 }
 
 ---------
