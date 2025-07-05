@@ -1,3 +1,76 @@
+package osplus.pkp.dto.util;
+
+import osplus.pkp.dto.model.ProtoFieldModel;
+import osplus.pkp.dto.model.ProtoMessageModel;
+
+import java.io.*;
+import java.util.*;
+
+public class ProtoParserUtil {
+
+    public static List<ProtoMessageModel> parseAll(File protoDir) {
+        List<ProtoMessageModel> messages = new ArrayList<>();
+        File[] protoFiles = protoDir.listFiles((dir, name) -> name.endsWith(".proto"));
+        if (protoFiles == null) {
+            return messages;
+        }
+
+        for (File protoFile : protoFiles) {
+            messages.addAll(parse(protoFile));
+        }
+        return messages;
+    }
+
+    public static List<ProtoMessageModel> parse(File protoFile) {
+        List<ProtoMessageModel> messageModels = new ArrayList<>();
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(protoFile))) {
+            String line;
+            String packageName = null;
+            ProtoMessageModel currentMessage = null;
+
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (line.startsWith("package ")) {
+                    packageName = line.split("\\s+")[1].replace(";", "").trim();
+                    continue;
+                }
+
+                if (line.startsWith("message ")) {
+                    String messageName = line.split("\\s+")[1].replace("{", "").trim();
+                    currentMessage = new ProtoMessageModel(messageName);
+                    currentMessage.setPackageName(packageName);
+                    continue;
+                }
+
+                if (line.startsWith("}")) {
+                    if (currentMessage != null) {
+                        messageModels.add(currentMessage);
+                        currentMessage = null;
+                    }
+                    continue;
+                }
+
+                if (currentMessage != null && !line.isEmpty() && line.contains(";")) {
+                    line = line.replaceAll("^(optional|required|repeated)\\s+", "");
+                    String[] parts = line.split("\\s+");
+                    if (parts.length >= 2) {
+                        String type = parts[0];
+                        String name = parts[1].split("=")[0].replace(";", "").trim();
+                        currentMessage.addField(new ProtoFieldModel(type, name));
+                    }
+                }
+            }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return messageModels;
+    }
+}
+
+---------------
 
 package osplus.pkp.dto.model;
 
