@@ -1,4 +1,9 @@
-package osplus.pkptuna.rest.rest.dispute.lookup.model.mapper;
-
-/**
-* Auto-generated mapper interface for 
+private static String insertRestInPackage(String originalPackage) {
+    String[] parts = originalPackage.split("\\.");
+    if (parts.length >= 2 && !parts[2].equals("rest")) {
+        List<String> result = new ArrayList<>(Arrays.asList(parts));
+        result.add(2, "rest"); // Insert after base domain (e.g., osplus.pkptuna)
+        return String.join(".", result);
+    }
+    return originalPackage;
+}
