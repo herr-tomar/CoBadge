@@ -1,51 +1,56 @@
-/**
-     * UI-Service-Endpunkt zur asynchronen Übermittlung einer Dispute-Lookup-Anfrage über Hazelcast.
-     * Antwort wird innerhalb von 5 Sekunden erwartet.
-     *
-     * @param issuerId      Herausgeberkennung
-     * @param cardReference Kartenreferenz
-     * @return              JSON-Antwort des {@link DisputeLookupResponseDto} oder Fehler-/Timeout-Nachricht
-     */
-    @UiService(value = "publishDisputesLookupRequest", method = MethodType.GET, requiresAuthentication = false)
-    public osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto  publishDisputesLookupRequest(
-            @ServiceParam("issuerId") String issuerId,
-            @ServiceParam("cardReference") String cardReference) {
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import osplus.pkptuna.rest.common.model.ApiResponse;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
-        try {
-            String correlationId = UUID.randomUUID().toString();
+@UiService(value = "publishDisputesLookupRequest", method = MethodType.GET, requiresAuthentication = false)
+public ResponseEntity<ApiResponse<osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto>> publishDisputesLookupRequest(
+        @ServiceParam("issuerId") String issuerId,
+        @ServiceParam("cardReference") String cardReference) {
 
-            DisputeLookupRequestMetadataDto metadataDto = DisputeLookupRequestMetadataDto.newBuilder()
-                    .setRequestChannel("APL-UI")
-                    .setMessageType("DISPUTE_LOOKUP")
-                    .setRequestedBy("UI-MANUAL-TEST")
-                    .setBusinessContext("test")
-                    .build();
+    try {
+        String correlationId = UUID.randomUUID().toString();
 
-            DisputeLookupRequestDto request = DisputeLookupRequestDto.newBuilder()
-                    .setMetadata(metadataDto)
-                    .setIssuerId(issuerId)
-                    .setCardReference(cardReference)
-                    .build();
+        DisputeLookupRequestMetadataDto metadataDto = DisputeLookupRequestMetadataDto.newBuilder()
+                .setRequestChannel("APL-UI")
+                .setMessageType("DISPUTE_LOOKUP")
+                .setRequestedBy("UI-MANUAL-TEST")
+                .setBusinessContext("test")
+                .build();
 
-            DisputeLookupRequestWrapperDto wrapper = DisputeLookupRequestWrapperDto.newBuilder()
-                    .setCorrelationId(correlationId)
-                    .setPayload(request)
-                    .build();
+        DisputeLookupRequestDto request = DisputeLookupRequestDto.newBuilder()
+                .setMetadata(metadataDto)
+                .setIssuerId(issuerId)
+                .setCardReference(cardReference)
+                .build();
 
-            hazelcastInstance.getReliableTopic("DisputeLookupRequestReliableTopic")
-                    .publish(wrapper.toByteArray());
+        DisputeLookupRequestWrapperDto wrapper = DisputeLookupRequestWrapperDto.newBuilder()
+                .setCorrelationId(correlationId)
+                .setPayload(request)
+                .build();
 
-            disputeLookupResponseTracker.register(correlationId);
-            CompletableFuture<DisputeLookupResponseDto> future = disputeLookupResponseTracker.await(correlationId);
+        hazelcastInstance.getReliableTopic("DisputeLookupRequestReliableTopic")
+                .publish(wrapper.toByteArray());
 
-            DisputeLookupResponseDto response = future.get(5, TimeUnit.SECONDS);
-            
-            return disputeLookupResponseDtoMapper.toRestDto(response);
+        disputeLookupResponseTracker.register(correlationId);
+        CompletableFuture<DisputeLookupResponseDto> future = disputeLookupResponseTracker.await(correlationId);
 
-        } catch (TimeoutException te) {
-            return "{ \"status\": \"timeout\", \"message\": \"No response in 5 seconds\" }";
-        } catch (Exception e) {
-            LOGGER.error("Failed to process publishDisputesLookupRequest", e);
-            return "{ \"status\": \"error\", \"message\": \"" + e.getMessage() + "\" }";
-        }
+        DisputeLookupResponseDto protoResponse = future.get(5, TimeUnit.SECONDS);
+        osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto restResponse =
+                disputeLookupResponseDtoMapper.toRestDto(protoResponse);
+
+        return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
+
+    } catch (TimeoutException te) {
+        return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
+                .body(new ApiResponse<>("timeout", "No response in 5 seconds", null));
+
+    } catch (Exception e) {
+        LOGGER.error("Failed to process publishDisputesLookupRequest", e);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ApiResponse<>("error", "Internal server error", null));
     }
+}
