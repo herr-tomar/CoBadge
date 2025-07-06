@@ -1,7 +1,16 @@
-Map<String, Object> mapperData = new HashMap<>();
-mapperData.put("mapperPackage", insertRestInPackage(model.getPackageName()) + ".mapper");
-mapperData.put("protoDtoPackage", model.getPackageName());
-mapperData.put("protoDtoClassName", model.getClassName());
-mapperData.put("restDtoPackage", insertRestInPackage(model.getPackageName()));
-mapperData.put("restDtoClassName", model.getClassName());
-mapperData.put("mapperInterfaceName", model.getClassName().replace("Dto", "") + "Mapper");
+package osplus.pkptuna.rest.dispute.model.mapper;
+
+/**
+* Auto-generated mapper interface for LinksDto
+*/
+
+import org.mapstruct.Mapper;
+import osplus.pkptuna.rest.dispute.model.LinksDto;
+import osplus.pkptuna.rest.dispute.model.LinksDto;
+
+@org.mapstruct.Mapper(componentModel = "spring")
+public interface LinksMapper {
+
+LinksDto toRestDto(LinksDto proto);
+
+}
