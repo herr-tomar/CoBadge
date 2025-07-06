@@ -9,7 +9,7 @@ import org.mapstruct.factory.Mappers;
 import osplus.apl.core.api.AplComponent;
 import osplus.pkptuna.protobuf.util.TimestampMapper;
 
-<#-- Import custom mappers -->
+<#-- Import all custom mappers -->
 <#list customMapperClassNames as mapperImport>
 import ${mapperImport};
 </#list>
@@ -19,7 +19,8 @@ import ${mapperImport};
     uses = {
         TimestampMapper
         <#list customMapperClassNames as mapper>
-            , ${mapper?substring(mapper?last_index_of(".") + 1)}
+            <#assign simpleName = mapper?keep_after_last(".")>
+            , ${simpleName}
         </#list>
     }
 )
