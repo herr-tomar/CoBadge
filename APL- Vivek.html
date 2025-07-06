@@ -1,22 +1,12 @@
-package osplus.pkptuna.rest.dispute.model.mapper;
-
-/**
-* Auto-generated mapper interface for EventDto
-*/
-
-import org.mapstruct.Mapper;
-import org.mapstruct.factory.Mappers;
-import osplus.apl.core.api.AplComponent;
-
-@AplComponent
-
+<#if customMapperClassNames?size != 0>
 @Mapper(
+    uses = {
+        osplus.pkptuna.protobuf.util.TimestampMapper
+        <#list customMapperClassNames as mapper>
+        , ${mapper}
+        </#list>
+    }
 )
-
-public interface EventDtoMapper {
-
-EventDtoMapper INSTANCE = Mappers.getMapper(EventDtoMapper.class);
-
-osplus.pkptuna.rest.dispute.model.EventDto toRestDto(osplus.pkptuna.dispute.model.EventDto proto);
-
-}
+<#else>
+@Mapper(uses = osplus.pkptuna.protobuf.util.TimestampMapper.class)
+</#if>
