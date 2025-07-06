@@ -1,3 +1,4 @@
+<#-- Required imports -->
 package ${mapperPackage};
 
 /**
@@ -9,16 +10,17 @@ import org.mapstruct.factory.Mappers;
 import osplus.apl.core.api.AplComponent;
 import osplus.pkptuna.protobuf.util.TimestampMapper;
 
-<#list customMapperImports as importLine>
-import ${importLine};
+<#-- Import custom mapper classes -->
+<#list customMapperImports as imp>
+import ${imp};
 </#list>
 
 @AplComponent
 <#if customMapperSimpleNames?size != 0>
 @Mapper(uses = {
-    TimestampMapper
-    <#list customMapperSimpleNames as simpleName>
-        , ${simpleName}
+    TimestampMapper.class
+    <#list customMapperSimpleNames as mapper>
+        , ${mapper}.class
     </#list>
 })
 <#else>
