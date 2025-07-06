@@ -1,18 +1,96 @@
-package osplus.pkp.dto.util;
+package osplus.pkp.dto.plugin;
 
+import freemarker.template.Configuration;
 import freemarker.template.Template;
+import freemarker.template.TemplateExceptionHandler;
+import freemarker.template.Version;
+import osplus.pkp.dto.model.ProtoMessageModel;
+import osplus.pkp.dto.util.ProtoParserUtil;
+import osplus.pkp.dto.util.TemplateWriterUtil;
 
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileWriter;
-import java.io.Writer;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
-public class TemplateWriterUtil {
+public class RestDtoGeneratorPlugin {
 
-    public static void writeTemplate(Template template, Map<String, Object> dataModel, File outputFile) throws Exception {
-        try (Writer writer = new BufferedWriter(new FileWriter(outputFile))) {
-            template.process(dataModel, writer);
+    public static void main(String[] args) {
+        if (args.length < 2) {
+            System.err.println("Usage: RestDtoGeneratorPlugin <protoInputDir> <restDtoOutputDir>");
+            System.exit(1);
         }
+
+        File protoDir = new File(args[0]);
+        File outputDir = new File(args[1]);
+
+        if (!protoDir.exists() || !protoDir.isDirectory()) {
+            System.err.println("Invalid proto input directory: " + protoDir.getAbsolutePath());
+            System.exit(2);
+        }
+
+        outputDir.mkdirs();
+
+        try {
+            // FreeMarker configuration
+            Configuration cfg = new Configuration(new Version("2.3.32"));
+            cfg.setClassForTemplateLoading(RestDtoGeneratorPlugin.class, "/templates");
+            cfg.setDefaultEncoding("UTF-8");
+            cfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
+
+            // Load templates
+            Template dtoTemplate = cfg.getTemplate("rest-dto.ftl");
+            Template mapperTemplate = cfg.getTemplate("mapper-interface.ftl");
+
+            List<ProtoMessageModel> messageModels = ProtoParserUtil.parseAll(protoDir);
+
+            for (ProtoMessageModel model : messageModels) {
+                // Determine package structure
+                String protoPackage = model.getPackageName();
+                String restPackage = insertRestInPackage(protoPackage);
+                String mapperPackage = restPackage + ".mapper";
+
+                // Generate DTO
+                String dtoPath = restPackage.replace('.', '/');
+                File dtoDir = new File(outputDir, dtoPath);
+                dtoDir.mkdirs();
+                File dtoFile = new File(dtoDir, model.getClassName() + ".java");
+                TemplateWriterUtil.writeTemplate(dtoTemplate, model, dtoFile);
+
+                // Generate Mapper Interface
+                Map<String, Object> mapperData = new HashMap<>();
+                mapperData.put("mapperPackage", mapperPackage);
+                mapperData.put("mapperInterfaceName", model.getClassName() + "Mapper");
+                mapperData.put("protoDtoPackage", protoPackage);
+                mapperData.put("protoDtoClassName", model.getClassName());
+                mapperData.put("restDtoPackage", restPackage);
+                mapperData.put("restDtoClassName", model.getClassName());
+
+                File mapperDir = new File(outputDir, mapperPackage.replace('.', '/'));
+                mapperDir.mkdirs();
+                File mapperFile = new File(mapperDir, model.getClassName() + "Mapper.java");
+                TemplateWriterUtil.writeTemplate(mapperTemplate, mapperData, mapperFile);
+            }
+
+            System.out.println("REST DTO and Mapper interface generation completed successfully.");
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.exit(3);
+        }
+    }
+
+    private static String insertRestInPackage(String originalPackage) {
+        String[] parts = originalPackage.split("\\.");
+        if (parts.length < 2) {
+            return originalPackage + ".rest";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append(parts[0]).append('.').append(parts[1]).append(".rest");
+        for (int i = 2; i < parts.length; i++) {
+            sb.append('.').append(parts[i]);
+        }
+        return sb.toString();
     }
 }
