@@ -4,10 +4,12 @@ public class ProtoFieldModel {
 
     private final String protoType;
     private final String name;
+    private final boolean repeated;
 
-    public ProtoFieldModel(String protoType, String name) {
+    public ProtoFieldModel(String protoType, String name, boolean repeated) {
         this.protoType = protoType;
         this.name = name;
+        this.repeated = repeated;
     }
 
     public String getProtoType() {
@@ -18,8 +20,12 @@ public class ProtoFieldModel {
         return name;
     }
 
+    public boolean isRepeated() {
+        return repeated;
+    }
+
     public String getJavaType() {
-        return switch (protoType) {
+        String javaType = switch (protoType) {
             case "string" -> "String";
             case "bool" -> "Boolean";
             case "int32", "sint32", "uint32", "fixed32" -> "Integer";
@@ -28,15 +34,13 @@ public class ProtoFieldModel {
             case "double" -> "Double";
             case "bytes" -> "byte[]";
             case "google.protobuf.Timestamp" -> "java.time.Instant";
-            default -> protoType.endsWith("Dto") ? protoType : "Object"; // fallback or nested type
+            default -> protoType.endsWith("Dto") ? protoType : "Object";
         };
+
+        return repeated ? "List<" + javaType + ">" : javaType;
     }
 
     public boolean isCustomType() {
         return !protoType.matches("string|bool|int32|sint32|uint32|fixed32|int64|sint64|uint64|fixed64|float|double|bytes|google.protobuf.Timestamp");
-    }
-
-    public boolean isRepeated() {
-        return false; // can be updated later if 'repeated' modifier is parsed
     }
 }
