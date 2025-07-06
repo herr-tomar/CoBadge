@@ -1,28 +1,49 @@
 @UiService(value = "disputeLookup", method = MethodType.GET, requiresAuthentication = false)
-    public osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto lookupDisputeFolder(
-            @ServiceParam("issuerId") String issuerId,
-            @ServiceParam("cardReference") String cardReference) {
+public ResponseEntity<ApiResponse<osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto>> lookupDisputeFolder(
+        @ServiceParam("issuerId") String issuerId,
+        @ServiceParam("cardReference") String cardReference) {
 
-        LOGGER.info("Received lookupDisputeFolder request for issuerId={} and cardReference={}", issuerId, cardReference);
-        DisputeLookupResponseDto dto = disputeService.lookupDisputeFolder(issuerId, cardReference);
-        return disputeLookupResponseDtoMapper.toRestDto(dto);
+    LOGGER.info("Received lookupDisputeFolder request for issuerId={} and cardReference={}", issuerId, cardReference);
+
+    try {
+        DisputeLookupResponseDto protoResponse = disputeService.lookupDisputeFolder(issuerId, cardReference);
+        osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto restResponse =
+                disputeLookupResponseDtoMapper.toRestDto(protoResponse);
+
+        return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
+    } catch (Exception e) {
+        LOGGER.error("Failed to lookup dispute folder", e);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ApiResponse<>("error", "Internal server error", null));
     }
+}
 
-    -----
 
-@UiService(value = "disputeDetails", method = MethodType.GET, requiresAuthentication = false)
-    public osplus.pkptuna.rest.dispute.model.DisputeResponseDto getDisputeDetails(
-            @ServiceParam("issuerId") String issuerId,
-            @ServiceParam("disputeFolderReference") String disputeFolderReference,
-            @ServiceParam(value = "embed") String embed) {
+                    ----
 
-        LOGGER.info("Fetching dispute folder details for issuerId={} and folderRef={} with embed={}",
-                issuerId, disputeFolderReference, embed);
 
-        List<String> embedList = (embed != null && !embed.isEmpty())
-                ? Arrays.asList(embed.split(","))
+                    @UiService(value = "disputeDetails", method = MethodType.GET, requiresAuthentication = false)
+public ResponseEntity<ApiResponse<osplus.pkptuna.rest.dispute.model.DisputeResponseDto>> getDisputeDetails(
+        @ServiceParam("issuerId") String issuerId,
+        @ServiceParam("disputeFolderReference") String disputeFolderReference,
+        @ServiceParam(value = "embed") String embed) {
+
+    LOGGER.info("Fetching dispute folder details for issuerId={} and folderRef={} with embed={}",
+            issuerId, disputeFolderReference, embed);
+
+    try {
+        List<String> embedList = (embed != null && !embed.isBlank())
+                ? Arrays.asList(embed.split("\\s*,\\s*"))
                 : null;
 
-        DisputeResponseDto dto = disputeDetailService.getDisputeFolderDetails(issuerId, disputeFolderReference, embedList);
-        return disputeResponseDtoMapper.toRestDto(dto);
+        DisputeResponseDto protoResponse = disputeDetailService.getDisputeFolderDetails(issuerId, disputeFolderReference, embedList);
+        osplus.pkptuna.rest.dispute.model.DisputeResponseDto restResponse =
+                disputeResponseDtoMapper.toRestDto(protoResponse);
+
+        return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
+    } catch (Exception e) {
+        LOGGER.error("Failed to fetch dispute folder details", e);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ApiResponse<>("error", "Internal server error", null));
     }
+}
