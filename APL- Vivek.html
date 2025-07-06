@@ -7,26 +7,26 @@ package ${mapperPackage};
 import org.mapstruct.Mapper;
 import org.mapstruct.factory.Mappers;
 import osplus.apl.core.api.AplComponent;
+import osplus.pkptuna.protobuf.util.TimestampMapper;
+
+<#-- Import custom mappers -->
+<#list customMapperClassNames as mapperImport>
+import ${mapperImport};
+</#list>
 
 @AplComponent
-
-<#if customMapperClassNames?size != 0>
-    @Mapper(
+@Mapper(
     uses = {
-    osplus.pkptuna.protobuf.util.TimestampMapper
-    <#list customMapperClassNames as mapper>
-        , ${mapper}
-    </#list>
+        TimestampMapper
+        <#list customMapperClassNames as mapper>
+            , ${mapper?substring(mapper?last_index_of(".") + 1)}
+        </#list>
     }
-    )
-<#else>
-    @Mapper(uses = osplus.pkptuna.protobuf.util.TimestampMapper.class)
-</#if>
-
+)
 public interface ${mapperInterfaceName} {
 
-${mapperInterfaceName} INSTANCE = Mappers.getMapper(${mapperInterfaceName}.class);
+    ${mapperInterfaceName} INSTANCE = Mappers.getMapper(${mapperInterfaceName}.class);
 
-${restDtoPackage}.${restDtoClassName} toRestDto(${protoDtoPackage}.${protoDtoClassName} proto);
+    ${restDtoPackage}.${restDtoClassName} toRestDto(${protoDtoPackage}.${protoDtoClassName} proto);
 
 }
