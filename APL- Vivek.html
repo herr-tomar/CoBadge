@@ -1,42 +1,92 @@
-package osplus.pkp.dto.model;
+package osplus.pkp.dto.util;
 
-public class ProtoFieldModel {
+import osplus.pkp.dto.model.ProtoFieldModel;
+import osplus.pkp.dto.model.ProtoMessageModel;
 
-    private final String protoType;
-    private final String name;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.util.ArrayList;
+import java.util.List;
 
-    public ProtoFieldModel(String protoType, String name) {
-        this.protoType = protoType;
-        this.name = name;
+public class ProtoParserUtil {
+
+    public static List<ProtoMessageModel> parseAll(File protoDir) {
+        List<ProtoMessageModel> messages = new ArrayList<>();
+        File[] protoFiles = protoDir.listFiles((dir, name) -> name.endsWith(".proto"));
+        if (protoFiles == null) {
+            return messages;
+        }
+
+        for (File protoFile : protoFiles) {
+            messages.addAll(parse(protoFile));
+        }
+        return messages;
     }
 
-    public String getProtoType() {
-        return protoType;
+    public static List<ProtoMessageModel> parse(File protoFile) {
+        List<ProtoMessageModel> messageModels = new ArrayList<>();
+        try (BufferedReader reader = new BufferedReader(new FileReader(protoFile))) {
+            String packageName = null;
+            ProtoMessageModel currentMessage = null;
+
+            String line = reader.readLine();
+            while (line != null) {
+                line = line.trim();
+
+                if (line.startsWith("package ")) {
+                    String[] parts = line.split("\\s+");
+                    if (parts.length >= 2) {
+                        packageName = parts[1].replace(";", "").trim();
+                    }
+                } else if (line.startsWith("message ")) {
+                    String messageName = line.split("\\s+")[1].replace("{", "").trim();
+                    currentMessage = new ProtoMessageModel(messageName);
+                    currentMessage.setProtoPackageName(packageName);
+                    currentMessage.setPackageName(insertRestIntoPackage(packageName));
+                } else if (line.startsWith("}")) {
+                    if (currentMessage != null) {
+                        messageModels.add(currentMessage);
+                        currentMessage = null;
+                    }
+                } else if (currentMessage != null && !line.isEmpty() && line.contains(";")) {
+                    line = line.replaceAll("^(optional|required|repeated)\\s+", "");
+
+                    String[] parts = line.split("\\s+");
+                    if (parts.length >= 2) {
+                        String type = parts[0];
+                        String name = parts[1];
+                        if (name.contains("=")) {
+                            name = name.substring(0, name.indexOf("=")).trim();
+                        }
+                        name = name.replace(";", "").trim();
+                        currentMessage.addField(new ProtoFieldModel(type, name));
+                    }
+                }
+
+                line = reader.readLine(); // move readLine outside of the condition
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to parse proto file: " + protoFile.getName());
+            e.printStackTrace();
+        }
+
+        return messageModels;
     }
 
-    public String getName() {
-        return name;
-    }
-
-    public String getJavaType() {
-        return switch (protoType) {
-            case "string" -> "String";
-            case "bool" -> "Boolean";
-            case "int32", "sint32", "uint32", "fixed32" -> "Integer";
-            case "int64", "sint64", "uint64", "fixed64" -> "Long";
-            case "float" -> "Float";
-            case "double" -> "Double";
-            case "bytes" -> "byte[]";
-            case "google.protobuf.Timestamp" -> "java.time.Instant";
-            default -> protoType.endsWith("Dto") ? protoType : "Object"; // fallback or nested type
-        };
-    }
-
-    public boolean isCustomType() {
-        return !protoType.matches("string|bool|int32|sint32|uint32|fixed32|int64|sint64|uint64|fixed64|float|double|bytes|google.protobuf.Timestamp");
-    }
-
-    public boolean isRepeated() {
-        return false; // can be updated later if 'repeated' modifier is parsed
+    private static String insertRestIntoPackage(String originalPackage) {
+        if (originalPackage == null || originalPackage.isEmpty()) {
+            return "rest";
+        }
+        String[] parts = originalPackage.split("\\.");
+        if (parts.length < 2) {
+            return originalPackage + ".rest";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append(parts[0]).append(".").append(parts[1]).append(".rest");
+        for (int i = 2; i < parts.length; i++) {
+            sb.append(".").append(parts[i]);
+        }
+        return sb.toString();
     }
 }
