@@ -15,15 +15,19 @@ import ${mapperImport};
 </#list>
 
 @AplComponent
+<#if customMapperClassNames?size != 0>
 @Mapper(
     uses = {
         TimestampMapper
         <#list customMapperClassNames as mapper>
-            <#assign simpleName = mapper?split("\\.")?last>
+            <#assign simpleName = mapper?replace(".*\\.", "")>
             , ${simpleName}
         </#list>
     }
 )
+<#else>
+@Mapper(uses = TimestampMapper.class)
+</#if>
 public interface ${mapperInterfaceName} {
 
     ${mapperInterfaceName} INSTANCE = Mappers.getMapper(${mapperInterfaceName}.class);
