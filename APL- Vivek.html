@@ -1,7 +1,7 @@
-package ${mapperPackage};
+package osplus.pkptuna.rest.dispute.model.mapper;
 
 /**
-* Auto-generated mapper interface for ${protoDtoClassName}
+* Auto-generated mapper interface for DataDto
 */
 
 import org.mapstruct.Mapper;
@@ -10,41 +10,44 @@ import org.mapstruct.factory.Mappers;
 import osplus.apl.core.api.AplComponent;
 import osplus.pkptuna.protobuf.util.TimestampMapper;
 
-<#-- Import custom mapper classes -->
-<#list customMapperImports as imp>
-import ${imp};
-</#list>
+    import osplus.pkptuna.rest.dispute.model.mapper.DisputeFolderIdentifierDtoMapper;
+    import osplus.pkptuna.rest.dispute.model.mapper.EventDtoMapper;
+    import osplus.pkptuna.rest.dispute.model.mapper.PostingDtoMapper;
+    import osplus.pkptuna.rest.dispute.model.mapper.DocumentDtoMapper;
+    import osplus.pkptuna.rest.dispute.model.mapper.MessageDtoMapper;
+    import osplus.pkptuna.rest.dispute.model.mapper.AmountDtoMapper;
+    import osplus.pkptuna.rest.dispute.model.mapper.AmountDtoMapper;
+    import osplus.pkptuna.rest.dispute.model.mapper.AmountDtoMapper;
+    import osplus.pkptuna.rest.dispute.model.mapper.AmountDtoMapper;
+    import osplus.pkptuna.rest.dispute.model.mapper.AmountDtoMapper;
+    import osplus.pkptuna.rest.dispute.model.mapper.AmountDtoMapper;
+    import osplus.pkptuna.rest.dispute.model.mapper.CardIdentifierDtoMapper;
 
 @AplComponent
 @Mapper(
-    uses = {
-        TimestampMapper.class
-        <#list customMapperSimpleNames as mapper>
-        , ${mapper}.class
-        </#list>
-    }
+uses = {
+TimestampMapper.class
+    , DisputeFolderIdentifierDtoMapper.class
+    , EventDtoMapper.class
+    , PostingDtoMapper.class
+    , DocumentDtoMapper.class
+    , MessageDtoMapper.class
+    , AmountDtoMapper.class
+    , AmountDtoMapper.class
+    , AmountDtoMapper.class
+    , AmountDtoMapper.class
+    , AmountDtoMapper.class
+    , AmountDtoMapper.class
+    , CardIdentifierDtoMapper.class
+}
 )
-public interface ${mapperInterfaceName} {
+public interface DataDtoMapper {
 
-    ${mapperInterfaceName} INSTANCE = Mappers.getMapper(${mapperInterfaceName}.class);
+DataDtoMapper INSTANCE = Mappers.getMapper(DataDtoMapper.class);
 
-    <#-- Generate @Mapping entries for repeated fields -->
-    <#list repeatedFieldMappings as mapping>
-    @Mapping(source = "${mapping.source}", target = "${mapping.target}")
-    </#list>
-    ${restDtoPackage}.${restDtoClassName} toRestDto(${protoDtoPackage}.${protoDtoClassName} proto);
+    @Mapping(source = "eventsList", target = "events")
+    @Mapping(source = "postingsList", target = "postings")
+    @Mapping(source = "documentsList", target = "documents")
+    @Mapping(source = "messagesList", target = "messages")
+osplus.pkptuna.rest.dispute.model.DataDto toRestDto(osplus.pkptuna.dispute.model.DataDto proto);
 }
-
-----
-
-List<Map<String, String>> repeatedFieldMappings = new ArrayList<>();
-
-for (ProtoFieldModel field : model.getFields()) {
-    if (field.isRepeated()) {
-        Map<String, String> mapping = new HashMap<>();
-        mapping.put("source", field.getName() + "List"); // e.g. eventsList
-        mapping.put("target", field.getName());          // e.g. events
-        repeatedFieldMappings.add(mapping);
-    }
-}
-mapperData.put("repeatedFieldMappings", repeatedFieldMappings);
