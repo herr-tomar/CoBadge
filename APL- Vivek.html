@@ -1,53 +1,13 @@
-package osplus.pkptuna.rest.dispute.model.mapper;
+Set<String> fullMapperClassSet = new HashSet<>();
+Set<String> simpleMapperClassSet = new HashSet<>();
 
-/**
-* Auto-generated mapper interface for DataDto
-*/
-
-import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
-import org.mapstruct.factory.Mappers;
-import osplus.apl.core.api.AplComponent;
-import osplus.pkptuna.protobuf.util.TimestampMapper;
-
-    import osplus.pkptuna.rest.dispute.model.mapper.DisputeFolderIdentifierDtoMapper;
-    import osplus.pkptuna.rest.dispute.model.mapper.EventDtoMapper;
-    import osplus.pkptuna.rest.dispute.model.mapper.PostingDtoMapper;
-    import osplus.pkptuna.rest.dispute.model.mapper.DocumentDtoMapper;
-    import osplus.pkptuna.rest.dispute.model.mapper.MessageDtoMapper;
-    import osplus.pkptuna.rest.dispute.model.mapper.AmountDtoMapper;
-    import osplus.pkptuna.rest.dispute.model.mapper.AmountDtoMapper;
-    import osplus.pkptuna.rest.dispute.model.mapper.AmountDtoMapper;
-    import osplus.pkptuna.rest.dispute.model.mapper.AmountDtoMapper;
-    import osplus.pkptuna.rest.dispute.model.mapper.AmountDtoMapper;
-    import osplus.pkptuna.rest.dispute.model.mapper.AmountDtoMapper;
-    import osplus.pkptuna.rest.dispute.model.mapper.CardIdentifierDtoMapper;
-
-@AplComponent
-@Mapper(
-uses = {
-TimestampMapper.class
-    , DisputeFolderIdentifierDtoMapper.class
-    , EventDtoMapper.class
-    , PostingDtoMapper.class
-    , DocumentDtoMapper.class
-    , MessageDtoMapper.class
-    , AmountDtoMapper.class
-    , AmountDtoMapper.class
-    , AmountDtoMapper.class
-    , AmountDtoMapper.class
-    , AmountDtoMapper.class
-    , AmountDtoMapper.class
-    , CardIdentifierDtoMapper.class
+for (ProtoFieldModel field : model.getFields()) {
+    if (field.isCustomType()) {
+        fullMapperClassSet.add(insertRestInPackage(model.getPackageName()) + ".mapper." + field.getProtoType() + "Mapper");
+        simpleMapperClassSet.add(field.getProtoType() + "Mapper");
+    }
 }
-)
-public interface DataDtoMapper {
 
-DataDtoMapper INSTANCE = Mappers.getMapper(DataDtoMapper.class);
-
-    @Mapping(source = "eventsList", target = "events")
-    @Mapping(source = "postingsList", target = "postings")
-    @Mapping(source = "documentsList", target = "documents")
-    @Mapping(source = "messagesList", target = "messages")
-osplus.pkptuna.rest.dispute.model.DataDto toRestDto(osplus.pkptuna.dispute.model.DataDto proto);
-}
+// Convert to list to preserve order in template
+List<String> fullMapperClassNames = new ArrayList<>(fullMapperClassSet);
+List<String> simpleMapperClassNames = new ArrayList<>(simpleMapperClassSet);
