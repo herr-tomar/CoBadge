@@ -1,47 +1,38 @@
-package osplus.pkp.dto.model;
+package ${packageName};
 
-import java.util.ArrayList;
-import java.util.List;
+/**
+ * Auto-generated REST DTO for ${className}
+ */
+public class ${className} {
 
-public class ProtoMessageModel {
-    private String className;
-    private String packageName;
-    private String protoPackageName; // <-- Add this field
-    private final List<ProtoFieldModel> fields = new ArrayList<>();
+<#list fields as field>
+    private ${field.javaType} ${field.name};
+</#list>
 
-    public ProtoMessageModel(String className) {
-        this.className = className;
+<#list fields as field>
+
+    public ${field.javaType} get${field.name?cap_first}() {
+        return ${field.name};
     }
 
-    public String getClassName() {
-        return className;
+    public void set${field.name?cap_first}(${field.javaType} ${field.name}) {
+        this.${field.name} = ${field.name};
     }
+</#list>
+}
 
-    public void setClassName(String className) {
-        this.className = className;
-    }
 
-    public String getPackageName() {
-        return packageName;
-    }
+    -----------
 
-    public void setPackageName(String packageName) {
-        this.packageName = packageName;
-    }
+    package ${mapperPackage};
 
-    public String getProtoPackageName() {
-        return protoPackageName;
-    }
+/**
+ * Auto-generated mapper interface for ${className}
+ */
+@org.mapstruct.Mapper(componentModel = "spring")
+public interface ${className}Mapper {
 
-    public void setProtoPackageName(String protoPackageName) {
-        this.protoPackageName = protoPackageName;
-    }
+    ${restPackage}.${className} toRestDto(${protoPackage}.${className} proto);
 
-    public List<ProtoFieldModel> getFields() {
-        return fields;
-    }
-
-    public void addField(ProtoFieldModel field) {
-        this.fields.add(field);
-    }
+    ${protoPackage}.${className} toProtoDto(${restPackage}.${className} rest);
 }
