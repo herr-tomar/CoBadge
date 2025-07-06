@@ -1,12 +1,32 @@
+package ${mapperPackage};
+
+/**
+* Auto-generated mapper interface for ${protoDtoClassName}
+*/
+
+import org.mapstruct.Mapper;
+import org.mapstruct.factory.Mappers;
+import osplus.apl.core.api.AplComponent;
+
+@AplComponent
+
 <#if customMapperClassNames?size != 0>
-@Mapper(
+    @Mapper(
     uses = {
-        osplus.pkptuna.protobuf.util.TimestampMapper
-        <#list customMapperClassNames as mapper>
+    osplus.pkptuna.protobuf.util.TimestampMapper
+    <#list customMapperClassNames as mapper>
         , ${mapper}
-        </#list>
+    </#list>
     }
-)
+    )
 <#else>
-@Mapper(uses = osplus.pkptuna.protobuf.util.TimestampMapper.class)
+    @Mapper(uses = osplus.pkptuna.protobuf.util.TimestampMapper.class)
 </#if>
+
+public interface ${mapperInterfaceName} {
+
+${mapperInterfaceName} INSTANCE = Mappers.getMapper(${mapperInterfaceName}.class);
+
+${restDtoPackage}.${restDtoClassName} toRestDto(${protoDtoPackage}.${protoDtoClassName} proto);
+
+}
