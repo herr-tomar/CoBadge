@@ -1,48 +1,62 @@
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import osplus.pkptuna.rest.common.model.ApiResponse;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
 @UiService(value = "publishDisputeDetailRequest", method = MethodType.GET, requiresAuthentication = false)
-    public String publishDisputeDetailRequest(
-            @ServiceParam("issuerId") String issuerId,
-            @ServiceParam("disputeFolderReference") String disputeFolderReference,
-            @ServiceParam(value = "embed") String embed) {
+public ResponseEntity<ApiResponse<osplus.pkptuna.rest.dispute.model.DisputeResponseDto>> publishDisputeDetailRequest(
+        @ServiceParam("issuerId") String issuerId,
+        @ServiceParam("disputeFolderReference") String disputeFolderReference,
+        @ServiceParam(value = "embed") String embed) {
 
-        try {
-            String correlationId = UUID.randomUUID().toString();
+    try {
+        String correlationId = UUID.randomUUID().toString();
 
-            DisputeDetailRequestMetadataDto.Builder metaBuilder = DisputeDetailRequestMetadataDto.newBuilder()
-                    .setRequestChannel("APL-UI")
-                    .setMessageType("DISPUTE_FOLDER_DETAIL")
-                    .setRequestedBy("UI-MANUAL-TEST")
-                    .setBusinessContext("test");
+        DisputeDetailRequestMetadataDto.Builder metaBuilder = DisputeDetailRequestMetadataDto.newBuilder()
+                .setRequestChannel("APL-UI")
+                .setMessageType("DISPUTE_FOLDER_DETAIL")
+                .setRequestedBy("UI-MANUAL-TEST")
+                .setBusinessContext("test");
 
-            if (embed != null && !embed.isBlank()) {
-                for (String val : embed.split("\\s*,\\s*")) {
-                    metaBuilder.addEmbed(val);
-                }
+        if (embed != null && !embed.isBlank()) {
+            for (String val : embed.split("\\s*,\\s*")) {
+                metaBuilder.addEmbed(val);
             }
-
-            DisputeDetailRequestDto request = DisputeDetailRequestDto.newBuilder()
-                    .setMetadata(metaBuilder.build())
-                    .setIssuerId(issuerId)
-                    .setDisputeFolderReference(disputeFolderReference)
-                    .build();
-
-            DisputeDetailRequestWrapperDto wrapper = DisputeDetailRequestWrapperDto.newBuilder()
-                    .setCorrelationId(correlationId)
-                    .setPayload(request)
-                    .build();
-
-            hazelcastInstance.getReliableTopic("DisputeDetailRequestReliableTopic")
-                    .publish(wrapper.toByteArray());
-
-            disputeDetailResponseTracker.register(correlationId);
-            CompletableFuture<DisputeResponseDto> future = disputeDetailResponseTracker.await(correlationId);
-
-            DisputeResponseDto response = future.get(5, TimeUnit.SECONDS);
-            return ProtobufJsonUtil.printProtoToJson(response);
-
-        } catch (TimeoutException te) {
-            return "{ \"status\": \"timeout\", \"message\": \"No response in 5 seconds\" }";
-        } catch (Exception e) {
-            LOGGER.error("Failed to process publishDisputeDetailRequest", e);
-            return "{ \"status\": \"error\", \"message\": \"" + e.getMessage() + "\" }";
         }
+
+        DisputeDetailRequestDto request = DisputeDetailRequestDto.newBuilder()
+                .setMetadata(metaBuilder.build())
+                .setIssuerId(issuerId)
+                .setDisputeFolderReference(disputeFolderReference)
+                .build();
+
+        DisputeDetailRequestWrapperDto wrapper = DisputeDetailRequestWrapperDto.newBuilder()
+                .setCorrelationId(correlationId)
+                .setPayload(request)
+                .build();
+
+        hazelcastInstance.getReliableTopic("DisputeDetailRequestReliableTopic")
+                .publish(wrapper.toByteArray());
+
+        disputeDetailResponseTracker.register(correlationId);
+        CompletableFuture<DisputeResponseDto> future = disputeDetailResponseTracker.await(correlationId);
+
+        DisputeResponseDto protoResponse = future.get(5, TimeUnit.SECONDS);
+        osplus.pkptuna.rest.dispute.model.DisputeResponseDto restResponse =
+                disputeResponseDtoMapper.toRestDto(protoResponse);
+
+        return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
+
+    } catch (TimeoutException te) {
+        return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
+                .body(new ApiResponse<>("timeout", "No response in 5 seconds", null));
+
+    } catch (Exception e) {
+        LOGGER.error("Failed to process publishDisputeDetailRequest", e);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ApiResponse<>("error", "Internal server error", null));
     }
+}
