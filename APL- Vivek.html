@@ -19,7 +19,7 @@ import ${mapperImport};
     uses = {
         TimestampMapper
         <#list customMapperClassNames as mapper>
-            <#assign simpleName = mapper?keep_after_last(".")>
+            <#assign simpleName = mapper?split("\\.")?last>
             , ${simpleName}
         </#list>
     }
