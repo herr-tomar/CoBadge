@@ -35,8 +35,8 @@ public class ProtoParserUtil {
             String packageName = null;
             ProtoMessageModel currentMessage = null;
 
-            String line;
-            while ((line = reader.readLine()) != null) {
+            String line = reader.readLine();
+            while (line != null) {
                 line = line.trim();
 
                 if (line.startsWith("package ")) {
@@ -69,6 +69,8 @@ public class ProtoParserUtil {
                         currentMessage.addField(new ProtoFieldModel(type, name, repeated));
                     }
                 }
+
+                line = reader.readLine();  // PMD-compliant: assignment outside condition
             }
         } catch (Exception e) {
             LOGGER.error("Failed to parse proto file: " + protoFile.getName(), e);
