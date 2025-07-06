@@ -1,4 +1,3 @@
-<#-- Required imports -->
 package ${mapperPackage};
 
 /**
@@ -6,158 +5,46 @@ package ${mapperPackage};
 */
 
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 import osplus.apl.core.api.AplComponent;
 import osplus.pkptuna.protobuf.util.TimestampMapper;
 
 <#-- Import custom mapper classes -->
 <#list customMapperImports as imp>
-    import ${imp};
+import ${imp};
 </#list>
 
 @AplComponent
-<#if customMapperSimpleNames?size != 0>
-    @Mapper(uses = {
-    TimestampMapper.class
-    <#list customMapperSimpleNames as mapper>
+@Mapper(
+    uses = {
+        TimestampMapper.class
+        <#list customMapperSimpleNames as mapper>
         , ${mapper}.class
-    </#list>
-    })
-<#else>
-    @Mapper(uses = TimestampMapper.class)
-</#if>
+        </#list>
+    }
+)
 public interface ${mapperInterfaceName} {
 
-${mapperInterfaceName} INSTANCE = Mappers.getMapper(${mapperInterfaceName}.class);
+    ${mapperInterfaceName} INSTANCE = Mappers.getMapper(${mapperInterfaceName}.class);
 
-${restDtoPackage}.${restDtoClassName} toRestDto(${protoDtoPackage}.${protoDtoClassName} proto);
+    <#-- Generate @Mapping entries for repeated fields -->
+    <#list repeatedFieldMappings as mapping>
+    @Mapping(source = "${mapping.source}", target = "${mapping.target}")
+    </#list>
+    ${restDtoPackage}.${restDtoClassName} toRestDto(${protoDtoPackage}.${protoDtoClassName} proto);
 }
 
-    -----
+----
 
-package osplus.pkp.dto.plugin;
+List<Map<String, String>> repeatedFieldMappings = new ArrayList<>();
 
-import freemarker.template.Configuration;
-import freemarker.template.Template;
-import freemarker.template.TemplateExceptionHandler;
-import freemarker.template.Version;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkp.dto.model.ProtoFieldModel;
-import osplus.pkp.dto.model.ProtoMessageModel;
-import osplus.pkp.dto.util.ProtoParserUtil;
-import osplus.pkp.dto.util.TemplateWriterUtil;
-
-import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-public class RestDtoGeneratorPlugin {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(RestDtoGeneratorPlugin.class);
-
-    public static void main(String[] args) {
-        if (args.length < 2) {
-            LOGGER.error("Usage: RestDtoGeneratorPlugin <protoInputDir> <restDtoOutputDir>");
-            System.exit(1);
-        }
-
-        File protoDir = new File(args[0]);
-        File outputDir = new File(args[1]);
-
-        if (!protoDir.exists() || !protoDir.isDirectory()) {
-            LOGGER.error("Invalid proto input directory: " + protoDir.getAbsolutePath());
-            System.exit(2);
-        }
-
-        outputDir.mkdirs();
-
-        try {
-            // FreeMarker configuration
-            Configuration cfg = new Configuration(new Version("2.3.32"));
-            cfg.setClassForTemplateLoading(RestDtoGeneratorPlugin.class, "/templates");
-            cfg.setDefaultEncoding("UTF-8");
-            cfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
-
-            // Load templates
-            Template dtoTemplate = cfg.getTemplate("rest-dto.ftl");
-            Template mapperTemplate = cfg.getTemplate("rest-mapper.ftl");
-
-            List<ProtoMessageModel> messageModels = ProtoParserUtil.parseAll(protoDir);
-
-            for (ProtoMessageModel model : messageModels) {
-                // Determine package structure
-                String protoPackage = model.getPackageName();
-                String restPackage = insertRestInPackage(protoPackage);
-                String mapperPackage = restPackage + ".mapper";
-
-                // Generate DTO
-                String dtoPath = restPackage.replace('.', '/');
-                File dtoDir = new File(outputDir, dtoPath);
-                dtoDir.mkdirs();
-
-                Map<String, Object> dtoData = new HashMap<>();
-                dtoData.put("packageName", insertRestInPackage(model.getPackageName()));
-                dtoData.put("className", model.getClassName());
-                dtoData.put("fields", model.getFields());
-
-                File dtoFile = new File(dtoDir, model.getClassName() + ".java");
-                TemplateWriterUtil.writeTemplate(dtoTemplate, dtoData, dtoFile);
-
-
-                // Generate Mapper Interface
-
-                List<String> fullMapperClassNames = new ArrayList<>();
-                List<String> simpleMapperClassNames = new ArrayList<>();
-
-                for (ProtoFieldModel field : model.getFields()) {
-                    if (field.isCustomType()) {
-                        String mapperFQN = insertRestInPackage(model.getPackageName()) + ".mapper." + field.getProtoType() + "Mapper";
-                        fullMapperClassNames.add(mapperFQN);
-                        simpleMapperClassNames.add(field.getProtoType() + "Mapper");
-                    }
-                }
-
-
-
-                Map<String, Object> mapperData = new HashMap<>();
-                mapperData.put("mapperPackage", insertRestInPackage(model.getPackageName()) + ".mapper");
-                mapperData.put("protoDtoPackage", model.getPackageName());
-                mapperData.put("protoDtoClassName", model.getClassName());
-                mapperData.put("restDtoPackage", insertRestInPackage(model.getPackageName()));
-                mapperData.put("restDtoClassName", model.getClassName());
-                mapperData.put("mapperInterfaceName", model.getClassName() + "Mapper");
-
-                mapperData.put("customMapperImports", fullMapperClassNames);     // for imports
-                mapperData.put("customMapperSimpleNames", simpleMapperClassNames); // for uses={}
-
-
-                File mapperDir = new File(outputDir, mapperPackage.replace('.', '/'));
-                mapperDir.mkdirs();
-
-                File mapperFile = new File(mapperDir, model.getClassName() + "Mapper.java");
-                TemplateWriterUtil.writeTemplate(mapperTemplate, mapperData, mapperFile);
-            }
-
-            LOGGER.info("REST DTO and Mapper interface generation completed successfully.");
-
-        } catch (Exception e) {
-            LOGGER.error(e.getMessage());
-            System.exit(3);
-        }
-    }
-
-    private static String insertRestInPackage(String originalPackage) {
-        String[] parts = originalPackage.split("\\.");
-        if (parts.length >= 2 && !parts[2].equals("rest")) {
-            List<String> result = new ArrayList<>(Arrays.asList(parts));
-            result.add(2, "rest"); // Insert after base domain (e.g., osplus.pkptuna)
-            return String.join(".", result);
-        }
-        return originalPackage;
+for (ProtoFieldModel field : model.getFields()) {
+    if (field.isRepeated()) {
+        Map<String, String> mapping = new HashMap<>();
+        mapping.put("source", field.getName() + "List"); // e.g. eventsList
+        mapping.put("target", field.getName());          // e.g. events
+        repeatedFieldMappings.add(mapping);
     }
 }
-    
+mapperData.put("repeatedFieldMappings", repeatedFieldMappings);
