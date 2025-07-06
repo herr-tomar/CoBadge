@@ -1,66 +1,42 @@
 package osplus.pkp.dto.model;
 
-import java.util.ArrayList;
-import java.util.List;
+public class ProtoFieldModel {
 
-public class ProtoMessageModel {
+    private final String protoType;
+    private final String name;
 
-    private String name;
-    private String packageName;
-    private String className;
-    private List<ProtoFieldModel> fields = new ArrayList<>();
-
-    public ProtoMessageModel(String name) {
+    public ProtoFieldModel(String protoType, String name) {
+        this.protoType = protoType;
         this.name = name;
-        this.className = name;
     }
 
-    public void addField(ProtoFieldModel field) {
-        this.fields.add(field);
-    }
-
-    public List<ProtoFieldModel> getFields() {
-        return fields;
+    public String getProtoType() {
+        return protoType;
     }
 
     public String getName() {
         return name;
     }
 
-    public String getClassName() {
-        return className;
+    public String getJavaType() {
+        return switch (protoType) {
+            case "string" -> "String";
+            case "bool" -> "Boolean";
+            case "int32", "sint32", "uint32", "fixed32" -> "Integer";
+            case "int64", "sint64", "uint64", "fixed64" -> "Long";
+            case "float" -> "Float";
+            case "double" -> "Double";
+            case "bytes" -> "byte[]";
+            case "google.protobuf.Timestamp" -> "java.time.Instant";
+            default -> protoType.endsWith("Dto") ? protoType : "Object"; // fallback or nested type
+        };
     }
 
-    public String getPackageName() {
-        return packageName;
+    public boolean isCustomType() {
+        return !protoType.matches("string|bool|int32|sint32|uint32|fixed32|int64|sint64|uint64|fixed64|float|double|bytes|google.protobuf.Timestamp");
     }
 
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public void setPackageName(String packageName) {
-        this.packageName = packageName;
-    }
-
-    public void setClassName(String className) {
-        this.className = className;
-    }
-
-    // Calculates REST package name by inserting "rest" after the base package
-    public String getRestPackageName() {
-        if (packageName == null || packageName.isBlank()) {
-            return "rest";
-        }
-        String[] parts = packageName.split("\\.", 3);
-        if (parts.length >= 2) {
-            return parts[0] + "." + parts[1] + ".rest." + (parts.length == 3 ? parts[2] : "");
-        }
-        return "rest." + packageName;
-    }
-
-    // Calculates mapper package name under .rest.mapper
-    public String getMapperPackageName() {
-        return getRestPackageName() + ".mapper";
+    public boolean isRepeated() {
+        return false; // can be updated later if 'repeated' modifier is parsed
     }
 }
