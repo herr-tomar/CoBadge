@@ -1,92 +1,47 @@
-package osplus.pkp.dto.util;
+package osplus.pkp.dto.model;
 
-import osplus.pkp.dto.model.ProtoFieldModel;
-import osplus.pkp.dto.model.ProtoMessageModel;
-
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ProtoParserUtil {
+public class ProtoMessageModel {
+    private String className;
+    private String packageName;
+    private String protoPackageName; // <-- Add this field
+    private final List<ProtoFieldModel> fields = new ArrayList<>();
 
-    public static List<ProtoMessageModel> parseAll(File protoDir) {
-        List<ProtoMessageModel> messages = new ArrayList<>();
-        File[] protoFiles = protoDir.listFiles((dir, name) -> name.endsWith(".proto"));
-        if (protoFiles == null) {
-            return messages;
-        }
-
-        for (File protoFile : protoFiles) {
-            messages.addAll(parse(protoFile));
-        }
-        return messages;
+    public ProtoMessageModel(String className) {
+        this.className = className;
     }
 
-    public static List<ProtoMessageModel> parse(File protoFile) {
-        List<ProtoMessageModel> messageModels = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new FileReader(protoFile))) {
-            String packageName = null;
-            ProtoMessageModel currentMessage = null;
-
-            String line = reader.readLine();
-            while (line != null) {
-                line = line.trim();
-
-                if (line.startsWith("package ")) {
-                    String[] parts = line.split("\\s+");
-                    if (parts.length >= 2) {
-                        packageName = parts[1].replace(";", "").trim();
-                    }
-                } else if (line.startsWith("message ")) {
-                    String messageName = line.split("\\s+")[1].replace("{", "").trim();
-                    currentMessage = new ProtoMessageModel(messageName);
-                    currentMessage.setProtoPackageName(packageName);
-                    currentMessage.setPackageName(insertRestIntoPackage(packageName));
-                } else if (line.startsWith("}")) {
-                    if (currentMessage != null) {
-                        messageModels.add(currentMessage);
-                        currentMessage = null;
-                    }
-                } else if (currentMessage != null && !line.isEmpty() && line.contains(";")) {
-                    line = line.replaceAll("^(optional|required|repeated)\\s+", "");
-
-                    String[] parts = line.split("\\s+");
-                    if (parts.length >= 2) {
-                        String type = parts[0];
-                        String name = parts[1];
-                        if (name.contains("=")) {
-                            name = name.substring(0, name.indexOf("=")).trim();
-                        }
-                        name = name.replace(";", "").trim();
-                        currentMessage.addField(new ProtoFieldModel(type, name));
-                    }
-                }
-
-                line = reader.readLine(); // move readLine outside of the condition
-            }
-        } catch (Exception e) {
-            System.err.println("Failed to parse proto file: " + protoFile.getName());
-            e.printStackTrace();
-        }
-
-        return messageModels;
+    public String getClassName() {
+        return className;
     }
 
-    private static String insertRestIntoPackage(String originalPackage) {
-        if (originalPackage == null || originalPackage.isEmpty()) {
-            return "rest";
-        }
-        String[] parts = originalPackage.split("\\.");
-        if (parts.length < 2) {
-            return originalPackage + ".rest";
-        }
-        StringBuilder sb = new StringBuilder();
-        sb.append(parts[0]).append(".").append(parts[1]).append(".rest");
-        for (int i = 2; i < parts.length; i++) {
-            sb.append(".").append(parts[i]);
-        }
-        return sb.toString();
+    public void setClassName(String className) {
+        this.className = className;
+    }
+
+    public String getPackageName() {
+        return packageName;
+    }
+
+    public void setPackageName(String packageName) {
+        this.packageName = packageName;
+    }
+
+    public String getProtoPackageName() {
+        return protoPackageName;
+    }
+
+    public void setProtoPackageName(String protoPackageName) {
+        this.protoPackageName = protoPackageName;
+    }
+
+    public List<ProtoFieldModel> getFields() {
+        return fields;
+    }
+
+    public void addField(ProtoFieldModel field) {
+        this.fields.add(field);
     }
 }
