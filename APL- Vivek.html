@@ -1,22 +1,24 @@
 package ${packageName};
 
+import java.util.List;
+
 /**
 * Auto-generated REST DTO for ${className}
 */
 public class ${className} {
 
 <#list fields as field>
-    private ${field.javaType} ${field.name};
+    private <#if field.repeated>List<${field.javaType}><#else>${field.javaType}</#if> ${field.name};
 </#list>
 
 <#list fields as field>
 
-    public ${field.javaType} get${field.name?cap_first}() {
-    return ${field.name};
+    public <#if field.repeated>List<${field.javaType}><#else>${field.javaType}</#if> get${field.name?cap_first}() {
+        return ${field.name};
     }
 
-    public void set${field.name?cap_first}(${field.javaType} ${field.name}) {
-    this.${field.name} = ${field.name};
+    public void set${field.name?cap_first}(<#if field.repeated>List<${field.javaType}><#else>${field.javaType}</#if> ${field.name}) {
+        this.${field.name} = ${field.name};
     }
 </#list>
 }
