@@ -1,10 +1,22 @@
-[WARNING] /C:/DEV/pkptuna-mkp/pkptuna-protobuf/target/generated-sources/rest-dtos/osplus/pkptuna/rest/dispute/model/mapper/DataDtoMapper.java:[17,43] Unmapped target properties: "events, postings, documents, messages".
-/C:/DEV/pkptuna-mkp/pkptuna-protobuf/target/generated-sources/rest-dtos/osplus/pkptuna/rest/dispute/model/mapper/DataDtoMapper.java:[17,43] Unmapped target properties: "events, postings, documents, messages".
-/C:/DEV/pkptuna-mkp/pkptuna-protobuf/target/generated-sources/rest-dtos/osplus/pkptuna/rest/dispute/model/mapper/DisputeDetailRequestWrapperDtoMapper.java:[17,66] Unmapped target property: "embed". Mapping from property "DisputeDetailRequestMetadataDto payload.metadata" to "DisputeDetailRequestMetadataDto payload.metadata".
-/C:/DEV/pkptuna-mkp/pkptuna-protobuf/target/generated-sources/rest-dtos/osplus/pkptuna/rest/dispute/model/mapper/DisputeDetailResponseWrapperDtoMapper.java:[17,67] Unmapped target properties: "events, postings, documents, messages". Mapping from property "DataDto response.data" to "DataDto response.data".
-/C:/DEV/pkptuna-mkp/pkptuna-protobuf/target/generated-sources/rest-dtos/osplus/pkptuna/rest/dispute/model/mapper/DisputeResponseDtoMapper.java:[17,54] Unmapped target properties: "events, postings, documents, messages". Mapping from property "DataDto data" to "DataDto data".
-/C:/DEV/pkptuna-mkp/pkptuna-protobuf/target/generated-sources/rest-dtos/osplus/pkptuna/rest/dispute/lookup/model/mapper/DisputeLookupResponseWrapperDtoMapper.java:[17,74] Unmapped target property: "disputeFolders". Mapping from property "DisputeLookupResponseDto response" to "DisputeLookupResponseDto response".
-/C:/DEV/pkptuna-mkp/pkptuna-protobuf/target/generated-sources/rest-dtos/osplus/pkptuna/rest/dispute/lookup/model/mapper/FullDisputeLookupResponseDtoMapper.java:[17,71] Unmapped target property: "data".
-/C:/DEV/pkptuna-mkp/pkptuna-protobuf/target/generated-sources/rest-dtos/osplus/pkptuna/rest/dispute/model/mapper/DisputeDetailRequestMetadataDtoMapper.java:[17,67] Unmapped target property: "embed".
-/C:/DEV/pkptuna-mkp/pkptuna-protobuf/target/generated-sources/rest-dtos/osplus/pkptuna/rest/dispute/model/mapper/DisputeDetailRequestDtoMapper.java:[17,59] Unmapped target property: "embed". Mapping from property "DisputeDetailRequestMetadataDto metadata" to "DisputeDetailRequestMetadataDto metadata".
-/C:/DEV/pkptuna-mkp/pkptuna-protobuf/target/generated-sources/rest-dtos/osplus/pkptuna/rest/dispute/lookup/model/mapper/DisputeLookupResponseDtoMapper.java:[17,67] Unmapped target property: "disputeFolders".
+package ${packageName};
+
+/**
+* Auto-generated REST DTO for ${className}
+*/
+public class ${className} {
+
+<#list fields as field>
+    private ${field.javaType} ${field.name};
+</#list>
+
+<#list fields as field>
+
+    public ${field.javaType} get${field.name?cap_first}() {
+    return ${field.name};
+    }
+
+    public void set${field.name?cap_first}(${field.javaType} ${field.name}) {
+    this.${field.name} = ${field.name};
+    }
+</#list>
+}
