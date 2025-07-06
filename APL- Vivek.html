@@ -1,24 +1,7 @@
-List<String> fullMapperClassNames = new ArrayList<>();
-List<String> simpleMapperClassNames = new ArrayList<>();
-
-for (ProtoFieldModel field : model.getFields()) {
-    if (field.isCustomType()) {
-        String mapperFQN = insertRestInPackage(model.getPackageName()) + ".mapper." + field.getProtoType() + "Mapper";
-        fullMapperClassNames.add(mapperFQN);
-        simpleMapperClassNames.add(field.getProtoType() + "Mapper");
-    }
-}
-
-mapperData.put("customMapperImports", fullMapperClassNames);     // for imports
-mapperData.put("customMapperSimpleNames", simpleMapperClassNames); // for uses={}
-
-
-------------
-
-package ${mapperPackage};
+package osplus.pkptuna.rest.dispute.lookup.model.mapper;
 
 /**
-* Auto-generated mapper interface for ${protoDtoClassName}
+* Auto-generated mapper interface for DisputeLookupRequestWrapperDto
 */
 
 import org.mapstruct.Mapper;
@@ -26,27 +9,19 @@ import org.mapstruct.factory.Mappers;
 import osplus.apl.core.api.AplComponent;
 import osplus.pkptuna.protobuf.util.TimestampMapper;
 
-<#list customMapperImports as importLine>
-import ${importLine};
-</#list>
+    import osplus.pkptuna.rest.dispute.lookup.model.mapper.DisputeLookupRequestDtoMapper;
 
 @AplComponent
-<#if customMapperSimpleNames?size != 0>
-@Mapper(
+    @Mapper(
     uses = {
-        TimestampMapper
-        <#list customMapperSimpleNames as simpleName>
-            , ${simpleName}
-        </#list>
+    TimestampMapper
+        , DisputeLookupRequestDtoMapper
     }
-)
-<#else>
-@Mapper(uses = TimestampMapper.class)
-</#if>
-public interface ${mapperInterfaceName} {
+    )
+public interface DisputeLookupRequestWrapperDtoMapper {
 
-    ${mapperInterfaceName} INSTANCE = Mappers.getMapper(${mapperInterfaceName}.class);
+DisputeLookupRequestWrapperDtoMapper INSTANCE = Mappers.getMapper(DisputeLookupRequestWrapperDtoMapper.class);
 
-    ${restDtoPackage}.${restDtoClassName} toRestDto(${protoDtoPackage}.${protoDtoClassName} proto);
+osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupRequestWrapperDto toRestDto(osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto proto);
 
 }
