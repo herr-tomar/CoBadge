@@ -1,49 +1,22 @@
-@UiService(value = "disputeLookup", method = MethodType.GET, requiresAuthentication = false)
-public ResponseEntity<ApiResponse<osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto>> lookupDisputeFolder(
-        @ServiceParam("issuerId") String issuerId,
-        @ServiceParam("cardReference") String cardReference) {
-
-    LOGGER.info("Received lookupDisputeFolder request for issuerId={} and cardReference={}", issuerId, cardReference);
-
-    try {
-        DisputeLookupResponseDto protoResponse = disputeService.lookupDisputeFolder(issuerId, cardReference);
-        osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto restResponse =
-                disputeLookupResponseDtoMapper.toRestDto(protoResponse);
-
-        return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
-    } catch (Exception e) {
-        LOGGER.error("Failed to lookup dispute folder", e);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ApiResponse<>("error", "Internal server error", null));
-    }
-}
+/**
+ * Ruft Informationen zum Dispute-Folder basierend auf der Issuer-ID und der Kartenreferenz ab.
+ *
+ * @param issuerId       Kennung des Kartenherausgebers
+ * @param cardReference  Kartenreferenz für die Suche
+ * @return {@link ResponseEntity}, das eine {@link ApiResponse} mit einem
+ *         {@link osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto} enthält
+ */
 
 
-                    ----
+---
 
 
-                    @UiService(value = "disputeDetails", method = MethodType.GET, requiresAuthentication = false)
-public ResponseEntity<ApiResponse<osplus.pkptuna.rest.dispute.model.DisputeResponseDto>> getDisputeDetails(
-        @ServiceParam("issuerId") String issuerId,
-        @ServiceParam("disputeFolderReference") String disputeFolderReference,
-        @ServiceParam(value = "embed") String embed) {
-
-    LOGGER.info("Fetching dispute folder details for issuerId={} and folderRef={} with embed={}",
-            issuerId, disputeFolderReference, embed);
-
-    try {
-        List<String> embedList = (embed != null && !embed.isBlank())
-                ? Arrays.asList(embed.split("\\s*,\\s*"))
-                : null;
-
-        DisputeResponseDto protoResponse = disputeDetailService.getDisputeFolderDetails(issuerId, disputeFolderReference, embedList);
-        osplus.pkptuna.rest.dispute.model.DisputeResponseDto restResponse =
-                disputeResponseDtoMapper.toRestDto(protoResponse);
-
-        return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
-    } catch (Exception e) {
-        LOGGER.error("Failed to fetch dispute folder details", e);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ApiResponse<>("error", "Internal server error", null));
-    }
-}
+/**
+ * Liefert Detailinformationen zu einem Dispute-Folder inklusive optionaler eingebetteter Entitäten.
+ *
+ * @param issuerId               Kennung des Kartenherausgebers
+ * @param disputeFolderReference Eindeutiger Referenzwert des Dispute-Folders
+ * @param embed                  Optionale, kommagetrennte Liste von Einbettungen (z. B. "events,documents")
+ * @return {@link ResponseEntity}, das eine {@link ApiResponse} mit einem
+ *         {@link osplus.pkptuna.rest.dispute.model.DisputeResponseDto} enthält
+ */
