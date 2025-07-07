@@ -1,9 +1,24 @@
+import com.google.protobuf.Message;
+import com.google.protobuf.Parser;
 
-Description:
+import java.io.IOException;
+import java.lang.reflect.Method;
 
-Parameter 0 of constructor in osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer required a bean of type 'com.google.protobuf.Parser' that could not be found.
+public class ProtobufDeserializer<T extends Message> {
 
+    private final Parser<T> parser;
 
-Action:
+    @SuppressWarnings("unchecked")
+    public ProtobufDeserializer(Class<T> messageType) {
+        try {
+            Method parserMethod = messageType.getMethod("parser");
+            this.parser = (Parser<T>) parserMethod.invoke(null);
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not get parser for " + messageType.getName(), e);
+        }
+    }
 
-Consider defining a bean of type 'com.google.protobuf.Parser' in your configuration.
+    public T deserialize(byte[] data) throws IOException {
+        return parser.parseFrom(data);
+    }
+}
