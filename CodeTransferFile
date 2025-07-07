@@ -14,15 +14,27 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Testklasse für {@link ProtoParserUtil}.
+ * Prüft das korrekte Parsen von .proto-Dateien in {@link ProtoMessageModel}- und {@link ProtoFieldModel}-Objekte,
+ * einschließlich Unterstützung für "repeated"-Felder.
+ */
 class ProtoParserUtilTest {
 
     private File tempDir;
 
+    /**
+     * Erzeugt ein temporäres Verzeichnis vor jedem Testfall.
+     * @throws Exception falls das Verzeichnis nicht erstellt werden kann
+     */
     @BeforeEach
     void setUp() throws Exception {
         tempDir = Files.createTempDirectory("proto-test").toFile();
     }
 
+    /**
+     * Löscht alle temporären Dateien und Verzeichnisse nach jedem Testfall.
+     */
     @AfterEach
     void tearDown() {
         if (tempDir != null && tempDir.exists()) {
@@ -36,6 +48,11 @@ class ProtoParserUtilTest {
         }
     }
 
+    /**
+     * Testet das Parsen einer gültigen .proto-Datei mit mehreren "repeated"-Feldern.
+     * Verifiziert, dass die Felder korrekt erkannt und markiert werden.
+     * @throws Exception falls ein I/O-Fehler auftritt
+     */
     @Test
     void testParseValidProtoFileWithRepeatedFields() throws Exception {
         File protoFile = new File(tempDir, "TestRepeated.proto");
@@ -71,6 +88,11 @@ class ProtoParserUtilTest {
         assertFalse(field3.isRepeated());
     }
 
+    /**
+     * Testet das Parsen mehrerer .proto-Dateien mit "repeated"- und Standardfeldern.
+     * Verifiziert, dass alle Nachrichtenmodelle korrekt erkannt werden.
+     * @throws Exception falls ein I/O-Fehler auftritt
+     */
     @Test
     void testParseAllWithRepeatedFieldsInMultipleFiles() throws Exception {
         createProtoFile("A.proto", """
@@ -91,14 +113,14 @@ class ProtoParserUtilTest {
         List<ProtoMessageModel> result = ProtoParserUtil.parseAll(tempDir);
         assertEquals(2, result.size());
 
-        // Check file A
+        // Nachricht A prüfen
         ProtoMessageModel modelA = result.stream()
                 .filter(m -> m.getClassName().equals("A"))
                 .findFirst()
                 .orElseThrow();
         assertTrue(modelA.getFields().get(0).isRepeated());
 
-        // Check file B
+        // Nachricht B prüfen
         ProtoMessageModel modelB = result.stream()
                 .filter(m -> m.getClassName().equals("B"))
                 .findFirst()
@@ -108,6 +130,10 @@ class ProtoParserUtilTest {
         assertTrue(modelB.getFields().get(1).isRepeated());
     }
 
+    /**
+     * Testet das Parsen einer einfachen .proto-Datei ohne "repeated"-Felder.
+     * @throws Exception falls ein I/O-Fehler auftritt
+     */
     @Test
     void testParseWithNoRepeatedFields() throws Exception {
         File protoFile = new File(tempDir, "Simple.proto");
@@ -129,6 +155,13 @@ class ProtoParserUtilTest {
         assertFalse(fields.get(1).isRepeated());
     }
 
+    /**
+     * Hilfsmethode zur Erzeugung einer .proto-Datei im temporären Verzeichnis.
+     *
+     * @param fileName Dateiname
+     * @param content  Inhalt der .proto-Datei
+     * @throws Exception falls die Datei nicht geschrieben werden kann
+     */
     private void createProtoFile(String fileName, String content) throws Exception {
         File file = new File(tempDir, fileName);
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
@@ -136,6 +169,7 @@ class ProtoParserUtilTest {
         }
     }
 }
+
 
 --------------
 
