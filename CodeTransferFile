@@ -1,375 +1,125 @@
-https://issuing-solutions.eae.apis.svc.as8677.net/issbox/api/v2/issuers/{issuerId}/cards/{cardReference}/disputes
+package osplus.pkp.dto.util;
 
-Content type
-application/json
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkp.dto.model.ProtoFieldModel;
+import osplus.pkp.dto.model.ProtoMessageModel;
 
-Response 200 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
-{
-  "responseMetadata": {
-    "correlationId": "string",
-    "links": {
-      "self": "/x/{x}?x=x",
-      "next": "/x/{x}?page[offset]=2"
-    },
-    "statusMessage": "Executed successfully",
-    "statusCode": 200,
-    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
-    "timeTakenMs": 12
-  },
-  "data": [
-    {
-      "issuerId": "string",
-      "disputeFolderIdentifier": {
-        "disputeFolderReference": "string",
-        "issuerDisputeExternalReference": "string"
-      },
-      "events": [
-        {
-          "type": "string",
-          "message": "string",
-          "external": true,
-          "creationDate": "2025-06-05T13:07:38Z"
-        }
-      ],
-      "postings": [
-        {
-          "postingAmount": {
-            "value": 0,
-            "exponent": 0,
-            "isoCode": "string"
-          },
-          "message": "string",
-          "immediateReimbursement": true,
-          "postingTypeReference": "string",
-          "operationReference": "string",
-          "disputeAdjustmentType": "string",
-          "creationDate": "2025-06-05T13:07:38Z"
-        }
-      ],
-      "documents": [
-        {
-          "data": "string",
-          "type": "string",
-          "label": "string",
-          "fileName": "string",
-          "creationDate": "2025-06-05T13:07:38Z"
-        }
-      ],
-      "messages": [
-        {
-          "type": "string",
-          "status": "string",
-          "creationDate": "2025-06-05T13:07:38Z",
-          "amount": {
-            "value": 0,
-            "exponent": 0,
-            "isoCode": "string"
-          },
-          "reasonCode": "string",
-          "reasonCodeDescription": "string",
-          "reverseFlag": true,
-          "schemeCaseId": "string"
-        }
-      ],
-      "acquirerReferenceData": "string",
-      "transactionType": "string",
-      "transactionTime": "2025-06-05T13:07:38Z",
-      "transactionAmount": {
-        "value": 0,
-        "exponent": 0,
-        "isoCode": "string"
-      },
-      "reconciliationAmount": {
-        "value": 0,
-        "exponent": 0,
-        "isoCode": "string"
-      },
-      "billingAmount": {
-        "value": 0,
-        "exponent": 0,
-        "isoCode": "string"
-      },
-      "billingFees": {
-        "value": 0,
-        "exponent": 0,
-        "isoCode": "string"
-      },
-      "outstandingBalance": {
-        "value": 0,
-        "exponent": 0,
-        "isoCode": "string"
-      },
-      "issuerAccountingBalance": {
-        "value": 0,
-        "exponent": 0,
-        "isoCode": "string"
-      },
-      "statusCode": "string",
-      "reason": "string",
-      "creationDate": "2025-06-05T13:07:38Z",
-      "cardAcceptorName": "string",
-      "cardAcceptorCity": "string",
-      "cardAcceptorCountry": "string",
-      "cardAcceptorIdCode": "string",
-      "cardAcceptorZipCode": "string",
-      "userInCharge": "string",
-      "cardIdentifier": {
-        "cardReference": "string",
-        "issuerCardExternalReference": "string"
-      },
-      "lastMessageType": "string",
-      "lastMessageDate": "2025-06-05T13:07:38Z",
-      "lastMessageStatus": "string",
-      "superFolderReference": "string",
-      "transactionCategory": "string",
-      "transmissionDate": "2025-06-05T13:07:38Z",
-      "clientOpenDate": "2025-06-05T13:07:38Z"
+/**
+ * Dienstklasse zum Parsen von .proto-Dateien zur Extraktion von Nachrichtenstrukturen (Messages).
+ */
+public final class ProtoParserUtil {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ProtoParserUtil.class);
+
+    // Konstanten
+    private static final String PROTO_EXTENSION = ".proto";
+    private static final String CLEANED_LINE_REGEX = "^(optional|required|repeated)\\s+";
+    private static final String PACKAGE_KEYWORD = "package ";
+    private static final String MESSAGE_KEYWORD = "message ";
+    private static final String BLOCK_END = "}";
+    private static final String SEMICOLON = ";";
+    private static final String EQUAL_SIGN = "=";
+    private static final String REPEATED_PREFIX = "repeated ";
+
+    private ProtoParserUtil() {
+        // Verhindert Instanziierung
     }
-  ]
+
+    /**
+     * Parst alle .proto-Dateien in einem Verzeichnis.
+     *
+     * @param protoDir Verzeichnis mit Protobuf-Dateien
+     * @return Liste aller geparsten Nachrichtenmodelle
+     */
+    public static List<ProtoMessageModel> parseAll(File protoDir) {
+        if (protoDir == null || !protoDir.isDirectory()) {
+            LOGGER.warn("Ungültiges Verzeichnis übergeben: {}", protoDir);
+            return Collections.emptyList();
+        }
+
+        File[] protoFiles = protoDir.listFiles((dir, name) -> name.endsWith(PROTO_EXTENSION));
+        if (protoFiles == null) {
+            return Collections.emptyList();
+        }
+
+        List<ProtoMessageModel> messages = new ArrayList<>();
+        for (File protoFile : protoFiles) {
+            messages.addAll(parse(protoFile));
+        }
+        return messages;
+    }
+
+    /**
+     * Parst eine einzelne .proto-Datei und extrahiert alle enthaltenen Messages.
+     *
+     * @param protoFile Die zu analysierende .proto-Datei
+     * @return Liste mit Nachrichtenmodellen, die in der Datei definiert sind
+     */
+    public static List<ProtoMessageModel> parse(File protoFile) {
+        List<ProtoMessageModel> messageModels = new ArrayList<>();
+
+        if (protoFile == null || !protoFile.exists()) {
+            LOGGER.warn("Datei existiert nicht oder ist null: {}", protoFile);
+            return messageModels;
+        }
+
+        String protoFileName = protoFile.getName();
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(protoFile))) {
+            String packageName = null;
+            ProtoMessageModel currentMessage = null;
+            String line = reader.readLine();
+
+            while (line != null) {
+                line = line.trim();
+
+                if (line.startsWith(PACKAGE_KEYWORD)) {
+                    String[] parts = line.split("\\s+");
+                    if (parts.length >= 2) {
+                        packageName = parts[1].replace(SEMICOLON, "").trim();
+                    }
+                } else if (line.startsWith(MESSAGE_KEYWORD)) {
+                    String messageName = line.split("\\s+")[1].replace("{", "").trim();
+                    currentMessage = new ProtoMessageModel(messageName);
+                    currentMessage.setProtoPackageName(packageName);
+                    currentMessage.setPackageName(packageName);
+                } else if (line.startsWith(BLOCK_END)) {
+                    if (currentMessage != null) {
+                        messageModels.add(currentMessage);
+                        currentMessage = null;
+                    }
+                } else if (currentMessage != null && !line.isEmpty() && line.contains(SEMICOLON)) {
+                    boolean repeated = line.startsWith(REPEATED_PREFIX);
+                    String cleanedLine = line.replaceAll(CLEANED_LINE_REGEX, "");
+                    String[] parts = cleanedLine.split("\\s+");
+
+                    if (parts.length >= 2) {
+                        String type = parts[0];
+                        String name = parts[1];
+                        if (name.contains(EQUAL_SIGN)) {
+                            name = name.substring(0, name.indexOf(EQUAL_SIGN)).trim();
+                        }
+                        name = name.replace(SEMICOLON, "").trim();
+                        currentMessage.addField(new ProtoFieldModel(type, name, repeated));
+                    }
+                }
+
+                line = reader.readLine(); // nächste Zeile
+            }
+
+        } catch (IOException e) {
+            LOGGER.error("Fehler beim Lesen der Proto-Datei '{}': {}", protoFileName, e.getMessage(), e);
+        }
+
+        return messageModels;
+    }
 }
-
-Response 400 
-
-{
-  "responseMetadata": {
-    "correlationId": 12,
-    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
-    "statusCode": 400,
-    "statusMessage": "Bad request"
-  }
-}
-
-Response 401
-
-{
-  "responseMetadata": {
-    "correlationId": 12,
-    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
-    "statusCode": 401,
-    "statusMessage": "Unauthorized"
-  }
-}
-
-Response 403
-
-{
-  "responseMetadata": {
-    "correlationId": 12,
-    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
-    "statusCode": 403,
-    "statusMessage": "Forbidden"
-  }
-}
-
-Response 404
-
-{
-  "responseMetadata": {
-    "correlationId": 12,
-    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
-    "statusCode": 404,
-    "statusMessage": "Not found"
-  }
-}
-
-Response 500 
-
-{
-  "responseMetadata": {
-    "correlationId": 12,
-    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
-    "statusCode": 500,
-    "statusMessage": "Internal server error"
-  }
-}
-
-Response 502
-
-{
-  "responseMetadata": {
-    "correlationId": 12,
-    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
-    "statusCode": 502,
-    "statusMessage": "Bad Gateway"
-  }
-}
-
-
---------------------------------
-
-//path Parameters
-issuerId , required, string
-Issuer ID
-
-cardReference
-required
-string
-Card Reference
-
-//query Parameters
-filter
-Array of strings
-Filtered Fields
-
-embed
-Array of strings
-Items Enum: "events" "postings" "documents" "messages"
-Embedded Fields
-
-// header Parameters
-WL-Correlation-ID
-string
-WL-Origin
-string
-
-----------------------------------------------------
-Response Schema: application/json
-responseMetadata
-required
-object
-Response metadata
-
-data
-Array of objects (Dispute)
-Response data
-
-Array 
-issuerId
-string
-Issuer Identifier (unique per platform)
-
-disputeFolderIdentifier
-object
-Dispute Folder Identifier
-
-events
-Array of objects (DisputeEvent)
-Events attached to the dispute folder.Event can be triggered by our system or added by the issuer (purpose can to indicate a communication from/to cardholder)
-
-postings
-Array of objects (DisputePosting)
-Posted operation on the dispute folder, example : Do a refund towards the cardholder account, Do a write-off towards an issuer account (Profit and Loss, Fraud,..), do a Foreign exchange fee, Financial Advice Exchange Rate Difference
-
-documents
-Array of objects (DisputeDocument)
-Documents added to the dispute folder
-
-messages
-Array of objects (DisputeMessage)
-Messages exchanged with the scheme linked to the dispute folder
-
-acquirerReferenceData
-string
-Acquiring Reference Number (ARN) related to the disputed transaction
-
-transactionType
-string
-DEPRECATED
-
-transactionTime
-string <date-time>
-Transaction Date and Time on the Merchant site related to the disputed transaction
-
-transactionAmount
-object
-Transaction Amount (Value/Currency/Currency Exponent) related to the disputed transaction
-
-reconciliationAmount
-object
-Scheme Reconciliation Amount (Value/Currency/Currency Exponent) related to the disputed transaction
-
-billingAmount
-object
-Cardholder Billing Amount (Value/Currency/Currency Exponent) related to the disputed transaction on Cardholder point of view
-
-billingFees
-object
-Cardholder Billing Fees Amount (Value/Currency/Currency Exponent) associated to the disputed transaction on Cardholder point of view
-
-outstandingBalance
-object
-Cardholder Outstanding balance (Value/Currency/Currency Exponent) associated to the disputed transaction
-
-issuerAccountingBalance
-object
-Issuer Accounting Balance (Value/Currency/Currency Exponent) related to the dispute on issuer point of view
-
-statusCode
-string
-Dispute status (open, closed) associated to the Dispute Folder
-
-reason
-string
-Dispute Reason associated to the Dispute Folder
-
-creationDate
-string <date-time>
-Date of the Dispute Folder creation
-
-cardAcceptorName
-string
-Merchant Address Name related to the disputed transaction
-
-cardAcceptorCity
-string
-Merchant Address City related to the disputed transaction
-
-cardAcceptorCountry
-string
-Merchant Address Country Code (num-3) related to the disputed transaction
-
-cardAcceptorIdCode
-string
-Merchant Identifier related to the disputed transaction
-
-cardAcceptorZipCode
-string
-Merchant Address Zip Code related to the disputed transaction
-
-userInCharge
-string
-User in charge of the Dispute Folder
-
-cardIdentifier
-object
-Card Identifier related to the disputed transaction
-
-lastMessageType
-string
-Type of the last Message of the Dispute Folder
-
-lastMessageDate
-string <date-time>
-Date of the last Message of the Dispute Folder
-
-lastMessageStatus
-string
-Status of the last Message of the Dispute Folder
-
-superFolderReference
-string
-Super folder reference if super folder exists
-
-transactionCategory
-string
-Internal Transaction category (SALES, CASH_WITHDRAWAL, etc ..) related to the disputed transaction
-
-transmissionDate
-string <date-time>
-Transmission date from the scheme MCI : PDS 0158 - s5 Central Site Business Date VISA : TCR0 164-167 Central Processing Date (YDDD)
-
-clientOpenDate
-string <date-time>
-Date when the cardholder has raised the Dispute, used to track the receipt of the cardholder dispute
-
-----------------------------
-
-For all negative response codes like 400 , 401 403 etc
-
-400 Bad request
-Response Schema: application/json
-responseMetadata
-required
-object
-Response metadata
