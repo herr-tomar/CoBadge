@@ -27,6 +27,7 @@ public final class RestDtoGeneratorPlugin {
     private static final String ENCODING_UTF_8 = "UTF-8";
     private static final String TEMPLATE_REST_DTO = "rest-dto.ftl";
     private static final String TEMPLATE_REST_MAPPER = "rest-mapper.ftl";
+
     private static final String KEY_PACKAGE_NAME = "packageName";
     private static final String KEY_CLASS_NAME = "className";
     private static final String KEY_FIELDS = "fields";
@@ -51,7 +52,7 @@ public final class RestDtoGeneratorPlugin {
      */
     public static void main(String[] args) {
         try {
-            generate(args);
+            generate(args, null);
         } catch (IllegalArgumentException e) {
             LOGGER.error(e.getMessage());
             System.exit(1);
@@ -67,10 +68,11 @@ public final class RestDtoGeneratorPlugin {
     /**
      * Führt die DTO- und Mapper-Generierung anhand der übergebenen Argumente aus.
      *
-     * @param args Argumente: [0] = Pfad zum Proto-Verzeichnis, [1] = Ausgabeverzeichnis
+     * @param args        Argumente: [0] = Pfad zum Proto-Verzeichnis, [1] = Ausgabeverzeichnis
+     * @param templateDir Optionales Verzeichnis für Templates (z. B. aus Tests)
      * @throws IOException bei Datei- oder Templatefehlern
      */
-    public static void generate(String[] args) throws IOException {
+    public static void generate(String[] args, File templateDir) throws IOException {
         if (args.length < 2) {
             throw new IllegalArgumentException("Usage: RestDtoGeneratorPlugin <protoInputDir> <restDtoOutputDir>");
         }
@@ -85,7 +87,11 @@ public final class RestDtoGeneratorPlugin {
         outputDir.mkdirs();
 
         Configuration cfg = new Configuration(new Version("2.3.32"));
-        cfg.setClassForTemplateLoading(RestDtoGeneratorPlugin.class, TEMPLATE_DIRECTORY);
+        if (templateDir != null) {
+            cfg.setDirectoryForTemplateLoading(templateDir);
+        } else {
+            cfg.setClassForTemplateLoading(RestDtoGeneratorPlugin.class, TEMPLATE_DIRECTORY);
+        }
         cfg.setDefaultEncoding(ENCODING_UTF_8);
         cfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
 
@@ -102,12 +108,13 @@ public final class RestDtoGeneratorPlugin {
         LOGGER.info("REST DTO- und Mapper-Generierung erfolgreich abgeschlossen.");
     }
 
-    private static void generateDto(Template dtoTemplate, File outputDir, ProtoMessageModel model) throws IOException {
-        String protoPackage = model.getProtoPackageName(); // safer and guaranteed set
-        String restPackage = insertRestInPackage(protoPackage);
+    public static void generate(String[] args) throws IOException {
+        generate(args, null);
+    }
 
-        String dtoPath = restPackage.replace('.', '/');
-        File dtoDir = new File(outputDir, dtoPath);
+    private static void generateDto(Template dtoTemplate, File outputDir, ProtoMessageModel model) throws IOException {
+        String restPackage = insertRestInPackage(model.getProtoPackageName());
+        File dtoDir = new File(outputDir, restPackage.replace('.', '/'));
         dtoDir.mkdirs();
 
         Map<String, Object> dtoData = new HashMap<>();
@@ -120,7 +127,7 @@ public final class RestDtoGeneratorPlugin {
     }
 
     private static void generateMapper(Template mapperTemplate, File outputDir, ProtoMessageModel model) throws IOException {
-        String protoPackage = model.getProtoPackageName(); // not getPackageName()
+        String protoPackage = model.getProtoPackageName();
         String restPackage = insertRestInPackage(protoPackage);
         String mapperPackage = restPackage + ".mapper";
 
@@ -129,7 +136,7 @@ public final class RestDtoGeneratorPlugin {
 
         for (ProtoFieldModel field : model.getFields()) {
             if (field.isCustomType()) {
-                fullMapperClassSet.add(restPackage + ".mapper." + field.getProtoType() + "Mapper");
+                fullMapperClassSet.add(mapperPackage + "." + field.getProtoType() + "Mapper");
                 simpleMapperClassSet.add(field.getProtoType() + "Mapper");
             }
         }
@@ -155,7 +162,6 @@ public final class RestDtoGeneratorPlugin {
         mapperData.put(KEY_CUSTOM_SIMPLE_NAMES, new ArrayList<>(simpleMapperClassSet));
         mapperData.put(KEY_REPEATED_MAPPINGS, repeatedFieldMappings);
 
-
         File mapperDir = new File(outputDir, mapperPackage.replace('.', '/'));
         mapperDir.mkdirs();
 
@@ -170,7 +176,7 @@ public final class RestDtoGeneratorPlugin {
      * @return Neuer Package-Name mit ".rest"
      */
     private static String insertRestInPackage(String originalPackage) {
-        final String[] parts = originalPackage.split("\\.");
+        String[] parts = originalPackage.split("\\.");
 
         if (parts.length < 2) {
             LOGGER.warn("Package name is smaller than 2 segments: '{}'. 'rest' will not be inserted.", originalPackage);
@@ -181,8 +187,8 @@ public final class RestDtoGeneratorPlugin {
             return originalPackage;
         }
 
-        final List<String> result = new ArrayList<>(Arrays.asList(parts));
-        result.add(Math.min(2, result.size()), "rest");  // Insert safely
+        List<String> result = new ArrayList<>(Arrays.asList(parts));
+        result.add(Math.min(2, result.size()), "rest");
         return String.join(".", result);
     }
 }
