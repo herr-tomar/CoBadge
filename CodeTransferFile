@@ -1,36 +1,20 @@
- public void pollRequestMaps() {
-        for (FlowConfig config : flowConfigs) {
-            String flowName = config.name();
-            String baseMap = config.mapBase();
-            int partitions = config.partitions();
-            String responseTopic = config.responseTopic();
-
-            for (int i = 0; i < partitions; i++) {
-                String mapName = baseMap + i;
-                IMap<String, Object> map = hazelcastInstance.getMap(mapName);
-
-                for (Map.Entry<String, Object> entry : map.entrySet()) {
-                    String correlationId = entry.getKey();
-                    Object rawRequest = entry.getValue();
-
-                    try {
-                        FlowHandler<Object, Object> handler = handlerRegistry.getHandler(flowName);
-                        if (handler == null) {
-                            LOGGER.warn("No FlowHandler registered for flow '{}'. Skipping.", flowName);
-                            continue;
-                        }
-
-                        Object response = handler.handleRequest(rawRequest);
-                        Object wrapped = handler.wrapResponse(correlationId, response);
-                        handler.sendResponse(hazelcastInstance, responseTopic, wrapped);
-                        map.remove(correlationId);
-
-                        LOGGER.info("Processed and removed entry from {} with correlationId={}", mapName, correlationId);
-
-                    } catch (Exception e) {
-                        LOGGER.error("Error processing request from {} for flow '{}': {}", mapName, flowName, e.getMessage(), e);
-                    }
-                }
-            }
+ /**
+     * Sendet eine einzelne Nachricht an das angegebene Topic.
+     * Die Nachricht wird serialisiert und als byte[] veröffentlicht.
+     *
+     * @param topicName Name des Hazelcast-Topics
+     * @param traceCode Tracing-Code für Logging-Zwecke
+     * @param payload   die Nachricht (muss Serializable sein)
+     */
+    @Override
+    public void sendMessage(String topicName, String traceCode, Serializable payload) {
+        try {
+            V typedPayload = (V) payload;
+            byte[] bytes = serializer.serialize(typedPayload);
+            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
+            topic.publish(bytes);
+            LOGGER.info("Published to topic [" + topicName + "] for trace " + traceCode);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to publish to topic " + topicName, e);
         }
     }
