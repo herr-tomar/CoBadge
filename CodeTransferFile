@@ -96,10 +96,19 @@ class RestDtoGeneratorPluginTest {
 
     @Test
     void testWithEmptyProtoDir() {
-        File emptyDir = Files.createTempDirectory("empty-proto").toFile();
+    File emptyDir = null;
+    try {
+        emptyDir = Files.createTempDirectory("empty-proto").toFile();
         assertDoesNotThrow(() -> RestDtoGeneratorPlugin.generate(
                 new String[]{emptyDir.getAbsolutePath(), tempOutputDir.getAbsolutePath()}
         ));
-        deleteRecursive(emptyDir);
+    } catch (IOException e) {
+        fail("Fehler beim Erstellen des temporären Verzeichnisses für den Test: " + e.getMessage());
+    } finally {
+        if (emptyDir != null) {
+            deleteRecursive(emptyDir);
+        }
     }
+}
+
 }
