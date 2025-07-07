@@ -1,20 +1,35 @@
- /**
-     * Sendet eine einzelne Nachricht an das angegebene Topic.
-     * Die Nachricht wird serialisiert und als byte[] veröffentlicht.
+package osplus.pkptuna.hazelcast.protobuf.impl;
+
+import com.google.protobuf.Message;
+import com.google.protobuf.Parser;
+import osplus.pkptuna.hazelcast.protobuf.SimpleDeserializer;
+
+import java.io.IOException;
+
+/**
+ * Implementierung von {@link SimpleDeserializer}, die ein Google Protobuf-Parser
+ * verwendet, um ein Byte-Array in ein Protobuf-Message-Objekt zu deserialisieren.
+ *
+ * @param <T> der konkrete Protobuf-Typ, der geparst wird
+ */
+public class ProtobufDeserializer<T extends Message> implements SimpleDeserializer<T> {
+
+    private final Parser<T> parser;
+
+    /**
+     * Konstruktor mit übergebenem {@link Parser} für den Protobuf-Typ.
      *
-     * @param topicName Name des Hazelcast-Topics
-     * @param traceCode Tracing-Code für Logging-Zwecke
-     * @param payload   die Nachricht (muss Serializable sein)
+     * @param parser der Parser für den konkreten Protobuf-Typ
+     */
+    public ProtobufDeserializer(Parser<T> parser) {
+        this.parser = parser;
+    }
+
+    /**
+     * {@inheritDoc}
      */
     @Override
-    public void sendMessage(String topicName, String traceCode, Serializable payload) {
-        try {
-            V typedPayload = (V) payload;
-            byte[] bytes = serializer.serialize(typedPayload);
-            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
-            topic.publish(bytes);
-            LOGGER.info("Published to topic [" + topicName + "] for trace " + traceCode);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to publish to topic " + topicName, e);
-        }
+    public T deserialize(byte[] bytes) throws IOException {
+        return parser.parseFrom(bytes);
     }
+}
