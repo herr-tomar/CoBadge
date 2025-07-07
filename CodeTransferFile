@@ -1,113 +1,32 @@
-package osplus.pkp.dto.plugin;
+@BeforeEach
+void setUp() throws Exception {
+    tempProtoDir = Files.createTempDirectory("proto-dir").toFile();
+    tempOutputDir = Files.createTempDirectory("output-dir").toFile();
+    tempTemplateDir = Files.createTempDirectory("template-dir").toFile(); // NEW
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+    // .proto Datei erstellen
+    File protoFile = new File(tempProtoDir, "sample.proto");
+    try (Writer writer = new FileWriter(protoFile)) {
+        writer.write("""
+            package osplus.sample;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.Writer;
-import java.nio.file.Files;
-
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
-
-/**
- * Testklasse für das RestDtoGeneratorPlugin.
- */
-class RestDtoGeneratorPluginTest {
-
-    private File tempProtoDir;
-    private File tempOutputDir;
-
-    @BeforeEach
-    void setUp() throws Exception {
-        tempProtoDir = Files.createTempDirectory("proto-dir").toFile();
-        tempOutputDir = Files.createTempDirectory("output-dir").toFile();
-
-        // Simpler .proto-Datei erzeugen
-        File protoFile = new File(tempProtoDir, "sample.proto");
-        try (Writer writer = new FileWriter(protoFile)) {
-            writer.write("""
-                package osplus.sample;
-
-                message Person {
-                    string name = 1;
-                    repeated int32 scores = 2;
-                }
-            """);
-        }
-
-        File templateDir = new File("src/main/resources/templates");
-        templateDir.mkdirs();
-
-        try (Writer writer = new FileWriter(new File(templateDir, "rest-dto.ftl"))) {
-            writer.write("package ${packageName};\npublic class ${className} {}");
-        }
-
-        try (Writer writer = new FileWriter(new File(templateDir, "rest-mapper.ftl"))) {
-            writer.write("package ${mapperPackage};\ninterface ${mapperInterfaceName} {}");
-        }
-    }
-
-    @AfterEach
-    void tearDown() {
-        deleteRecursive(tempProtoDir);
-        deleteRecursive(tempOutputDir);
-    }
-
-    private void deleteRecursive(File file) {
-        if (file == null || !file.exists()) return;
-        if (file.isDirectory()) {
-            for (File child : file.listFiles()) {
-                deleteRecursive(child);
+            message Person {
+                string name = 1;
+                repeated int32 scores = 2;
             }
-        }
-        file.delete();
+        """);
     }
 
-    @Test
-    void testSuccessfulGeneration() {
-        assertDoesNotThrow(() -> RestDtoGeneratorPlugin.generate(
-                new String[]{tempProtoDir.getAbsolutePath(), tempOutputDir.getAbsolutePath()}
-        ));
-
-        // Check if output was generated
-        File[] generatedFiles = tempOutputDir.listFiles();
-        assertNotNull(generatedFiles);
-        assertTrue(generatedFiles.length > 0, "No output files generated.");
+    // Fake templates im temp dir
+    File dtoTemplate = new File(tempTemplateDir, "rest-dto.ftl");
+    try (Writer writer = new FileWriter(dtoTemplate)) {
+        writer.write("package ${packageName};\npublic class ${className} {\n<#list fields as field>\nprivate ${field.javaType} ${field.name};\n</#list>\n}");
     }
 
-    @Test
-    void testMissingArguments() {
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> RestDtoGeneratorPlugin.generate(new String[0]));
-        assertTrue(ex.getMessage().contains("Usage"));
+    File mapperTemplate = new File(tempTemplateDir, "rest-mapper.ftl");
+    try (Writer writer = new FileWriter(mapperTemplate)) {
+        writer.write("package ${mapperPackage};\ninterface ${mapperInterfaceName} {}");
     }
 
-    @Test
-    void testInvalidProtoDir() {
-        String fakePath = new File("nonexistent").getAbsolutePath();
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> RestDtoGeneratorPlugin.generate(new String[]{fakePath, tempOutputDir.getAbsolutePath()}));
-        assertTrue(ex.getMessage().contains("Ungültiges Proto-Verzeichnis"));
-    }
-
-    @Test
-    void testWithEmptyProtoDir() {
-        try {
-            File emptyDir = Files.createTempDirectory("empty-proto").toFile();
-            assertDoesNotThrow(() -> RestDtoGeneratorPlugin.generate(
-                    new String[]{emptyDir.getAbsolutePath(), tempOutputDir.getAbsolutePath()}
-            ));
-            deleteRecursive(emptyDir); // still cleanup
-        } catch (IOException e) {
-            fail("Fehler beim Erstellen des temporären Verzeichnisses für den Test: " + e.getMessage());
-        }
-    }
-
+    // Optional: Inject template path into plugin via setter / method param (see below)
 }
