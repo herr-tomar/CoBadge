@@ -1,30 +1,105 @@
- BUILD FAILURE
-[INFO] ------------------------------------------------------------------------
-[INFO] Total time:  7.680 s
-[INFO] Finished at: 2025-07-07T12:47:34+02:00
-[INFO] ------------------------------------------------------------------------
-[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.3:test (default-test) on project pkp-dto-plugin: 
-[ERROR] 
-[ERROR] See C:\DEV\pkptuna-mkp\pkp-dto-plugin\target\surefire-reports for the individual test results.
-[ERROR] See dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
-[ERROR] ExecutionException The forked VM terminated without properly saying goodbye. VM crash or System.exit called?
-[ERROR] Command was cmd.exe /X /C "C:\Projekte\workbench\java21-zulu\bin\java --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED -javaagent:C:\Projekte\.m2\repository\org\mockito\mockito-core\5.17.0\mockito-core-5.17.0.jar -jar C:\Users\j769180\AppData\Local\Temp\surefire15796314606968752582\surefirebooter-20250707124732638_9.jar C:\Users\j769180\AppData\Local\Temp\surefire15796314606968752582 2025-07-07T12-47-32_352-jvmRun1 surefire-20250707124732638_2tmp surefire_2-20250707124732638_5tmp"
-[ERROR] Error occurred in starting fork, check output in log
-[ERROR] Process Exit Code: 1
-[ERROR] Crashed tests:
-[ERROR] osplus.pkp.dto.plugin.RestDtoGeneratorPluginTest
-[ERROR] org.apache.maven.surefire.booter.SurefireBooterForkException: ExecutionException The forked VM terminated without properly saying goodbye. VM crash or System.exit called?
-[ERROR] Command was cmd.exe /X /C "C:\Projekte\workbench\java21-zulu\bin\java --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED -javaagent:C:\Projekte\.m2\repository\org\mockito\mockito-core\5.17.0\mockito-core-5.17.0.jar -jar C:\Users\j769180\AppData\Local\Temp\surefire15796314606968752582\surefirebooter-20250707124732638_9.jar C:\Users\j769180\AppData\Local\Temp\surefire15796314606968752582 2025-07-07T12-47-32_352-jvmRun1 surefire-20250707124732638_2tmp surefire_2-20250707124732638_5tmp"
-[ERROR] Error occurred in starting fork, check output in log
-[ERROR] Process Exit Code: 1
-[ERROR] Crashed tests:
-[ERROR] osplus.pkp.dto.plugin.RestDtoGeneratorPluginTest
-[ERROR] 	at org.apache.maven.plugin.surefire.booterclient.ForkStarter.awaitResultsDone(ForkStarter.java:456)
-[ERROR] 	at org.apache.maven.plugin.surefire.booterclient.ForkStarter.runSuitesForkOnceMultiple(ForkStarter.java:358)
-[ERROR] 	at org.apache.maven.plugin.surefire.booterclient.ForkStarter.run(ForkStarter.java:296)
-[ERROR] 	at org.apache.maven.plugin.surefire.booterclient.ForkStarter.run(ForkStarter.java:250)
-[ERROR] 	at org.apache.maven.plugin.surefire.AbstractSurefireMojo.executeProvider(AbstractSurefireMojo.java:1337)
-[ERROR] 	at org.apache.maven.plugin.surefire.AbstractSurefireMojo.executeAfterPreconditionsChecked(AbstractSurefireMojo.java:1135)
-[ERROR] 	at org.apache.maven.plugin.surefire.AbstractSurefireMojo.execute(AbstractSurefireMojo.java:969)
-[ERROR] 	at org.apache.maven.plugin.DefaultBuildPluginManager.executeMojo(DefaultBuildPluginManager.java:126)
-[ERROR] 	at org.apache.maven.lifecycle.internal.MojoExecutor.doExecute2(MojoExecutor.java:328)
+package osplus.pkp.dto.plugin;
+
+import freemarker.template.Template;
+import org.junit.jupiter.api.*;
+import osplus.pkp.dto.util.TemplateWriterUtil;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.Writer;
+import java.nio.file.Files;
+import java.util.Collections;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Testklasse für das RestDtoGeneratorPlugin.
+ */
+class RestDtoGeneratorPluginTest {
+
+    private File tempProtoDir;
+    private File tempOutputDir;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        tempProtoDir = Files.createTempDirectory("proto-dir").toFile();
+        tempOutputDir = Files.createTempDirectory("output-dir").toFile();
+
+        // Simpler .proto-Datei erzeugen
+        File protoFile = new File(tempProtoDir, "sample.proto");
+        try (Writer writer = new FileWriter(protoFile)) {
+            writer.write("""
+                package osplus.sample;
+
+                message Person {
+                    string name = 1;
+                    repeated int32 scores = 2;
+                }
+            """);
+        }
+
+        // Template dummy-Dateien erzeugen (for actual test run, place real ones under /templates)
+        File templateDir = new File("src/main/resources/templates");
+        templateDir.mkdirs();
+
+        try (Writer writer = new FileWriter(new File(templateDir, "rest-dto.ftl"))) {
+            writer.write("package ${packageName};\npublic class ${className} {}");
+        }
+
+        try (Writer writer = new FileWriter(new File(templateDir, "rest-mapper.ftl"))) {
+            writer.write("package ${mapperPackage};\ninterface ${mapperInterfaceName} {}");
+        }
+    }
+
+    @AfterEach
+    void tearDown() {
+        deleteRecursive(tempProtoDir);
+        deleteRecursive(tempOutputDir);
+    }
+
+    private void deleteRecursive(File file) {
+        if (file == null || !file.exists()) return;
+        if (file.isDirectory()) {
+            for (File child : file.listFiles()) {
+                deleteRecursive(child);
+            }
+        }
+        file.delete();
+    }
+
+    @Test
+    void testSuccessfulGeneration() {
+        assertDoesNotThrow(() -> RestDtoGeneratorPlugin.generate(
+                new String[]{tempProtoDir.getAbsolutePath(), tempOutputDir.getAbsolutePath()}
+        ));
+
+        // Check if output was generated
+        File[] generatedFiles = tempOutputDir.listFiles();
+        assertNotNull(generatedFiles);
+        assertTrue(generatedFiles.length > 0, "No output files generated.");
+    }
+
+    @Test
+    void testMissingArguments() {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> RestDtoGeneratorPlugin.generate(new String[0]));
+        assertTrue(ex.getMessage().contains("Usage"));
+    }
+
+    @Test
+    void testInvalidProtoDir() {
+        String fakePath = new File("nonexistent").getAbsolutePath();
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> RestDtoGeneratorPlugin.generate(new String[]{fakePath, tempOutputDir.getAbsolutePath()}));
+        assertTrue(ex.getMessage().contains("Ungültiges Proto-Verzeichnis"));
+    }
+
+    @Test
+    void testWithEmptyProtoDir() {
+        File emptyDir = Files.createTempDirectory("empty-proto").toFile();
+        assertDoesNotThrow(() -> RestDtoGeneratorPlugin.generate(
+                new String[]{emptyDir.getAbsolutePath(), tempOutputDir.getAbsolutePath()}
+        ));
+        deleteRecursive(emptyDir);
+    }
+}
