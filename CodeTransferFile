@@ -1,16 +1,104 @@
-private static String insertRestInPackage(String originalPackage) {
-    final String[] parts = originalPackage.split("\\.");
+package osplus.pkp.dto.model;
 
-    if (parts.length < 2) {
-        LOGGER.warn("Paketname hat weniger als zwei Segmente: '{}'. 'rest' wird nicht eingefügt.", originalPackage);
-        return originalPackage;
+import java.util.ArrayList;
+import java.util.List;
+
+public class ProtoMessageModel {
+    private String className;
+    private String packageName;
+    private String protoPackageName;
+    private final List<ProtoFieldModel> fields = new ArrayList<>();
+
+    public ProtoMessageModel(String className) {
+        this.className = className;
     }
 
-    if (parts.length >= 3 && "rest".equals(parts[2])) {
-        return originalPackage;
+    public String getClassName() {
+        return className;
     }
 
-    final List<String> result = new ArrayList<>(Arrays.asList(parts));
-    result.add(Math.min(2, result.size()), "rest");  // Insert safely
-    return String.join(".", result);
+    public void setClassName(String className) {
+        this.className = className;
+    }
+
+    public String getPackageName() {
+        return packageName;
+    }
+
+    public void setPackageName(String packageName) {
+        this.packageName = packageName;
+    }
+
+    public String getProtoPackageName() {
+        return protoPackageName;
+    }
+
+    public void setProtoPackageName(String protoPackageName) {
+        this.protoPackageName = protoPackageName;
+    }
+
+    public List<ProtoFieldModel> getFields() {
+        return fields;
+    }
+
+    public void addField(ProtoFieldModel field) {
+        this.fields.add(field);
+    }
+}
+
+----------------------
+
+package osplus.pkp.dto.model;
+
+public class ProtoFieldModel {
+
+    private final String protoType;
+    private final String name;
+    private final boolean repeated;
+
+    public ProtoFieldModel(String protoType, String name, boolean repeated) {
+        this.protoType = protoType;
+        this.name = name;
+        this.repeated = repeated;
+    }
+
+    public String getProtoType() {
+        return protoType;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public boolean isRepeated() {
+        return repeated;
+    }
+
+    public String getJavaType() {
+        String javaType = switch (protoType) {
+            case "string" -> "String";
+            case "bool" -> "Boolean";
+            case "int32", "sint32", "uint32", "fixed32" -> "Integer";
+            case "int64", "sint64", "uint64", "fixed64" -> "Long";
+            case "float" -> "Float";
+            case "double" -> "Double";
+            case "bytes" -> "byte[]";
+            case "google.protobuf.Timestamp" -> "java.time.Instant";
+            default -> protoType.endsWith("Dto") ? protoType : "Object";
+        };
+
+        return repeated ? "List<" + javaType + ">" : javaType;
+    }
+
+    public boolean isCustomType() {
+        return !protoType.matches("string|bool|int32|sint32|uint32|fixed32|int64|sint64|uint64|fixed64|float|double|bytes|google.protobuf.Timestamp");
+    }
+
+    public String getSimpleJavaType() {
+        String type = protoType;
+        if (protoType.endsWith("Dto")) {
+            type = protoType;
+        }
+        return type.replaceAll(".*\\.", ""); // Strip package if any
+    }
 }
