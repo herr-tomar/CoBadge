@@ -1,128 +1,359 @@
-package osplus.pkptuna.uimodule;
+package osplus.pkp.dto.util;
 
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.topic.ITopic;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mapstruct.factory.Mappers;
-import org.springframework.http.ResponseEntity;
-import osplus.pkptuna.api.ApiResponse;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
-import osplus.pkptuna.dispute.model.DisputeDetailRequestWrapperDto;
-import osplus.pkptuna.dispute.model.DisputeResponseDto;
-import osplus.pkptuna.dispute.service.DisputeDetailService;
-import osplus.pkptuna.dispute.service.DisputeService;
-import osplus.pkptuna.rest.dispute.lookup.model.mapper.DisputeLookupResponseDtoMapper;
-import osplus.pkptuna.rest.dispute.model.mapper.DisputeResponseDtoMapper;
-import osplus.pkptuna.util.GenericResponseTracker;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkp.dto.model.ProtoFieldModel;
+import osplus.pkp.dto.model.ProtoMessageModel;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.util.ArrayList;
+import java.util.List;
+
+public class ProtoParserUtil {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ProtoParserUtil.class);
+
+    public static List<ProtoMessageModel> parseAll(File protoDir) {
+        List<ProtoMessageModel> messages = new ArrayList<>();
+        File[] protoFiles = protoDir.listFiles((dir, name) -> name.endsWith(".proto"));
+        if (protoFiles == null) {
+            return messages;
+        }
+
+        for (File protoFile : protoFiles) {
+            messages.addAll(parse(protoFile));
+        }
+        return messages;
+    }
+
+    public static List<ProtoMessageModel> parse(File protoFile) {
+        List<ProtoMessageModel> messageModels = new ArrayList<>();
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(protoFile))) {
+            String packageName = null;
+            ProtoMessageModel currentMessage = null;
+
+            String line = reader.readLine();
+            while (line != null) {
+                line = line.trim();
+
+                if (line.startsWith("package ")) {
+                    String[] parts = line.split("\\s+");
+                    if (parts.length >= 2) {
+                        packageName = parts[1].replace(";", "").trim();
+                    }
+                } else if (line.startsWith("message ")) {
+                    String messageName = line.split("\\s+")[1].replace("{", "").trim();
+                    currentMessage = new ProtoMessageModel(messageName);
+                    currentMessage.setProtoPackageName(packageName);
+                    currentMessage.setPackageName(packageName);
+                } else if (line.startsWith("}")) {
+                    if (currentMessage != null) {
+                        messageModels.add(currentMessage);
+                        currentMessage = null;
+                    }
+                } else if (currentMessage != null && !line.isEmpty() && line.contains(";")) {
+                    boolean repeated = line.startsWith("repeated ");
+                    String cleanedLine = line.replaceAll("^(optional|required|repeated)\\s+", "");
+                    String[] parts = cleanedLine.split("\\s+");
+
+                    if (parts.length >= 2) {
+                        String type = parts[0];
+                        String name = parts[1];
+                        if (name.contains("=")) {
+                            name = name.substring(0, name.indexOf("=")).trim();
+                        }
+                        name = name.replace(";", "").trim();
+                        currentMessage.addField(new ProtoFieldModel(type, name, repeated));
+                    }
+                }
+
+                line = reader.readLine();  // PMD-compliant: assignment outside condition
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to parse proto file: " + protoFile.getName(), e);
+        }
+
+        return messageModels;
+    }
+}
+
+------
+
+package osplus.pkp.dto.util;
+
+import freemarker.template.Template;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.Writer;
+import java.util.Map;
+
+public class TemplateWriterUtil {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(TemplateWriterUtil.class);
+
+    public static void writeTemplate(Template template, Map<String, Object> dataModel, File outputFile) {
+        try (Writer writer = new BufferedWriter(new FileWriter(outputFile))) {
+            template.process(dataModel, writer);
+        } catch (Exception e) {
+            LOGGER.error("Failed to write file: " + outputFile.getName());
+            e.printStackTrace();
+        }
+    }
+}
+
+------------------------
+
+package osplus.pkp.dto.plugin;
+
+import freemarker.template.Configuration;
+import freemarker.template.Template;
+import freemarker.template.TemplateExceptionHandler;
+import freemarker.template.Version;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkp.dto.model.ProtoFieldModel;
+import osplus.pkp.dto.model.ProtoMessageModel;
+import osplus.pkp.dto.util.ProtoParserUtil;
+import osplus.pkp.dto.util.TemplateWriterUtil;
+
+import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+public class RestDtoGeneratorPlugin {
 
-class DisputeUiModuleTest {
+    private static final Logger LOGGER = LoggerFactory.getLogger(RestDtoGeneratorPlugin.class);
 
-    private DisputeUiModule disputeUiModule;
-    private DisputeService disputeService;
-    private DisputeDetailService disputeDetailService;
-    private HazelcastInstance hazelcastInstance;
+    public static void main(String[] args) {
+        if (args.length < 2) {
+            LOGGER.error("Usage: RestDtoGeneratorPlugin <protoInputDir> <restDtoOutputDir>");
+            System.exit(1);
+        }
 
-    private GenericResponseTracker<DisputeLookupResponseDto> disputeLookupResponseTracker;
-    private GenericResponseTracker<DisputeResponseDto> disputeDetailResponseTracker;
+        File protoDir = new File(args[0]);
+        File outputDir = new File(args[1]);
 
-    private DisputeLookupResponseDtoMapper disputeLookupResponseDtoMapper;
-    private DisputeResponseDtoMapper disputeResponseDtoMapper;
+        if (!protoDir.exists() || !protoDir.isDirectory()) {
+            LOGGER.error("Invalid proto input directory: " + protoDir.getAbsolutePath());
+            System.exit(2);
+        }
 
-    @BeforeEach
-    void setUp() {
-        disputeService = mock(DisputeService.class);
-        disputeDetailService = mock(DisputeDetailService.class);
-        hazelcastInstance = mock(HazelcastInstance.class);
+        outputDir.mkdirs();
 
-        disputeLookupResponseTracker = mock(GenericResponseTracker.class);
-        disputeDetailResponseTracker = mock(GenericResponseTracker.class);
+        try {
+            // FreeMarker configuration
+            Configuration cfg = new Configuration(new Version("2.3.32"));
+            cfg.setClassForTemplateLoading(RestDtoGeneratorPlugin.class, "/templates");
+            cfg.setDefaultEncoding("UTF-8");
+            cfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
 
-        disputeLookupResponseDtoMapper = mock(DisputeLookupResponseDtoMapper.class);
-        disputeResponseDtoMapper = mock(DisputeResponseDtoMapper.class);
+            // Load templates
+            Template dtoTemplate = cfg.getTemplate("rest-dto.ftl");
+            Template mapperTemplate = cfg.getTemplate("rest-mapper.ftl");
 
-        disputeUiModule = new DisputeUiModule(
-                hazelcastInstance,
-                disputeService,
-                disputeDetailService,
-                disputeDetailResponseTracker,
-                disputeLookupResponseTracker,
-                disputeLookupResponseDtoMapper,
-                disputeResponseDtoMapper
-        );
+            List<ProtoMessageModel> messageModels = ProtoParserUtil.parseAll(protoDir);
+
+            for (ProtoMessageModel model : messageModels) {
+                // Determine package structure
+                String protoPackage = model.getPackageName();
+                String restPackage = insertRestInPackage(protoPackage);
+                String mapperPackage = restPackage + ".mapper";
+
+                // Generate DTO
+                String dtoPath = restPackage.replace('.', '/');
+                File dtoDir = new File(outputDir, dtoPath);
+                dtoDir.mkdirs();
+
+                Map<String, Object> dtoData = new HashMap<>();
+                dtoData.put("packageName", insertRestInPackage(model.getPackageName()));
+                dtoData.put("className", model.getClassName());
+                dtoData.put("fields", model.getFields());
+
+                File dtoFile = new File(dtoDir, model.getClassName() + ".java");
+                TemplateWriterUtil.writeTemplate(dtoTemplate, dtoData, dtoFile);
+
+
+                // Generate Mapper Interface
+
+                Set<String> fullMapperClassSet = new HashSet<>();
+                Set<String> simpleMapperClassSet = new HashSet<>();
+
+                for (ProtoFieldModel field : model.getFields()) {
+                    if (field.isCustomType()) {
+                        fullMapperClassSet.add(insertRestInPackage(model.getPackageName()) + ".mapper." + field.getProtoType() + "Mapper");
+                        simpleMapperClassSet.add(field.getProtoType() + "Mapper");
+                    }
+                }
+
+                // Convert to list to preserve order in template
+                List<String> fullMapperClassNames = new ArrayList<>(fullMapperClassSet);
+                List<String> simpleMapperClassNames = new ArrayList<>(simpleMapperClassSet);
+
+                Map<String, Object> mapperData = new HashMap<>();
+                mapperData.put("mapperPackage", insertRestInPackage(model.getPackageName()) + ".mapper");
+                mapperData.put("protoDtoPackage", model.getPackageName());
+                mapperData.put("protoDtoClassName", model.getClassName());
+                mapperData.put("restDtoPackage", insertRestInPackage(model.getPackageName()));
+                mapperData.put("restDtoClassName", model.getClassName());
+                mapperData.put("mapperInterfaceName", model.getClassName() + "Mapper");
+
+                mapperData.put("customMapperImports", fullMapperClassNames);     // for imports
+                mapperData.put("customMapperSimpleNames", simpleMapperClassNames); // for uses={}
+
+                List<Map<String, String>> repeatedFieldMappings = new ArrayList<>();
+
+                for (ProtoFieldModel field : model.getFields()) {
+                    if (field.isRepeated()) {
+                        Map<String, String> mapping = new HashMap<>();
+                        mapping.put("source", field.getName() + "List"); // e.g. eventsList
+                        mapping.put("target", field.getName());          // e.g. events
+                        repeatedFieldMappings.add(mapping);
+                    }
+                }
+                mapperData.put("repeatedFieldMappings", repeatedFieldMappings);
+
+
+                File mapperDir = new File(outputDir, mapperPackage.replace('.', '/'));
+                mapperDir.mkdirs();
+
+                File mapperFile = new File(mapperDir, model.getClassName() + "Mapper.java");
+                TemplateWriterUtil.writeTemplate(mapperTemplate, mapperData, mapperFile);
+            }
+
+            LOGGER.info("REST DTO and Mapper interface generation completed successfully.");
+
+        } catch (Exception e) {
+            LOGGER.error(e.getMessage());
+            System.exit(3);
+        }
     }
 
-    @Test
-    void testLookupDisputeFolder() {
-        DisputeLookupResponseDto protoResponse = DisputeLookupResponseDto.getDefaultInstance();
-        when(disputeService.lookupDisputeFolder(anyString(), anyString())).thenReturn(protoResponse);
-        when(disputeLookupResponseDtoMapper.toRestDto(protoResponse)).thenReturn(new osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto());
+    private static String insertRestInPackage(String originalPackage) {
+        String[] parts = originalPackage.split("\\.");
+        if (parts.length >= 2 && !parts[2].equals("rest")) {
+            List<String> result = new ArrayList<>(Arrays.asList(parts));
+            result.add(2, "rest"); // Insert after base domain (e.g., osplus.pkptuna)
+            return String.join(".", result);
+        }
+        return originalPackage;
+    }
+}
 
-        ResponseEntity<ApiResponse<osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto>> response =
-                disputeUiModule.lookupDisputeFolder("issuer", "cardRef");
+----------------
 
-        assertEquals(200, response.getStatusCodeValue());
-        assertNotNull(response.getBody());
-        assertEquals("success", response.getBody().getStatus());
+package osplus.pkp.dto.model;
+
+public class ProtoFieldModel {
+
+    private final String protoType;
+    private final String name;
+    private final boolean repeated;
+
+    public ProtoFieldModel(String protoType, String name, boolean repeated) {
+        this.protoType = protoType;
+        this.name = name;
+        this.repeated = repeated;
     }
 
-    @Test
-    void testGetDisputeDetails() {
-        DisputeResponseDto protoResponse = DisputeResponseDto.getDefaultInstance();
-        when(disputeDetailService.getDisputeFolderDetails(anyString(), anyString(), any())).thenReturn(protoResponse);
-        when(disputeResponseDtoMapper.toRestDto(protoResponse)).thenReturn(new osplus.pkptuna.rest.dispute.model.DisputeResponseDto());
-
-        ResponseEntity<ApiResponse<osplus.pkptuna.rest.dispute.model.DisputeResponseDto>> response =
-                disputeUiModule.getDisputeDetails("issuer", "ref", "events,postings");
-
-        assertEquals(200, response.getStatusCodeValue());
-        assertNotNull(response.getBody());
-        assertEquals("success", response.getBody().getStatus());
+    public String getProtoType() {
+        return protoType;
     }
 
-    @Test
-    @SuppressWarnings("unchecked")
-    void testPublishDisputesLookupRequest() throws Exception {
-        DisputeLookupResponseDto protoResponse = DisputeLookupResponseDto.getDefaultInstance();
-        when(hazelcastInstance.getReliableTopic(anyString())).thenReturn(mock(ITopic.class));
-
-        CompletableFuture<DisputeLookupResponseDto> future = new CompletableFuture<>();
-        future.complete(protoResponse);
-        when(disputeLookupResponseTracker.await(anyString())).thenReturn((CompletableFuture) future);
-
-        when(disputeLookupResponseDtoMapper.toRestDto(protoResponse)).thenReturn(new osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto());
-
-        ResponseEntity<ApiResponse<osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto>> response =
-                disputeUiModule.publishDisputesLookupRequest("issuer", "cardRef");
-
-        assertEquals(200, response.getStatusCodeValue());
-        assertEquals("success", response.getBody().getStatus());
+    public String getName() {
+        return name;
     }
 
-    @Test
-    @SuppressWarnings("unchecked")
-    void testPublishDisputeDetailRequest() throws Exception {
-        DisputeResponseDto protoResponse = DisputeResponseDto.getDefaultInstance();
-        when(hazelcastInstance.getReliableTopic(anyString())).thenReturn(mock(ITopic.class));
+    public boolean isRepeated() {
+        return repeated;
+    }
 
-        CompletableFuture<DisputeResponseDto> future = new CompletableFuture<>();
-        future.complete(protoResponse);
-        when(disputeDetailResponseTracker.await(anyString())).thenReturn((CompletableFuture) future);
+    public String getJavaType() {
+        String javaType = switch (protoType) {
+            case "string" -> "String";
+            case "bool" -> "Boolean";
+            case "int32", "sint32", "uint32", "fixed32" -> "Integer";
+            case "int64", "sint64", "uint64", "fixed64" -> "Long";
+            case "float" -> "Float";
+            case "double" -> "Double";
+            case "bytes" -> "byte[]";
+            case "google.protobuf.Timestamp" -> "java.time.Instant";
+            default -> protoType.endsWith("Dto") ? protoType : "Object";
+        };
 
-        when(disputeResponseDtoMapper.toRestDto(protoResponse)).thenReturn(new osplus.pkptuna.rest.dispute.model.DisputeResponseDto());
+        return repeated ? "List<" + javaType + ">" : javaType;
+    }
 
-        ResponseEntity<ApiResponse<osplus.pkptuna.rest.dispute.model.DisputeResponseDto>> response =
-                disputeUiModule.publishDisputeDetailRequest("issuer", "folder123", "events,documents");
+    public boolean isCustomType() {
+        return !protoType.matches("string|bool|int32|sint32|uint32|fixed32|int64|sint64|uint64|fixed64|float|double|bytes|google.protobuf.Timestamp");
+    }
 
-        assertEquals(200, response.getStatusCodeValue());
-        assertEquals("success", response.getBody().getStatus());
+    public String getSimpleJavaType() {
+        String type = protoType;
+        if (protoType.endsWith("Dto")) {
+            type = protoType;
+        }
+        return type.replaceAll(".*\\.", ""); // Strip package if any
+    }
+}
+
+-------------------
+
+package osplus.pkp.dto.model;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class ProtoMessageModel {
+    private String className;
+    private String packageName;
+    private String protoPackageName;
+    private final List<ProtoFieldModel> fields = new ArrayList<>();
+
+    public ProtoMessageModel(String className) {
+        this.className = className;
+    }
+
+    public String getClassName() {
+        return className;
+    }
+
+    public void setClassName(String className) {
+        this.className = className;
+    }
+
+    public String getPackageName() {
+        return packageName;
+    }
+
+    public void setPackageName(String packageName) {
+        this.packageName = packageName;
+    }
+
+    public String getProtoPackageName() {
+        return protoPackageName;
+    }
+
+    public void setProtoPackageName(String protoPackageName) {
+        this.protoPackageName = protoPackageName;
+    }
+
+    public List<ProtoFieldModel> getFields() {
+        return fields;
+    }
+
+    public void addField(ProtoFieldModel field) {
+        this.fields.add(field);
     }
 }
