@@ -1,214 +1,199 @@
-package osplus.pkp.dto.model;
+package osplus.pkptuna.flows.handlers;
 
-import java.util.ArrayList;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.hazelcast.core.HazelcastInstance;
+import jakarta.annotation.PostConstruct;
+import osplus.apl.core.api.AplComponent;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.dispute.model.DisputeDetailRequestDto;
+import osplus.pkptuna.dispute.model.DisputeDetailRequestWrapperDto;
+import osplus.pkptuna.dispute.model.DisputeDetailResponseWrapperDto;
+import osplus.pkptuna.dispute.model.DisputeResponseDto;
+import osplus.pkptuna.dispute.service.DisputeDetailService;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
+
 import java.util.List;
 
 /**
- * Modellklasse, die eine Protobuf-Message beschreibt.
- * Enthält den Namen der Message, das zugehörige Paket sowie die enthaltenen Felder.
+ * FlowHandler zur Verarbeitung von Detailanfragen zu Streitfällen.
+ * Dieser Handler übernimmt die Deserialisierung, verarbeitet die Anfrage mit Hilfe des Services,
+ * verpackt die Antwort und publiziert sie auf einem Hazelcast Topic.
  */
-public class ProtoMessageModel {
+@AplComponent("dispute-detail")
+public class DisputeDetailFlowHandler implements FlowHandler<DisputeDetailRequestWrapperDto, DisputeResponseDto> {
 
-    /** Klassenname der Protobuf-Message. */
-    private String className;
+    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeDetailFlowHandler.class);
+    public static final String DISPUTE_DETAIL = "dispute-detail";
 
-    /** Java-Paketname, in den die REST-Klasse generiert wird. */
-    private String packageName;
+    private final DisputeDetailService disputeDetailService;
+    private final ReliableTopicPublisher reliableTopicPublisher;
 
-    /** Ursprünglicher Paketname aus der .proto-Datei. */
-    private String protoPackageName;
-
-    /** Liste der enthaltenen Felder der Message. */
-    private final List<ProtoFieldModel> fields = new ArrayList<>();
-
-    /**
-     * Konstruktor zur Initialisierung mit dem Klassennamen.
-     *
-     * @param className Name der Protobuf-Message
-     */
-    public ProtoMessageModel(String className) {
-        this.className = className;
+    public DisputeDetailFlowHandler(DisputeDetailService disputeService,
+                                    ReliableTopicPublisher reliableTopicPublisher) {
+        this.disputeDetailService = disputeService;
+        this.reliableTopicPublisher = reliableTopicPublisher;
     }
 
     /**
-     * Gibt den Klassennamen zurück.
-     *
-     * @return Name der Protobuf-Message
+     * {@inheritDoc}
+     * <p>
+     * Deserialisiert das Eingangsbytearray in ein Protobuf-Wrapping DTO.
      */
-    public String getClassName() {
-        return className;
+    @Override
+    public DisputeDetailRequestWrapperDto deserializeRequest(byte[] data) throws InvalidProtocolBufferException {
+        return DisputeDetailRequestWrapperDto.parseFrom(data);
     }
 
     /**
-     * Setzt den Klassennamen der Message.
-     *
-     * @param className Klassenname
+     * {@inheritDoc}
+     * <p>
+     * Extrahiert die Korrelations-ID aus dem Request.
      */
-    public void setClassName(String className) {
-        this.className = className;
+    @Override
+    public String extractCorrelationId(DisputeDetailRequestWrapperDto request) {
+        return request.getCorrelationId();
     }
 
     /**
-     * Gibt den Ziel-Paketnamen für das REST-Modell zurück.
-     *
-     * @return Paketname
+     * {@inheritDoc}
+     * <p>
+     * Verarbeitet die Anfrage durch Aufruf des zugehörigen Services.
      */
-    public String getPackageName() {
-        return packageName;
+    @Override
+    public DisputeResponseDto handleRequest(DisputeDetailRequestWrapperDto request) {
+        DisputeDetailRequestDto dto = request.getPayload();
+        List<String> embeds = dto.getMetadata().getEmbedList();
+        return disputeDetailService.getDisputeFolderDetails(dto.getIssuerId(), dto.getDisputeFolderReference(), embeds);
     }
 
     /**
-     * Setzt den Ziel-Paketnamen für das REST-Modell.
-     *
-     * @param packageName Paketname
+     * {@inheritDoc}
+     * <p>
+     * Verpackt das Ergebnis zusammen mit der Korrelations-ID in ein Wrapper-Objekt.
      */
-    public void setPackageName(String packageName) {
-        this.packageName = packageName;
+    @Override
+    public Object wrapResponse(String correlationId, DisputeResponseDto result) {
+        return DisputeDetailResponseWrapperDto.newBuilder()
+                .setCorrelationId(correlationId)
+                .setResponse(result)
+                .build();
     }
 
     /**
-     * Gibt den ursprünglichen Protobuf-Paketnamen zurück.
-     *
-     * @return Protobuf-Paketname
+     * {@inheritDoc}
+     * <p>
+     * Sendet die Antwort an das angegebene Hazelcast Topic.
      */
-    public String getProtoPackageName() {
-        return protoPackageName;
+    @Override
+    public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Object response) {
+        DisputeDetailResponseWrapperDto dto = (DisputeDetailResponseWrapperDto) response;
+        reliableTopicPublisher.sendMessage(topicName, "DISPUTE_ROUTER", dto);
     }
 
+    @Override
     /**
-     * Setzt den ursprünglichen Protobuf-Paketnamen.
-     *
-     * @param protoPackageName Protobuf-Paketname
+     * {@inheritDoc}
+     * <p>
+     *  Gibt den Namen des Flows zurück (z.B. für Registrierung oder Logging).
      */
-    public void setProtoPackageName(String protoPackageName) {
-        this.protoPackageName = protoPackageName;
+    public String getFlowName() {
+        return DISPUTE_DETAIL;
     }
 
-    /**
-     * Gibt die Liste der Felder zurück, die zur Message gehören.
-     *
-     * @return Liste der {@link ProtoFieldModel}
-     */
-    public List<ProtoFieldModel> getFields() {
-        return fields;
-    }
-
-    /**
-     * Fügt ein neues Feld zur Message hinzu.
-     *
-     * @param field Feldmodell, das hinzugefügt werden soll
-     */
-    public void addField(ProtoFieldModel field) {
-        this.fields.add(field);
+    @PostConstruct
+    void init() {
+        LOGGER.info("DisputeDetailFlowHandler loaded and initialised.");
     }
 }
+-----
 
+package osplus.pkptuna.flows.handlers;
 
-----------------------
+import com.hazelcast.core.HazelcastInstance;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import osplus.pkptuna.dispute.model.*;
 
-package osplus.pkp.dto.model;
+import osplus.pkptuna.dispute.service.DisputeDetailService;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.when;
 
 /**
- * Modellklasse, die ein einzelnes Feld innerhalb einer Protobuf-Message beschreibt.
- * Enthält den Typ, Namen und ob das Feld mehrfach vorkommen kann (repeated).
+ * Testklasse für {@link DisputeDetailFlowHandler}.
+ * Überprüft das Extrahieren der Korrelation-ID, den Aufruf des Service und das Verpacken der Antwort.
  */
-public class ProtoFieldModel {
+@ExtendWith(MockitoExtension.class)
+class DisputeDetailFlowHandlerTest {
 
-    /** Ursprünglicher Protobuf-Datentyp (z. B. string, int32, CustomDto etc.) */
-    private final String protoType;
+    @Mock
+    private DisputeDetailService disputeDetailService;
 
-    /** Feldname in der Message. */
-    private final String name;
+    @Mock
+    private HazelcastInstance hazelcastInstance;
 
-    /** Gibt an, ob es sich um ein wiederholtes Feld handelt (repeated). */
-    private final boolean repeated;
+    private DisputeDetailFlowHandler handler;
 
-    /**
-     * Konstruktor zur Initialisierung eines Protobuf-Feldes.
-     *
-     * @param protoType Typ des Feldes
-     * @param name Name des Feldes
-     * @param repeated true, wenn es sich um ein wiederholtes Feld handelt
-     */
-    public ProtoFieldModel(String protoType, String name, boolean repeated) {
-        this.protoType = protoType;
-        this.name = name;
-        this.repeated = repeated;
+    @BeforeEach
+    void setUp() {
+        handler = new DisputeDetailFlowHandler(disputeDetailService);
     }
 
     /**
-     * Gibt den Protobuf-Typ des Feldes zurück.
-     *
-     * @return Protobuf-Datentyp
+     * Testet die Extraktion der Korrelation-ID aus dem Request.
      */
-    public String getProtoType() {
-        return protoType;
+    @Test
+    void shouldExtractCorrelationId() {
+        DisputeDetailRequestWrapperDto request = DisputeDetailRequestWrapperDto.newBuilder()
+                .setCorrelationId("12345")
+                .build();
+
+        String result = handler.extractCorrelationId(request);
+
+        assertEquals("12345", result);
     }
 
     /**
-     * Gibt den Namen des Feldes zurück.
-     *
-     * @return Feldname
+     * Testet, ob der Handler den Service mit korrekten Parametern aufruft.
      */
-    public String getName() {
-        return name;
+    @Test
+    void shouldHandleRequestAndCallService() {
+        DisputeDetailRequestDto payload = DisputeDetailRequestDto.newBuilder()
+                .setIssuerId("issuer")
+                .setDisputeFolderReference("ref")
+                .setMetadata(DisputeDetailRequestMetadataDto.newBuilder().addEmbed("x"))
+                .build();
+
+        DisputeDetailRequestWrapperDto request = DisputeDetailRequestWrapperDto.newBuilder()
+                .setPayload(payload)
+                .build();
+
+        DisputeResponseDto expectedResponse = DisputeResponseDto.newBuilder().build();
+        when(disputeDetailService.getDisputeFolderDetails("issuer", "ref", List.of("x")))
+                .thenReturn(expectedResponse);
+
+        DisputeResponseDto response = handler.handleRequest(request);
+
+        assertEquals(expectedResponse, response);
     }
 
     /**
-     * Gibt an, ob das Feld wiederholt ist (repeated).
-     *
-     * @return true, wenn das Feld wiederholt ist
+     * Testet, ob das Response-Objekt korrekt verpackt wird.
      */
-    public boolean isRepeated() {
-        return repeated;
-    }
+    @Test
+    void shouldWrapResponseCorrectly() {
+        DisputeResponseDto response = DisputeResponseDto.newBuilder().build();
+        Object wrapped = handler.wrapResponse("abc", response);
 
-    /**
-     * Gibt den entsprechenden Java-Typ für den Protobuf-Typ zurück.
-     * Berücksichtigt dabei auch, ob das Feld repeated ist.
-     *
-     * @return Java-Typ als String
-     */
-    public String getJavaType() {
-        String javaType = switch (protoType) {
-            case "string" -> "String";
-            case "bool" -> "Boolean";
-            case "int32", "sint32", "uint32", "fixed32" -> "Integer";
-            case "int64", "sint64", "uint64", "fixed64" -> "Long";
-            case "float" -> "Float";
-            case "double" -> "Double";
-            case "bytes" -> "byte[]";
-            case "google.protobuf.Timestamp" -> "java.time.Instant";
-            default -> protoType.endsWith("Dto") ? protoType : "Object";
-        };
-
-        return repeated ? "List<" + javaType + ">" : javaType;
-    }
-
-    /**
-     * Prüft, ob es sich beim Typ um einen benutzerdefinierten Typ handelt
-     * (also nicht um einen eingebauten Protobuf-Typ).
-     *
-     * @return true, wenn es ein benutzerdefinierter Typ ist
-     */
-    public boolean isCustomType() {
-        return !protoType.matches(
-                "string|bool|int32|sint32|uint32|fixed32|int64|sint64|uint64|fixed64|float|double|bytes|google.protobuf.Timestamp"
-        );
-    }
-
-    /**
-     * Gibt den einfachen Java-Typnamen ohne Paketpfad zurück.
-     *
-     * @return einfacher Typname
-     */
-    public String getSimpleJavaType() {
-        String type = protoType;
-        if (protoType.endsWith("Dto")) {
-            type = protoType;
-        }
-        return type.replaceAll(".*\\.", ""); // Entfernt Paketnamen
+        assertTrue(wrapped instanceof DisputeDetailResponseWrapperDto);
+        assertEquals("abc", ((DisputeDetailResponseWrapperDto) wrapped).getCorrelationId());
     }
 }
-
-
