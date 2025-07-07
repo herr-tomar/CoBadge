@@ -3,108 +3,108 @@ package osplus.pkp.dto.model;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Modellklasse, die eine Protobuf-Message beschreibt.
+ * Enthält den Namen der Message, das zugehörige Paket sowie die enthaltenen Felder.
+ */
 public class ProtoMessageModel {
+
+    /** Klassenname der Protobuf-Message. */
     private String className;
+
+    /** Java-Paketname, in den die REST-Klasse generiert wird. */
     private String packageName;
+
+    /** Ursprünglicher Paketname aus der .proto-Datei. */
     private String protoPackageName;
+
+    /** Liste der enthaltenen Felder der Message. */
     private final List<ProtoFieldModel> fields = new ArrayList<>();
 
+    /**
+     * Konstruktor zur Initialisierung mit dem Klassennamen.
+     *
+     * @param className Name der Protobuf-Message
+     */
     public ProtoMessageModel(String className) {
         this.className = className;
     }
 
+    /**
+     * Gibt den Klassennamen zurück.
+     *
+     * @return Name der Protobuf-Message
+     */
     public String getClassName() {
         return className;
     }
 
+    /**
+     * Setzt den Klassennamen der Message.
+     *
+     * @param className Klassenname
+     */
     public void setClassName(String className) {
         this.className = className;
     }
 
+    /**
+     * Gibt den Ziel-Paketnamen für das REST-Modell zurück.
+     *
+     * @return Paketname
+     */
     public String getPackageName() {
         return packageName;
     }
 
+    /**
+     * Setzt den Ziel-Paketnamen für das REST-Modell.
+     *
+     * @param packageName Paketname
+     */
     public void setPackageName(String packageName) {
         this.packageName = packageName;
     }
 
+    /**
+     * Gibt den ursprünglichen Protobuf-Paketnamen zurück.
+     *
+     * @return Protobuf-Paketname
+     */
     public String getProtoPackageName() {
         return protoPackageName;
     }
 
+    /**
+     * Setzt den ursprünglichen Protobuf-Paketnamen.
+     *
+     * @param protoPackageName Protobuf-Paketname
+     */
     public void setProtoPackageName(String protoPackageName) {
         this.protoPackageName = protoPackageName;
     }
 
+    /**
+     * Gibt die Liste der Felder zurück, die zur Message gehören.
+     *
+     * @return Liste der {@link ProtoFieldModel}
+     */
     public List<ProtoFieldModel> getFields() {
         return fields;
     }
 
+    /**
+     * Fügt ein neues Feld zur Message hinzu.
+     *
+     * @param field Feldmodell, das hinzugefügt werden soll
+     */
     public void addField(ProtoFieldModel field) {
         this.fields.add(field);
     }
 }
 
+
 ----------------------
-
-package osplus.pkp.dto.model;
-
-public class ProtoFieldModel {
-
-    private final String protoType;
-    private final String name;
-    private final boolean repeated;
-
-    public ProtoFieldModel(String protoType, String name, boolean repeated) {
-        this.protoType = protoType;
-        this.name = name;
-        this.repeated = repeated;
-    }
-
-    public String getProtoType() {
-        return protoType;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public boolean isRepeated() {
-        return repeated;
-    }
-
-    public String getJavaType() {
-        String javaType = switch (protoType) {
-            case "string" -> "String";
-            case "bool" -> "Boolean";
-            case "int32", "sint32", "uint32", "fixed32" -> "Integer";
-            case "int64", "sint64", "uint64", "fixed64" -> "Long";
-            case "float" -> "Float";
-            case "double" -> "Double";
-            case "bytes" -> "byte[]";
-            case "google.protobuf.Timestamp" -> "java.time.Instant";
-            default -> protoType.endsWith("Dto") ? protoType : "Object";
-        };
-
-        return repeated ? "List<" + javaType + ">" : javaType;
-    }
-
-    public boolean isCustomType() {
-        return !protoType.matches("string|bool|int32|sint32|uint32|fixed32|int64|sint64|uint64|fixed64|float|double|bytes|google.protobuf.Timestamp");
-    }
-
-    public String getSimpleJavaType() {
-        String type = protoType;
-        if (protoType.endsWith("Dto")) {
-            type = protoType;
-        }
-        return type.replaceAll(".*\\.", ""); // Strip package if any
-    }
-}
-
--------
-
 
 package osplus.pkp.dto.model;
 
@@ -210,3 +210,5 @@ public class ProtoFieldModel {
         return type.replaceAll(".*\\.", ""); // Entfernt Paketnamen
     }
 }
+
+
