@@ -102,3 +102,111 @@ public class ProtoFieldModel {
         return type.replaceAll(".*\\.", ""); // Strip package if any
     }
 }
+
+-------
+
+
+package osplus.pkp.dto.model;
+
+/**
+ * Modellklasse, die ein einzelnes Feld innerhalb einer Protobuf-Message beschreibt.
+ * Enthält den Typ, Namen und ob das Feld mehrfach vorkommen kann (repeated).
+ */
+public class ProtoFieldModel {
+
+    /** Ursprünglicher Protobuf-Datentyp (z. B. string, int32, CustomDto etc.) */
+    private final String protoType;
+
+    /** Feldname in der Message. */
+    private final String name;
+
+    /** Gibt an, ob es sich um ein wiederholtes Feld handelt (repeated). */
+    private final boolean repeated;
+
+    /**
+     * Konstruktor zur Initialisierung eines Protobuf-Feldes.
+     *
+     * @param protoType Typ des Feldes
+     * @param name Name des Feldes
+     * @param repeated true, wenn es sich um ein wiederholtes Feld handelt
+     */
+    public ProtoFieldModel(String protoType, String name, boolean repeated) {
+        this.protoType = protoType;
+        this.name = name;
+        this.repeated = repeated;
+    }
+
+    /**
+     * Gibt den Protobuf-Typ des Feldes zurück.
+     *
+     * @return Protobuf-Datentyp
+     */
+    public String getProtoType() {
+        return protoType;
+    }
+
+    /**
+     * Gibt den Namen des Feldes zurück.
+     *
+     * @return Feldname
+     */
+    public String getName() {
+        return name;
+    }
+
+    /**
+     * Gibt an, ob das Feld wiederholt ist (repeated).
+     *
+     * @return true, wenn das Feld wiederholt ist
+     */
+    public boolean isRepeated() {
+        return repeated;
+    }
+
+    /**
+     * Gibt den entsprechenden Java-Typ für den Protobuf-Typ zurück.
+     * Berücksichtigt dabei auch, ob das Feld repeated ist.
+     *
+     * @return Java-Typ als String
+     */
+    public String getJavaType() {
+        String javaType = switch (protoType) {
+            case "string" -> "String";
+            case "bool" -> "Boolean";
+            case "int32", "sint32", "uint32", "fixed32" -> "Integer";
+            case "int64", "sint64", "uint64", "fixed64" -> "Long";
+            case "float" -> "Float";
+            case "double" -> "Double";
+            case "bytes" -> "byte[]";
+            case "google.protobuf.Timestamp" -> "java.time.Instant";
+            default -> protoType.endsWith("Dto") ? protoType : "Object";
+        };
+
+        return repeated ? "List<" + javaType + ">" : javaType;
+    }
+
+    /**
+     * Prüft, ob es sich beim Typ um einen benutzerdefinierten Typ handelt
+     * (also nicht um einen eingebauten Protobuf-Typ).
+     *
+     * @return true, wenn es ein benutzerdefinierter Typ ist
+     */
+    public boolean isCustomType() {
+        return !protoType.matches(
+                "string|bool|int32|sint32|uint32|fixed32|int64|sint64|uint64|fixed64|float|double|bytes|google.protobuf.Timestamp"
+        );
+    }
+
+    /**
+     * Gibt den einfachen Java-Typnamen ohne Paketpfad zurück.
+     *
+     * @return einfacher Typname
+     */
+    public String getSimpleJavaType() {
+        String type = protoType;
+        if (protoType.endsWith("Dto")) {
+            type = protoType;
+        }
+        return type.replaceAll(".*\\.", ""); // Entfernt Paketnamen
+    }
+}
