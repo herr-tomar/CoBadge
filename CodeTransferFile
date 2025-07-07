@@ -1,114 +1,12 @@
-package osplus.pkp.dto.plugin;
-
-import freemarker.template.Template;
-import org.junit.jupiter.api.*;
-import osplus.pkp.dto.util.TemplateWriterUtil;
-
-import java.io.File;
-import java.io.FileWriter;
-import java.io.Writer;
-import java.nio.file.Files;
-import java.util.Collections;
-
-import static org.junit.jupiter.api.Assertions.*;
-
-/**
- * Testklasse für das RestDtoGeneratorPlugin.
- */
-class RestDtoGeneratorPluginTest {
-
-    private File tempProtoDir;
-    private File tempOutputDir;
-
-    @BeforeEach
-    void setUp() throws Exception {
-        tempProtoDir = Files.createTempDirectory("proto-dir").toFile();
-        tempOutputDir = Files.createTempDirectory("output-dir").toFile();
-
-        // Simpler .proto-Datei erzeugen
-        File protoFile = new File(tempProtoDir, "sample.proto");
-        try (Writer writer = new FileWriter(protoFile)) {
-            writer.write("""
-                package osplus.sample;
-
-                message Person {
-                    string name = 1;
-                    repeated int32 scores = 2;
-                }
-            """);
-        }
-
-        // Template dummy-Dateien erzeugen (for actual test run, place real ones under /templates)
-        File templateDir = new File("src/main/resources/templates");
-        templateDir.mkdirs();
-
-        try (Writer writer = new FileWriter(new File(templateDir, "rest-dto.ftl"))) {
-            writer.write("package ${packageName};\npublic class ${className} {}");
-        }
-
-        try (Writer writer = new FileWriter(new File(templateDir, "rest-mapper.ftl"))) {
-            writer.write("package ${mapperPackage};\ninterface ${mapperInterfaceName} {}");
-        }
-    }
-
-    @AfterEach
-    void tearDown() {
-        deleteRecursive(tempProtoDir);
-        deleteRecursive(tempOutputDir);
-    }
-
-    private void deleteRecursive(File file) {
-        if (file == null || !file.exists()) return;
-        if (file.isDirectory()) {
-            for (File child : file.listFiles()) {
-                deleteRecursive(child);
-            }
-        }
-        file.delete();
-    }
-
-    @Test
-    void testSuccessfulGeneration() {
-        assertDoesNotThrow(() -> RestDtoGeneratorPlugin.generate(
-                new String[]{tempProtoDir.getAbsolutePath(), tempOutputDir.getAbsolutePath()}
-        ));
-
-        // Check if output was generated
-        File[] generatedFiles = tempOutputDir.listFiles();
-        assertNotNull(generatedFiles);
-        assertTrue(generatedFiles.length > 0, "No output files generated.");
-    }
-
-    @Test
-    void testMissingArguments() {
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> RestDtoGeneratorPlugin.generate(new String[0]));
-        assertTrue(ex.getMessage().contains("Usage"));
-    }
-
-    @Test
-    void testInvalidProtoDir() {
-        String fakePath = new File("nonexistent").getAbsolutePath();
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> RestDtoGeneratorPlugin.generate(new String[]{fakePath, tempOutputDir.getAbsolutePath()}));
-        assertTrue(ex.getMessage().contains("Ungültiges Proto-Verzeichnis"));
-    }
-
-    @Test
-    void testWithEmptyProtoDir() {
-    File emptyDir = null;
+@Test
+void testWithEmptyProtoDir() {
     try {
-        emptyDir = Files.createTempDirectory("empty-proto").toFile();
+        File emptyDir = Files.createTempDirectory("empty-proto").toFile();
         assertDoesNotThrow(() -> RestDtoGeneratorPlugin.generate(
                 new String[]{emptyDir.getAbsolutePath(), tempOutputDir.getAbsolutePath()}
         ));
+        deleteRecursive(emptyDir); // still cleanup
     } catch (IOException e) {
         fail("Fehler beim Erstellen des temporären Verzeichnisses für den Test: " + e.getMessage());
-    } finally {
-        if (emptyDir != null) {
-            deleteRecursive(emptyDir);
-        }
     }
-}
-
 }
