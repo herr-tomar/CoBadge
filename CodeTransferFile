@@ -1,177 +1,30 @@
-package osplus.pkp.dto.plugin;
-
-import freemarker.template.Configuration;
-import freemarker.template.Template;
-import freemarker.template.TemplateExceptionHandler;
-import freemarker.template.Version;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkp.dto.model.ProtoFieldModel;
-import osplus.pkp.dto.model.ProtoMessageModel;
-import osplus.pkp.dto.util.ProtoParserUtil;
-import osplus.pkp.dto.util.TemplateWriterUtil;
-
-import java.io.File;
-import java.io.IOException;
-import java.util.*;
-
-/**
- * Generator-Plugin zur automatisierten Erstellung von REST-DTOs und MapStruct-Mapping-Interfaces
- * auf Basis von .proto-Dateien.
- */
-public final class RestDtoGeneratorPlugin {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(RestDtoGeneratorPlugin.class);
-
-    private static final String TEMPLATE_DIRECTORY = "/templates";
-    private static final String ENCODING_UTF_8 = "UTF-8";
-    private static final String TEMPLATE_REST_DTO = "rest-dto.ftl";
-    private static final String TEMPLATE_REST_MAPPER = "rest-mapper.ftl";
-    private static final String KEY_PACKAGE_NAME = "packageName";
-    private static final String KEY_CLASS_NAME = "className";
-    private static final String KEY_FIELDS = "fields";
-    private static final String KEY_MAPPER_PACKAGE = "mapperPackage";
-    private static final String KEY_PROTO_DTO_PACKAGE = "protoDtoPackage";
-    private static final String KEY_PROTO_DTO_CLASS_NAME = "protoDtoClassName";
-    private static final String KEY_REST_DTO_PACKAGE = "restDtoPackage";
-    private static final String KEY_REST_DTO_CLASS_NAME = "restDtoClassName";
-    private static final String KEY_MAPPER_INTERFACE_NAME = "mapperInterfaceName";
-    private static final String KEY_CUSTOM_IMPORTS = "customMapperImports";
-    private static final String KEY_CUSTOM_SIMPLE_NAMES = "customMapperSimpleNames";
-    private static final String KEY_REPEATED_MAPPINGS = "repeatedFieldMappings";
-
-    private RestDtoGeneratorPlugin() {
-        // Verhindert Instanziierung
-    }
-
-    /**
-     * Einstiegspunkt für Kommandozeilen-Ausführung.
-     *
-     * @param args Argumente: [0] = Pfad zum Proto-Verzeichnis, [1] = Ausgabeverzeichnis
-     */
-    public static void main(String[] args) {
-        try {
-            generate(args);
-        } catch (IllegalArgumentException e) {
-            LOGGER.error(e.getMessage());
-            System.exit(1);
-        } catch (IOException e) {
-            LOGGER.error("Fehler beim Verarbeiten der Dateien.", e);
-            System.exit(2);
-        } catch (Exception e) {
-            LOGGER.error("Unerwarteter Fehler beim Generieren der DTOs.", e);
-            System.exit(3);
-        }
-    }
-
-    /**
-     * Führt die DTO- und Mapper-Generierung anhand der übergebenen Argumente aus.
-     *
-     * @param args Argumente: [0] = Pfad zum Proto-Verzeichnis, [1] = Ausgabeverzeichnis
-     * @throws IOException bei Datei- oder Templatefehlern
-     */
-    public static void generate(String[] args) throws IOException {
-        if (args.length < 2) {
-            throw new IllegalArgumentException("Usage: RestDtoGeneratorPlugin <protoInputDir> <restDtoOutputDir>");
-        }
-
-        File protoDir = new File(args[0]);
-        File outputDir = new File(args[1]);
-
-        if (!protoDir.exists() || !protoDir.isDirectory()) {
-            throw new IllegalArgumentException("Ungültiges Proto-Verzeichnis: " + protoDir.getAbsolutePath());
-        }
-
-        outputDir.mkdirs();
-
-        Configuration cfg = new Configuration(new Version("2.3.32"));
-        cfg.setClassForTemplateLoading(RestDtoGeneratorPlugin.class, TEMPLATE_DIRECTORY);
-        cfg.setDefaultEncoding(ENCODING_UTF_8);
-        cfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
-
-        Template dtoTemplate = cfg.getTemplate(TEMPLATE_REST_DTO);
-        Template mapperTemplate = cfg.getTemplate(TEMPLATE_REST_MAPPER);
-
-        List<ProtoMessageModel> messageModels = ProtoParserUtil.parseAll(protoDir);
-
-        for (ProtoMessageModel model : messageModels) {
-            generateDto(dtoTemplate, outputDir, model);
-            generateMapper(mapperTemplate, outputDir, model);
-        }
-
-        LOGGER.info("REST DTO- und Mapper-Generierung erfolgreich abgeschlossen.");
-    }
-
-    private static void generateDto(Template dtoTemplate, File outputDir, ProtoMessageModel model) throws IOException {
-        String restPackage = insertRestInPackage(model.getPackageName());
-        String dtoPath = restPackage.replace('.', '/');
-        File dtoDir = new File(outputDir, dtoPath);
-        dtoDir.mkdirs();
-
-        Map<String, Object> dtoData = new HashMap<>();
-        dtoData.put(KEY_PACKAGE_NAME, restPackage);
-        dtoData.put(KEY_CLASS_NAME, model.getClassName());
-        dtoData.put(KEY_FIELDS, model.getFields());
-
-        File dtoFile = new File(dtoDir, model.getClassName() + ".java");
-        TemplateWriterUtil.writeTemplate(dtoTemplate, dtoData, dtoFile);
-    }
-
-    private static void generateMapper(Template mapperTemplate, File outputDir, ProtoMessageModel model) throws IOException {
-        String restPackage = insertRestInPackage(model.getPackageName());
-        String mapperPackage = restPackage + ".mapper";
-
-        Set<String> fullMapperClassSet = new HashSet<>();
-        Set<String> simpleMapperClassSet = new HashSet<>();
-
-        for (ProtoFieldModel field : model.getFields()) {
-            if (field.isCustomType()) {
-                fullMapperClassSet.add(restPackage + ".mapper." + field.getProtoType() + "Mapper");
-                simpleMapperClassSet.add(field.getProtoType() + "Mapper");
-            }
-        }
-
-        List<Map<String, String>> repeatedFieldMappings = new ArrayList<>();
-        for (ProtoFieldModel field : model.getFields()) {
-            if (field.isRepeated()) {
-                Map<String, String> mapping = new HashMap<>();
-                mapping.put("source", field.getName() + "List");
-                mapping.put("target", field.getName());
-                repeatedFieldMappings.add(mapping);
-            }
-        }
-
-        Map<String, Object> mapperData = new HashMap<>();
-        mapperData.put(KEY_MAPPER_PACKAGE, mapperPackage);
-        mapperData.put(KEY_PROTO_DTO_PACKAGE, model.getPackageName());
-        mapperData.put(KEY_PROTO_DTO_CLASS_NAME, model.getClassName());
-        mapperData.put(KEY_REST_DTO_PACKAGE, restPackage);
-        mapperData.put(KEY_REST_DTO_CLASS_NAME, model.getClassName());
-        mapperData.put(KEY_MAPPER_INTERFACE_NAME, model.getClassName() + "Mapper");
-        mapperData.put(KEY_CUSTOM_IMPORTS, new ArrayList<>(fullMapperClassSet));
-        mapperData.put(KEY_CUSTOM_SIMPLE_NAMES, new ArrayList<>(simpleMapperClassSet));
-        mapperData.put(KEY_REPEATED_MAPPINGS, repeatedFieldMappings);
-
-        File mapperDir = new File(outputDir, mapperPackage.replace('.', '/'));
-        mapperDir.mkdirs();
-
-        File mapperFile = new File(mapperDir, model.getClassName() + "Mapper.java");
-        TemplateWriterUtil.writeTemplate(mapperTemplate, mapperData, mapperFile);
-    }
-
-    /**
-     * Fügt ".rest" als Bestandteil in den Package-Namen ein, sofern noch nicht enthalten.
-     *
-     * @param originalPackage Ursprünglicher Package-Name
-     * @return Neuer Package-Name mit ".rest"
-     */
-    private static String insertRestInPackage(String originalPackage) {
-        String[] parts = originalPackage.split("\\.");
-        if (parts.length >= 2 && !"rest".equals(parts[2])) {
-            List<String> result = new ArrayList<>(Arrays.asList(parts));
-            result.add(2, "rest");
-            return String.join(".", result);
-        }
-        return originalPackage;
-    }
-}
+ BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  7.680 s
+[INFO] Finished at: 2025-07-07T12:47:34+02:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.3:test (default-test) on project pkp-dto-plugin: 
+[ERROR] 
+[ERROR] See C:\DEV\pkptuna-mkp\pkp-dto-plugin\target\surefire-reports for the individual test results.
+[ERROR] See dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
+[ERROR] ExecutionException The forked VM terminated without properly saying goodbye. VM crash or System.exit called?
+[ERROR] Command was cmd.exe /X /C "C:\Projekte\workbench\java21-zulu\bin\java --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED -javaagent:C:\Projekte\.m2\repository\org\mockito\mockito-core\5.17.0\mockito-core-5.17.0.jar -jar C:\Users\j769180\AppData\Local\Temp\surefire15796314606968752582\surefirebooter-20250707124732638_9.jar C:\Users\j769180\AppData\Local\Temp\surefire15796314606968752582 2025-07-07T12-47-32_352-jvmRun1 surefire-20250707124732638_2tmp surefire_2-20250707124732638_5tmp"
+[ERROR] Error occurred in starting fork, check output in log
+[ERROR] Process Exit Code: 1
+[ERROR] Crashed tests:
+[ERROR] osplus.pkp.dto.plugin.RestDtoGeneratorPluginTest
+[ERROR] org.apache.maven.surefire.booter.SurefireBooterForkException: ExecutionException The forked VM terminated without properly saying goodbye. VM crash or System.exit called?
+[ERROR] Command was cmd.exe /X /C "C:\Projekte\workbench\java21-zulu\bin\java --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED -javaagent:C:\Projekte\.m2\repository\org\mockito\mockito-core\5.17.0\mockito-core-5.17.0.jar -jar C:\Users\j769180\AppData\Local\Temp\surefire15796314606968752582\surefirebooter-20250707124732638_9.jar C:\Users\j769180\AppData\Local\Temp\surefire15796314606968752582 2025-07-07T12-47-32_352-jvmRun1 surefire-20250707124732638_2tmp surefire_2-20250707124732638_5tmp"
+[ERROR] Error occurred in starting fork, check output in log
+[ERROR] Process Exit Code: 1
+[ERROR] Crashed tests:
+[ERROR] osplus.pkp.dto.plugin.RestDtoGeneratorPluginTest
+[ERROR] 	at org.apache.maven.plugin.surefire.booterclient.ForkStarter.awaitResultsDone(ForkStarter.java:456)
+[ERROR] 	at org.apache.maven.plugin.surefire.booterclient.ForkStarter.runSuitesForkOnceMultiple(ForkStarter.java:358)
+[ERROR] 	at org.apache.maven.plugin.surefire.booterclient.ForkStarter.run(ForkStarter.java:296)
+[ERROR] 	at org.apache.maven.plugin.surefire.booterclient.ForkStarter.run(ForkStarter.java:250)
+[ERROR] 	at org.apache.maven.plugin.surefire.AbstractSurefireMojo.executeProvider(AbstractSurefireMojo.java:1337)
+[ERROR] 	at org.apache.maven.plugin.surefire.AbstractSurefireMojo.executeAfterPreconditionsChecked(AbstractSurefireMojo.java:1135)
+[ERROR] 	at org.apache.maven.plugin.surefire.AbstractSurefireMojo.execute(AbstractSurefireMojo.java:969)
+[ERROR] 	at org.apache.maven.plugin.DefaultBuildPluginManager.executeMojo(DefaultBuildPluginManager.java:126)
+[ERROR] 	at org.apache.maven.lifecycle.internal.MojoExecutor.doExecute2(MojoExecutor.java:328)
