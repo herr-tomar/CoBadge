@@ -1,35 +1,13 @@
-package osplus.pkptuna.hazelcast.protobuf.impl;
+@Configuration
+public class ProtoDeserializerConfig {
 
-import com.google.protobuf.Message;
-import com.google.protobuf.Parser;
-import osplus.pkptuna.hazelcast.protobuf.SimpleDeserializer;
-
-import java.io.IOException;
-
-/**
- * Implementierung von {@link SimpleDeserializer}, die ein Google Protobuf-Parser
- * verwendet, um ein Byte-Array in ein Protobuf-Message-Objekt zu deserialisieren.
- *
- * @param <T> der konkrete Protobuf-Typ, der geparst wird
- */
-public class ProtobufDeserializer<T extends Message> implements SimpleDeserializer<T> {
-
-    private final Parser<T> parser;
-
-    /**
-     * Konstruktor mit übergebenem {@link Parser} für den Protobuf-Typ.
-     *
-     * @param parser der Parser für den konkreten Protobuf-Typ
-     */
-    public ProtobufDeserializer(Parser<T> parser) {
-        this.parser = parser;
+    @Bean
+    public ProtobufDeserializer<DisputeLookupRequestDto> disputeLookupRequestDeserializer() {
+        return new ProtobufDeserializer<>(DisputeLookupRequestDto.parser());
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public T deserialize(byte[] bytes) throws IOException {
-        return parser.parseFrom(bytes);
+    @Bean
+    public ProtobufDeserializer<DisputeLookupResponseDto> disputeLookupResponseDeserializer() {
+        return new ProtobufDeserializer<>(DisputeLookupResponseDto.parser());
     }
 }
