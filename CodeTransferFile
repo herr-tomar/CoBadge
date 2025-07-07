@@ -1,300 +1,125 @@
 package osplus.pkp.dto.util;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import osplus.pkp.dto.model.ProtoFieldModel;
-import osplus.pkp.dto.model.ProtoMessageModel;
+import freemarker.template.Template;
+import freemarker.template.TemplateException;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
 
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
-import java.nio.file.Files;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
+import java.io.IOException;
+import java.io.Writer;
+import java.util.Map;
 
 /**
- * Testklasse für {@link ProtoParserUtil}.
- * Prüft das korrekte Parsen von .proto-Dateien in {@link ProtoMessageModel}- und {@link ProtoFieldModel}-Objekte,
- * einschließlich Unterstützung für "repeated"-Felder.
+ * Hilfsklasse zum Schreiben von FreeMarker-Templates auf eine Datei.
+ * Kapselt das Filehandling und Fehlerprotokollierung.
  */
-class ProtoParserUtilTest {
+public final class TemplateWriterUtil {
 
-    private File tempDir;
+    private static final Logger LOGGER = LoggerFactory.getLogger(TemplateWriterUtil.class);
 
-    /**
-     * Erzeugt ein temporäres Verzeichnis vor jedem Testfall.
-     * @throws Exception falls das Verzeichnis nicht erstellt werden kann
-     */
-    @BeforeEach
-    void setUp() throws Exception {
-        tempDir = Files.createTempDirectory("proto-test").toFile();
+    private TemplateWriterUtil() {
+        // Verhindert Instanziierung
     }
 
     /**
-     * Löscht alle temporären Dateien und Verzeichnisse nach jedem Testfall.
-     */
-    @AfterEach
-    void tearDown() {
-        if (tempDir != null && tempDir.exists()) {
-            File[] files = tempDir.listFiles();
-            if (files != null) {
-                for (File file : files) {
-                    file.delete();
-                }
-            }
-            tempDir.delete();
-        }
-    }
-
-    /**
-     * Testet das Parsen einer gültigen .proto-Datei mit mehreren "repeated"-Feldern.
-     * Verifiziert, dass die Felder korrekt erkannt und markiert werden.
-     * @throws Exception falls ein I/O-Fehler auftritt
-     */
-    @Test
-    void testParseValidProtoFileWithRepeatedFields() throws Exception {
-        File protoFile = new File(tempDir, "TestRepeated.proto");
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(protoFile))) {
-            writer.write("package osplus.test;\n");
-            writer.write("message RepeatedTest {\n");
-            writer.write("  repeated string tags = 1;\n");
-            writer.write("  repeated int32 ids = 2;\n");
-            writer.write("  string name = 3;\n");
-            writer.write("}\n");
-        }
-
-        List<ProtoMessageModel> result = ProtoParserUtil.parse(protoFile);
-        assertEquals(1, result.size());
-
-        ProtoMessageModel model = result.get(0);
-        List<ProtoFieldModel> fields = model.getFields();
-
-        assertEquals(3, fields.size());
-
-        ProtoFieldModel field1 = fields.get(0);
-        assertEquals("tags", field1.getName());
-        assertEquals("string", field1.getProtoType());
-        assertTrue(field1.isRepeated());
-
-        ProtoFieldModel field2 = fields.get(1);
-        assertEquals("ids", field2.getName());
-        assertEquals("int32", field2.getProtoType());
-        assertTrue(field2.isRepeated());
-
-        ProtoFieldModel field3 = fields.get(2);
-        assertEquals("name", field3.getName());
-        assertFalse(field3.isRepeated());
-    }
-
-    /**
-     * Testet das Parsen mehrerer .proto-Dateien mit "repeated"- und Standardfeldern.
-     * Verifiziert, dass alle Nachrichtenmodelle korrekt erkannt werden.
-     * @throws Exception falls ein I/O-Fehler auftritt
-     */
-    @Test
-    void testParseAllWithRepeatedFieldsInMultipleFiles() throws Exception {
-        createProtoFile("A.proto", """
-            package pkg.a;
-            message A {
-              repeated string names = 1;
-            }
-        """);
-
-        createProtoFile("B.proto", """
-            package pkg.b;
-            message B {
-              int64 id = 1;
-              repeated float scores = 2;
-            }
-        """);
-
-        List<ProtoMessageModel> result = ProtoParserUtil.parseAll(tempDir);
-        assertEquals(2, result.size());
-
-        // Nachricht A prüfen
-        ProtoMessageModel modelA = result.stream()
-                .filter(m -> m.getClassName().equals("A"))
-                .findFirst()
-                .orElseThrow();
-        assertTrue(modelA.getFields().get(0).isRepeated());
-
-        // Nachricht B prüfen
-        ProtoMessageModel modelB = result.stream()
-                .filter(m -> m.getClassName().equals("B"))
-                .findFirst()
-                .orElseThrow();
-
-        assertEquals(2, modelB.getFields().size());
-        assertTrue(modelB.getFields().get(1).isRepeated());
-    }
-
-    /**
-     * Testet das Parsen einer einfachen .proto-Datei ohne "repeated"-Felder.
-     * @throws Exception falls ein I/O-Fehler auftritt
-     */
-    @Test
-    void testParseWithNoRepeatedFields() throws Exception {
-        File protoFile = new File(tempDir, "Simple.proto");
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(protoFile))) {
-            writer.write("package osplus.simple;\n");
-            writer.write("message SimpleMessage {\n");
-            writer.write("  int64 id = 1;\n");
-            writer.write("  string description = 2;\n");
-            writer.write("}\n");
-        }
-
-        List<ProtoMessageModel> result = ProtoParserUtil.parse(protoFile);
-        assertEquals(1, result.size());
-
-        List<ProtoFieldModel> fields = result.get(0).getFields();
-        assertEquals(2, fields.size());
-
-        assertFalse(fields.get(0).isRepeated());
-        assertFalse(fields.get(1).isRepeated());
-    }
-
-    /**
-     * Hilfsmethode zur Erzeugung einer .proto-Datei im temporären Verzeichnis.
+     * Schreibt ein FreeMarker-Template mit dem gegebenen Datenmodell in die Ausgabedatei.
      *
-     * @param fileName Dateiname
-     * @param content  Inhalt der .proto-Datei
-     * @throws Exception falls die Datei nicht geschrieben werden kann
+     * @param template   Das zu verwendende FreeMarker-Template
+     * @param dataModel  Das Datenmodell (Map), das im Template ersetzt wird
+     * @param outputFile Die Ausgabedatei
      */
-    private void createProtoFile(String fileName, String content) throws Exception {
-        File file = new File(tempDir, fileName);
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-            writer.write(content);
+    public static void writeTemplate(Template template, Map<String, Object> dataModel, File outputFile) {
+        try (Writer writer = new BufferedWriter(new FileWriter(outputFile))) {
+            template.process(dataModel, writer);
+            LOGGER.info("Datei erfolgreich generiert: {}", outputFile.getAbsolutePath());
+        } catch (IOException | TemplateException e) {
+            LOGGER.error("Fehler beim Schreiben der Datei: {}", outputFile.getName(), e);
         }
     }
 }
-
 
 --------------
 
 package osplus.pkp.dto.util;
 
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkp.dto.model.ProtoFieldModel;
-import osplus.pkp.dto.model.ProtoMessageModel;
+import freemarker.template.Configuration;
+import freemarker.template.Template;
+import freemarker.template.TemplateExceptionHandler;
+import freemarker.template.Version;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.nio.file.Files;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Dienstklasse zum Parsen von .proto-Dateien zur Extraktion von Nachrichtenstrukturen (Messages).
+ * Testklasse für {@link TemplateWriterUtil}.
+ * Verifiziert das Schreiben von Templates mit und ohne Inhalt.
  */
-public final class ProtoParserUtil {
+class TemplateWriterUtilTest {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ProtoParserUtil.class);
+    private File tempDir;
 
-    // Konstanten
-    private static final String PROTO_EXTENSION = ".proto";
-    private static final String CLEANED_LINE_REGEX = "^(optional|required|repeated)\\s+";
-    private static final String PACKAGE_KEYWORD = "package ";
-    private static final String MESSAGE_KEYWORD = "message ";
-    private static final String BLOCK_END = "}";
-    private static final String SEMICOLON = ";";
-    private static final String EQUAL_SIGN = "=";
-    private static final String REPEATED_PREFIX = "repeated ";
-
-    private ProtoParserUtil() {
-        // Verhindert Instanziierung
+    /**
+     * Erstellt ein temporäres Verzeichnis für Ausgabedateien.
+     *
+     * @throws Exception falls das Verzeichnis nicht erstellt werden kann
+     */
+    @BeforeEach
+    void setUp() throws Exception {
+        tempDir = Files.createTempDirectory("template-util-test").toFile();
     }
 
     /**
-     * Parst alle .proto-Dateien in einem Verzeichnis.
-     *
-     * @param protoDir Verzeichnis mit Protobuf-Dateien
-     * @return Liste aller geparsten Nachrichtenmodelle
+     * Löscht temporäre Testdateien nach jedem Testfall.
      */
-    public static List<ProtoMessageModel> parseAll(File protoDir) {
-        if (protoDir == null || !protoDir.isDirectory()) {
-            LOGGER.warn("Ungültiges Verzeichnis übergeben: {}", protoDir);
-            return Collections.emptyList();
-        }
-
-        File[] protoFiles = protoDir.listFiles((dir, name) -> name.endsWith(PROTO_EXTENSION));
-        if (protoFiles == null) {
-            return Collections.emptyList();
-        }
-
-        List<ProtoMessageModel> messages = new ArrayList<>();
-        for (File protoFile : protoFiles) {
-            messages.addAll(parse(protoFile));
-        }
-        return messages;
-    }
-
-    /**
-     * Parst eine einzelne .proto-Datei und extrahiert alle enthaltenen Messages.
-     *
-     * @param protoFile Die zu analysierende .proto-Datei
-     * @return Liste mit Nachrichtenmodellen, die in der Datei definiert sind
-     */
-    public static List<ProtoMessageModel> parse(File protoFile) {
-        List<ProtoMessageModel> messageModels = new ArrayList<>();
-
-        if (protoFile == null || !protoFile.exists()) {
-            LOGGER.warn("Datei existiert nicht oder ist null: {}", protoFile);
-            return messageModels;
-        }
-
-        String protoFileName = protoFile.getName();
-
-        try (BufferedReader reader = new BufferedReader(new FileReader(protoFile))) {
-            String packageName = null;
-            ProtoMessageModel currentMessage = null;
-            String line = reader.readLine();
-
-            while (line != null) {
-                line = line.trim();
-
-                if (line.startsWith(PACKAGE_KEYWORD)) {
-                    String[] parts = line.split("\\s+");
-                    if (parts.length >= 2) {
-                        packageName = parts[1].replace(SEMICOLON, "").trim();
-                    }
-                } else if (line.startsWith(MESSAGE_KEYWORD)) {
-                    String messageName = line.split("\\s+")[1].replace("{", "").trim();
-                    currentMessage = new ProtoMessageModel(messageName);
-                    currentMessage.setProtoPackageName(packageName);
-                    currentMessage.setPackageName(packageName);
-                } else if (line.startsWith(BLOCK_END)) {
-                    if (currentMessage != null) {
-                        messageModels.add(currentMessage);
-                        currentMessage = null;
-                    }
-                } else if (currentMessage != null && !line.isEmpty() && line.contains(SEMICOLON)) {
-                    boolean repeated = line.startsWith(REPEATED_PREFIX);
-                    String cleanedLine = line.replaceAll(CLEANED_LINE_REGEX, "");
-                    String[] parts = cleanedLine.split("\\s+");
-
-                    if (parts.length >= 2) {
-                        String type = parts[0];
-                        String name = parts[1];
-                        if (name.contains(EQUAL_SIGN)) {
-                            name = name.substring(0, name.indexOf(EQUAL_SIGN)).trim();
-                        }
-                        name = name.replace(SEMICOLON, "").trim();
-                        currentMessage.addField(new ProtoFieldModel(type, name, repeated));
-                    }
-                }
-
-                line = reader.readLine(); // nächste Zeile
+    @AfterEach
+    void tearDown() {
+        File[] files = tempDir.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                file.delete();
             }
-
-        } catch (IOException e) {
-            LOGGER.error("Fehler beim Lesen der Proto-Datei '{}': {}", protoFileName, e.getMessage(), e);
         }
+        tempDir.delete();
+    }
 
-        return messageModels;
+    /**
+     * Testet das Schreiben eines einfachen Templates mit einem Datenmodell.
+     *
+     * @throws Exception falls eine Template-Fehlkonfiguration auftritt
+     */
+    @Test
+    void testWriteTemplateSuccessfully() throws Exception {
+        // FreeMarker-Konfiguration für Tests
+        Configuration cfg = new Configuration(new Version("2.3.32"));
+        cfg.setClassForTemplateLoading(this.getClass(), "/");
+        cfg.setDefaultEncoding("UTF-8");
+        cfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
+
+        // Temporäres Template als String simulieren
+        File templateFile = new File(tempDir, "simple.ftl");
+        Files.writeString(templateFile.toPath(), "Hallo ${name}!");
+
+        // Template laden
+        Template template = cfg.getTemplate("template-util-test/simple.ftl");
+
+        Map<String, Object> dataModel = new HashMap<>();
+        dataModel.put("name", "Welt");
+
+        File output = new File(tempDir, "output.txt");
+        TemplateWriterUtil.writeTemplate(template, dataModel, output);
+
+        assertTrue(output.exists());
+        String content = Files.readString(output.toPath());
+        assertTrue(content.contains("Hallo Welt"));
     }
 }
