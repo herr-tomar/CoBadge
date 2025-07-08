@@ -7,9 +7,9 @@ import com.hazelcast.topic.Message;
 import com.hazelcast.topic.MessageListener;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
+import osplus.apl.core.api.AplComponent;
 import osplus.fi.core.logging.api.Logger;
 import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.apl.core.api.AplComponent;
 import osplus.pkptuna.hazelcast.config.FlowConfig;
 import osplus.pkptuna.hazelcast.flows.FlowHandler;
 import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
@@ -17,28 +17,13 @@ import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- Der {@code GenericHazelcastRouter} ist für das Routing eingehender Nachrichten von Hazelcast
- ReliableTopics in partitionierte IMaps zuständig, basierend auf vordefinierten Flusskonfigurationen.
- Diese Komponente stellt sicher, dass das Routing nur von einer aktiven Instanz pro Cluster durchgeführt wird –
- mittels eines einfachen Leader-Election-Mechanismus.
- <p><strong>Hauptfunktionen:</strong></p>
- <ul>
- <li><strong>Leader-Election:</strong> Nur eine Instanz im Cluster übernimmt das Routing, indem sie einen
- eindeutigen Schlüssel (z.B. {@code active-router}) in der verteilten {@code router-leader-map} beansprucht.</li>
- <li><strong>ReliableTopic-Listener:</strong> Abonniert die konfigurierten Hazelcast ReliableTopics
- ausschließlich dann, wenn diese Instanz als Leader bestimmt wurde.</li>
- <li><strong>Router-Claim-Map:</strong> Verwendet die {@code router-claim-map}, um sicherzustellen,
- dass jede Nachricht nur einmal geroutet wird (idempotentes Routing) – basierend auf der Korrelation-ID.</li>
- <li><strong>Round-Robin-Partitionierung:</strong> Eingehende Nachrichten werden gleichmäßig auf
- partitionierte IMaps (z.B. {@code request-map0}, {@code request-map1}, ...) verteilt – mit einer
- Round-Robin-Strategie pro Flow.</li>
- </ul>
- Diese Router-Komponente gewährleistet Konsistenz, Skalierbarkeit und Fehlertoleranz in verteilten Umgebungen,
- ohne auf komplexe CP-Mechanismen oder externe Koordinationsdienste angewiesen zu sein.
+ * Der {@code GenericHazelcastRouter} ist verantwortlich für das zentrale Routing eingehender Nachrichten
+ * aus ReliableTopics in partitionierte IMaps. Der Router verwendet eine zentrale Leader Election mit Heartbeat,
+ * um sicherzustellen, dass nur eine Instanz im Cluster aktiv routet.
  */
 @AplComponent
 public class GenericHazelcastRouter {
@@ -49,8 +34,9 @@ public class GenericHazelcastRouter {
     private final List<FlowConfig> flowConfigs;
     private final FlowHandlerRegistry handlerRegistry;
     private final String routerInstanceId;
-
     private final Map<String, AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
+
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
     @Autowired
     public GenericHazelcastRouter(HazelcastInstance hazelcastInstance,
@@ -69,24 +55,45 @@ public class GenericHazelcastRouter {
         this.routerInstanceId = routerInstanceId;
     }
 
-
-    /**
-     * Initialisiert die Routing-Konfigurationen nach dem Start.
-     * Führt eine einfache Leader Election durch: nur ein aktiver Router pro Cluster.
-     */
     @PostConstruct
     public void initRouters() {
-        // Leader election
-        IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
-        String existingLeader = leaderMap.putIfAbsent("active-router", routerInstanceId);
+        try {
+            IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
+            IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
 
-        if (existingLeader != null) {
-            LOGGER.info("This node is passive. Active router is already running with ID={}", existingLeader);
-            return;
-        } 
+            Long lastHeartbeat = heartbeatMap.get("heartbeat");
+            boolean heartbeatStale = lastHeartbeat == null || System.currentTimeMillis() - lastHeartbeat > 5000;
 
-        LOGGER.info("This node is elected as the active router (ID={}). Initializing listeners...", routerInstanceId);
+            String currentLeader = leaderMap.get("active-router");
 
+            if (heartbeatStale && (currentLeader == null || currentLeader.isBlank())) {
+                String claimed = leaderMap.putIfAbsent("active-router", routerInstanceId);
+                if (claimed == null || claimed.equals(routerInstanceId)) {
+                    LOGGER.info("This node is elected as the ACTIVE router (ID={})", routerInstanceId);
+                    startHeartbeat();
+                    subscribeToTopics();
+                } else {
+                    LOGGER.info("Another node won the leadership (ID={})", claimed);
+                }
+            } else {
+                LOGGER.info("Leadership already exists or heartbeat is alive (Leader={}, LastBeat={})",
+                        currentLeader, lastHeartbeat);
+            }
+
+        } catch (Exception e) {
+            LOGGER.error("Failed to initialize router", e);
+        }
+    }
+
+    private void startHeartbeat() {
+        IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
+        scheduler.scheduleAtFixedRate(() -> {
+            heartbeatMap.put("heartbeat", System.currentTimeMillis());
+        }, 0, 3, TimeUnit.SECONDS);
+        LOGGER.info("Heartbeat started for router ID={}", routerInstanceId);
+    }
+
+    private void subscribeToTopics() {
         if (flowConfigs == null || flowConfigs.isEmpty()) {
             LOGGER.warn("No Hazelcast flow configurations found.");
             return;
@@ -110,10 +117,6 @@ public class GenericHazelcastRouter {
         }
     }
 
-    /**
-     * Listener-Klasse, die Nachrichten verarbeitet und sie dem korrekten Map-Partition zuweist.
-     * Implementiert eine einfache Round-Robin-Strategie und einmalige Routing-Sicherung per Lock.
-     */
     private class RoutingListener<T> implements MessageListener<byte[]> {
 
         private final String flowName;
@@ -129,14 +132,6 @@ public class GenericHazelcastRouter {
         @Override
         public void onMessage(Message<byte[]> message) {
             try {
-                IMap<String,String> leaderMap = hazelcastInstance.getMap("router-leader-map");
-                String currentLeader = leaderMap.get("leader-" + flowName);
-
-                if (!routerInstanceId.equals(currentLeader)) {
-                    LOGGER.debug("Instance is not leader for flow '{}', skipping", flowName);
-                    return;
-                }
-
                 T request = handler.deserializeRequest(message.getMessageObject());
                 String correlationId = handler.extractCorrelationId(request);
                 String lockKey = "route-lock-" + correlationId;
