@@ -2,16 +2,25 @@
 public void testNotLeaderDoesNotProcessMessage() throws Exception {
     // Arrange
     router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry);
-    
-    // Mock the leader map before init
+
+    // Mock leader map before initRouters()
     IMap<String, String> leaderMap = mock(IMap.class);
     when(hazelcastInstance.getMap("router-leader-map")).thenReturn(leaderMap);
-    
-    // Simulate that a different instance is the leader
-    when(leaderMap.get("leader-myFlow")).thenReturn("some-other-instance-id");
 
-    router.initRouters();
+    // Force routerInstanceId to something different
+    String thisInstanceId = "instance-A";
+    String actualLeader = "instance-B";
 
+    // Manually inject the leader
+    when(leaderMap.get("leader-myFlow")).thenReturn(actualLeader);
+
+    // Mock other required maps
+    when(hazelcastInstance.getMap("router-claim-map")).thenReturn(routerMap);
+    when(hazelcastInstance.getMap(startsWith("map-"))).thenReturn(targetMap);
+
+    router.initRouters(); // registers listener
+
+    // Setup mocks for handler
     byte[] rawMessage = "data".getBytes();
     Object deserialized = new Object();
     String corrId = "test-corr-id";
@@ -19,17 +28,18 @@ public void testNotLeaderDoesNotProcessMessage() throws Exception {
     when(handler.deserializeRequest(rawMessage)).thenReturn(deserialized);
     when(handler.extractCorrelationId(deserialized)).thenReturn(corrId);
 
+    // Simulate incoming message
     Message<byte[]> message = mock(Message.class);
     when(message.getMessageObject()).thenReturn(rawMessage);
 
+    // Capture and invoke the listener
     ArgumentCaptor<com.hazelcast.topic.MessageListener<byte[]>> captor =
             ArgumentCaptor.forClass(com.hazelcast.topic.MessageListener.class);
     verify(topic).addMessageListener(captor.capture());
 
-    // Act
-    captor.getValue().onMessage(message);
+    captor.getValue().onMessage(message); // triggers routing logic
 
-    // Assert: No routing should happen since this instance is not the leader
+    // Assert: should not route because this instance is not leader
     verify(routerMap, never()).putIfAbsent(anyString(), anyString());
     verify(targetMap, never()).put(anyString(), any());
 }
