@@ -1,36 +1,33 @@
-@Test
-public void testNotLeaderDoesNotProcessMessage() throws Exception {
-    // Given: A router instance that is NOT the leader
-    String testInstanceId = "instance-A";
-    String testLeaderId = "instance-B"; // different than instance-A
+@Override
+public void onMessage(Message<byte[]> message) {
+    try {
+        // 👇 Check leadership before proceeding
+        String currentLeader = hazelcastInstance.getMap("router-leader-map").get("leader-" + flowName);
+        if (!routerInstanceId.equals(currentLeader)) {
+            LOGGER.debug("Instance is not leader for flow '{}', skipping", flowName);
+            return;
+        }
 
-    // Override the leaderMap behavior
-    @SuppressWarnings("unchecked")
-    IMap<String, String> leaderMap = (IMap<String, String>) hazelcastInstance.getMap("router-leader-map");
-    when(leaderMap.get("leader-myFlow")).thenReturn(testLeaderId);
+        T request = handler.deserializeRequest(message.getMessageObject());
+        String correlationId = handler.extractCorrelationId(request);
+        String lockKey = "route-lock-" + correlationId;
 
-    // Recreate router with overridden leader ID
-    router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry, testInstanceId);
-    router.initRouters();
+        IMap<String, String> routerMap = hazelcastInstance.getMap("router-claim-map");
+        String uniqueId = UUID.randomUUID().toString();
 
-    // Prepare test message
-    byte[] rawMessage = "data".getBytes();
-    Object deserialized = new Object();
-    String corrId = "test-corr-id";
+        String existing = routerMap.putIfAbsent(lockKey, uniqueId);
+        if (existing != null) {
+            LOGGER.info("Skipped duplicate routing for correlationId={}", correlationId);
+            return;
+        }
 
-    when(handler.deserializeRequest(rawMessage)).thenReturn(deserialized);
-    when(handler.extractCorrelationId(deserialized)).thenReturn(corrId);
+        int index = roundRobinCounters.get(flowName).getAndIncrement() % config.partitions();
+        String mapKey = config.mapBase() + index;
 
-    // Fire message
-    Message<byte[]> message = mock(Message.class);
-    when(message.getMessageObject()).thenReturn(rawMessage);
+        hazelcastInstance.getMap(mapKey).put(correlationId, request);
+        LOGGER.info("Routed correlationId='{}' to map '{}'", correlationId, mapKey);
 
-    ArgumentCaptor<MessageListener<byte[]>> captor = ArgumentCaptor.forClass(MessageListener.class);
-    verify(topic).addMessageListener(captor.capture());
-
-    captor.getValue().onMessage(message);
-
-    // Then: Nothing should be routed
-    verify(routerMap, never()).putIfAbsent(anyString(), anyString());
-    verify(targetMap, never()).put(anyString(), any());
+    } catch (Exception e) {
+        LOGGER.error("Routing failure for flow '{}': {}", flowName, e.getMessage(), e);
+    }
 }
