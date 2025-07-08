@@ -1,47 +1,164 @@
+package osplus.pkptuna.hazelcast.pubsub;
+
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.topic.ITopic;
+import com.hazelcast.topic.Message;
+import com.hazelcast.topic.MessageListener;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.apl.core.api.AplComponent;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ Der {@code GenericHazelcastRouter} ist für das Routing eingehender Nachrichten von Hazelcast
+ ReliableTopics in partitionierte IMaps zuständig, basierend auf vordefinierten Flusskonfigurationen.
+ Diese Komponente stellt sicher, dass das Routing nur von einer aktiven Instanz pro Cluster durchgeführt wird –
+ mittels eines einfachen Leader-Election-Mechanismus.
+ <p><strong>Hauptfunktionen:</strong></p>
+ <ul>
+ <li><strong>Leader-Election:</strong> Nur eine Instanz im Cluster übernimmt das Routing, indem sie einen
+ eindeutigen Schlüssel (z.B. {@code active-router}) in der verteilten {@code router-leader-map} beansprucht.</li>
+ <li><strong>ReliableTopic-Listener:</strong> Abonniert die konfigurierten Hazelcast ReliableTopics
+ ausschließlich dann, wenn diese Instanz als Leader bestimmt wurde.</li>
+ <li><strong>Router-Claim-Map:</strong> Verwendet die {@code router-claim-map}, um sicherzustellen,
+ dass jede Nachricht nur einmal geroutet wird (idempotentes Routing) – basierend auf der Korrelation-ID.</li>
+ <li><strong>Round-Robin-Partitionierung:</strong> Eingehende Nachrichten werden gleichmäßig auf
+ partitionierte IMaps (z.B. {@code request-map0}, {@code request-map1}, ...) verteilt – mit einer
+ Round-Robin-Strategie pro Flow.</li>
+ </ul>
+ Diese Router-Komponente gewährleistet Konsistenz, Skalierbarkeit und Fehlertoleranz in verteilten Umgebungen,
+ ohne auf komplexe CP-Mechanismen oder externe Koordinationsdienste angewiesen zu sein.
+ */
+@AplComponent
+public class GenericHazelcastRouter {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastRouter.class);
+
+    private final HazelcastInstance hazelcastInstance;
+    private final List<FlowConfig> flowConfigs;
+    private final FlowHandlerRegistry handlerRegistry;
+    private final String routerInstanceId;
+
+    private final Map<String, AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
+
+    @Autowired
+    public GenericHazelcastRouter(HazelcastInstance hazelcastInstance,
+                                  List<FlowConfig> flowConfigs,
+                                  FlowHandlerRegistry handlerRegistry) {
+        this(hazelcastInstance, flowConfigs, handlerRegistry, UUID.randomUUID().toString());
+    }
+
+    public GenericHazelcastRouter(HazelcastInstance hazelcastInstance,
+                                  List<FlowConfig> flowConfigs,
+                                  FlowHandlerRegistry handlerRegistry,
+                                  String routerInstanceId) {
+        this.hazelcastInstance = hazelcastInstance;
+        this.flowConfigs = flowConfigs;
+        this.handlerRegistry = handlerRegistry;
+        this.routerInstanceId = routerInstanceId;
+    }
 
 
-org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'osplus.pkptuna.hazelcast.config.HazelcastFlowBootstrap': Unsatisfied dependency expressed through constructor parameter 0: Error creating bean with name 'osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter': Failed to instantiate [osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter]: No default constructor found
-	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:804) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.ConstructorResolver.autowireConstructor(ConstructorResolver.java:240) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireConstructor(AbstractAutowireCapableBeanFactory.java:1395) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1232) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:569) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1222) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1188) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1123) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:987) ~[spring-context-6.2.8.jar:6.2.8]
-	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:627) ~[spring-context-6.2.8.jar:6.2.8]
-	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146) ~[spring-boot-3.5.3.jar:3.5.3]
-	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752) ~[spring-boot-3.5.3.jar:3.5.3]
-	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439) ~[spring-boot-3.5.3.jar:3.5.3]
-	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318) ~[spring-boot-3.5.3.jar:3.5.3]
-	at osplus.apl.core.AplCoreRunner.main(AplCoreRunner.java:248) ~[apl-core-runner-251.0.0-M7.jar:251.0.0-M7]
-Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter': Failed to instantiate [osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter]: No default constructor found
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateBean(AbstractAutowireCapableBeanFactory.java:1357) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1242) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:569) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.config.DependencyDescriptor.resolveCandidate(DependencyDescriptor.java:254) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1745) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1628) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:913) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:791) ~[spring-beans-6.2.8.jar:6.2.8]
-	... 19 common frames omitted
-Caused by: org.springframework.beans.BeanInstantiationException: Failed to instantiate [osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter]: No default constructor found
-	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiate(SimpleInstantiationStrategy.java:118) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateBean(AbstractAutowireCapableBeanFactory.java:1351) ~[spring-beans-6.2.8.jar:6.2.8]
-	... 31 common frames omitted
-Caused by: java.lang.NoSuchMethodException: osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter.<init>()
-	at java.base/java.lang.Class.getConstructor0(Class.java:3761) ~[na:na]
-	at java.base/java.lang.Class.getDeclaredConstructor(Class.java:2930) ~[na:na]
-	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiate(SimpleInstantiationStrategy.java:114) ~[spring-beans-6.2.8.jar:6.2.8]
-	... 32 common frames omitted
+    /**
+     * Initialisiert die Routing-Konfigurationen nach dem Start.
+     * Führt eine einfache Leader Election durch: nur ein aktiver Router pro Cluster.
+     */
+    @PostConstruct
+    public void initRouters() {
+        // Leader election
+        IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
+        String existingLeader = leaderMap.putIfAbsent("active-router", routerInstanceId);
+
+        if (existingLeader != null) {
+            LOGGER.info("This node is passive. Active router is already running with ID={}", existingLeader);
+            return;
+        } 
+
+        LOGGER.info("This node is elected as the active router (ID={}). Initializing listeners...", routerInstanceId);
+
+        if (flowConfigs == null || flowConfigs.isEmpty()) {
+            LOGGER.warn("No Hazelcast flow configurations found.");
+            return;
+        }
+
+        for (FlowConfig config : flowConfigs) {
+            String flowName = config.name();
+            roundRobinCounters.putIfAbsent(flowName, new AtomicInteger(0));
+
+            @SuppressWarnings("unchecked")
+            FlowHandler<Object, Object> handler = (FlowHandler<Object, Object>) handlerRegistry.getHandler(flowName);
+
+            if (handler == null) {
+                LOGGER.warn("No FlowHandler registered for flow: {}", flowName);
+                continue;
+            }
+
+            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(config.requestTopic());
+            topic.addMessageListener(new RoutingListener(flowName, config, handler));
+            LOGGER.info("Listening on topic={} for flow={}", config.requestTopic(), flowName);
+        }
+    }
+
+    /**
+     * Listener-Klasse, die Nachrichten verarbeitet und sie dem korrekten Map-Partition zuweist.
+     * Implementiert eine einfache Round-Robin-Strategie und einmalige Routing-Sicherung per Lock.
+     */
+    private class RoutingListener<T> implements MessageListener<byte[]> {
+
+        private final String flowName;
+        private final FlowConfig config;
+        private final FlowHandler<T, ?> handler;
+
+        RoutingListener(String flowName, FlowConfig config, FlowHandler<T, ?> handler) {
+            this.flowName = flowName;
+            this.config = config;
+            this.handler = handler;
+        }
+
+        @Override
+        public void onMessage(Message<byte[]> message) {
+            try {
+                IMap<String,String> leaderMap = hazelcastInstance.getMap("router-leader-map");
+                String currentLeader = leaderMap.get("leader-" + flowName);
+
+                if (!routerInstanceId.equals(currentLeader)) {
+                    LOGGER.debug("Instance is not leader for flow '{}', skipping", flowName);
+                    return;
+                }
+
+                T request = handler.deserializeRequest(message.getMessageObject());
+                String correlationId = handler.extractCorrelationId(request);
+                String lockKey = "route-lock-" + correlationId;
+
+                IMap<String, String> routerMap = hazelcastInstance.getMap("router-claim-map");
+                String uniqueId = UUID.randomUUID().toString();
+
+                String existing = routerMap.putIfAbsent(lockKey, uniqueId);
+                if (existing != null) {
+                    LOGGER.info("Skipped duplicate routing for correlationId={}", correlationId);
+                    return;
+                }
+
+                int index = roundRobinCounters.get(flowName).getAndIncrement() % config.partitions();
+                String mapKey = config.mapBase() + index;
+
+                hazelcastInstance.getMap(mapKey).put(correlationId, request);
+                LOGGER.info("Routed correlationId='{}' to map '{}'", correlationId, mapKey);
+
+            } catch (Exception e) {
+                LOGGER.error("Routing failure for flow '{}': {}", flowName, e.getMessage(), e);
+            }
+        }
+    }
+}
