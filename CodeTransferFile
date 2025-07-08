@@ -1,11 +1,32 @@
- private HazelcastInstance hazelcastInstance;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.topic.ITopic;
+import com.hazelcast.topic.Message;
+import com.hazelcast.topic.MessageListener;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
+
+import java.util.List;
+import java.util.UUID;
+
+import static org.mockito.Mockito.*;
+
+public class GenericHazelcastRouterTest {
+
+    private HazelcastInstance hazelcastInstance;
     private FlowHandlerRegistry handlerRegistry;
     private FlowHandler<Object, Object> handler;
 
-    private ITopic topic;
-    private IMap leaderMap;
-    private IMap routerMap;
-    private IMap targetMap;
+    private ITopic<byte[]> topic;
+    private IMap<String, String> leaderMap;
+    private IMap<String, Long> heartbeatMap;
+    private IMap<String, String> routerMap;
+    private IMap<String, Object> targetMap;
 
     private FlowConfig config;
     private GenericHazelcastRouter router;
@@ -19,6 +40,7 @@
 
         topic = mock(ITopic.class);
         leaderMap = mock(IMap.class);
+        heartbeatMap = mock(IMap.class);
         routerMap = mock(IMap.class);
         targetMap = mock(IMap.class);
 
@@ -31,15 +53,20 @@
         when(handlerRegistry.getHandler("myFlow")).thenReturn(handler);
         when(hazelcastInstance.getReliableTopic("topic1")).thenReturn(topic);
         when(hazelcastInstance.getMap("router-leader-map")).thenReturn(leaderMap);
+        when(hazelcastInstance.getMap("router-heartbeat-map")).thenReturn(heartbeatMap);
         when(hazelcastInstance.getMap("router-claim-map")).thenReturn(routerMap);
         when(hazelcastInstance.getMap(startsWith("map-"))).thenReturn(targetMap);
+
+        // Setup: force leadership by simulating stale heartbeat and no current leader
+        when(heartbeatMap.get("heartbeat")).thenReturn(null);
+        when(leaderMap.get("active-router")).thenReturn(null);
+        when(leaderMap.putIfAbsent(eq("active-router"), eq(routerInstanceId))).thenReturn(null);
 
         router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry, routerInstanceId);
     }
 
     @Test
     public void testMessageRoutedSuccessfully() throws Exception {
-        when(leaderMap.get("leader-myFlow")).thenReturn(routerInstanceId);
         router.initRouters();
 
         byte[] rawMessage = "test".getBytes();
@@ -63,7 +90,6 @@
 
     @Test
     public void testDuplicateMessageNotProcessed() throws Exception {
-        when(leaderMap.get("leader-myFlow")).thenReturn(routerInstanceId);
         router.initRouters();
 
         byte[] rawMessage = "test".getBytes();
@@ -87,11 +113,9 @@
 
     @Test
     public void testRoutingHandlerThrowsException() throws Exception {
-        when(leaderMap.get("leader-myFlow")).thenReturn(routerInstanceId);
         router.initRouters();
 
         byte[] rawMessage = "bad".getBytes();
-
         when(handler.deserializeRequest(rawMessage)).thenThrow(new RuntimeException("Failed"));
 
         Message<byte[]> message = mock(Message.class);
@@ -107,25 +131,13 @@
     }
 
     @Test
-    public void testNotLeaderDoesNotProcessMessage() throws Exception {
-        when(leaderMap.get("leader-myFlow")).thenReturn("instance-B"); // different from current instance
+    public void testNotLeaderDoesNotSubscribeToTopics() {
+        // Simulate: heartbeat is valid and another router is active
+        when(heartbeatMap.get("heartbeat")).thenReturn(System.currentTimeMillis());
+        when(leaderMap.get("active-router")).thenReturn("instance-B");
+
         router.initRouters();
 
-        byte[] rawMessage = "skip".getBytes();
-        Object deserialized = new Object();
-        String corrId = "not-leader-corr";
-
-        when(handler.deserializeRequest(rawMessage)).thenReturn(deserialized);
-        when(handler.extractCorrelationId(deserialized)).thenReturn(corrId);
-
-        Message<byte[]> message = mock(Message.class);
-        when(message.getMessageObject()).thenReturn(rawMessage);
-
-        ArgumentCaptor<MessageListener<byte[]>> captor = ArgumentCaptor.forClass(MessageListener.class);
-        verify(topic).addMessageListener(captor.capture());
-
-        captor.getValue().onMessage(message);
-
-        verify(routerMap, never()).putIfAbsent(anyString(), anyString());
-        verify(targetMap, never()).put(anyString(), any());
+        verify(topic, never()).addMessageListener(any());
     }
+}
