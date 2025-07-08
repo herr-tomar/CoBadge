@@ -28,6 +28,8 @@ public class GenericHazelcastRouterTest {
     private IMap routerMap;
     @SuppressWarnings("rawtypes")
     private IMap targetMap;
+    @SuppressWarnings("rawtypes")
+    private IMap leaderMap;
 
     private FlowConfig config;
 
@@ -42,6 +44,7 @@ public class GenericHazelcastRouterTest {
         topic = mock(ITopic.class);
         routerMap = mock(IMap.class);
         targetMap = mock(IMap.class);
+        leaderMap = mock(IMap.class);
 
         config = mock(FlowConfig.class);
         when(config.name()).thenReturn("myFlow");
@@ -52,12 +55,14 @@ public class GenericHazelcastRouterTest {
         when(handlerRegistry.getHandler("myFlow")).thenReturn(handler);
         when(hazelcastInstance.getReliableTopic("topic1")).thenReturn((ITopic) topic);
         when(hazelcastInstance.getMap("router-claim-map")).thenReturn((IMap) routerMap);
+        when(hazelcastInstance.getMap("router-leader-map")).thenReturn((IMap) leaderMap);
         when(hazelcastInstance.getMap(startsWith("map-"))).thenReturn((IMap) targetMap);
+
+        // Simulate leader
+        when(leaderMap.putIfAbsent(eq("myFlow"), anyString())).thenReturn(null);
+        when(leaderMap.get("myFlow")).thenReturn(GenericHazelcastRouter.ROUTER_INSTANCE_ID);
     }
 
-    /**
-     * Positiver Test: Nachricht wird korrekt verarbeitet und geroutet.
-     */
     @Test
     public void testMessageRoutedSuccessfully() throws Exception {
         router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry);
@@ -82,9 +87,6 @@ public class GenericHazelcastRouterTest {
         verify(targetMap).put(eq(corrId), eq(deserialized));
     }
 
-    /**
-     * Negativer Test: Doppelte Nachricht wird nicht verarbeitet.
-     */
     @Test
     public void testDuplicateMessageNotProcessed() throws Exception {
         router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry);
@@ -109,9 +111,6 @@ public class GenericHazelcastRouterTest {
         verify(targetMap, never()).put(anyString(), any());
     }
 
-    /**
-     * Negativer Test: Exception beim Handler wird korrekt protokolliert und Verarbeitung wird abgebrochen.
-     */
     @Test
     public void testRoutingHandlerThrowsException() throws Exception {
         router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry);
@@ -120,6 +119,32 @@ public class GenericHazelcastRouterTest {
         byte[] rawMessage = "data".getBytes();
 
         when(handler.deserializeRequest(rawMessage)).thenThrow(new RuntimeException("Handler failure"));
+
+        Message<byte[]> message = mock(Message.class);
+        when(message.getMessageObject()).thenReturn(rawMessage);
+
+        ArgumentCaptor<com.hazelcast.topic.MessageListener<byte[]>> captor = ArgumentCaptor.forClass(com.hazelcast.topic.MessageListener.class);
+        verify(topic).addMessageListener(captor.capture());
+
+        captor.getValue().onMessage(message);
+
+        verify(routerMap, never()).putIfAbsent(anyString(), anyString());
+        verify(targetMap, never()).put(anyString(), any());
+    }
+
+    @Test
+    public void testNotLeaderDoesNotProcessMessage() throws Exception {
+        when(leaderMap.get("myFlow")).thenReturn("some-other-instance");
+
+        router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry);
+        router.initRouters();
+
+        byte[] rawMessage = "data".getBytes();
+        Object deserialized = new Object();
+        String corrId = UUID.randomUUID().toString();
+
+        when(handler.deserializeRequest(rawMessage)).thenReturn(deserialized);
+        when(handler.extractCorrelationId(deserialized)).thenReturn(corrId);
 
         Message<byte[]> message = mock(Message.class);
         when(message.getMessageObject()).thenReturn(rawMessage);
