@@ -1,11 +1,11 @@
-Technische Eigenschaften & Garantien
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 
-    Durabilität: Garantiert durch die persistente Speicherung in Hazelcast Reliable Topics mit Ringpuffer-Replikation
-
-    Hochverfügbarkeit: Mehrere Cluster-Knoten sichern Daten und Verarbeitung bei Ausfall
-
-    Einmalige Verarbeitung: Durch Claim Map-Mechanismus mit putIfAbsent() auf Correlation-ID-Basis
-
-    Entkoppelte Architektur: Trennung zwischen Empfang, Routing, Geschäftslogik und Rückmeldung
-
-    Flow-Isolation: Jeder Geschäftsprozess ist individuell konfigurierbar mit eigenem Topic und Map
+@ConfigurationProperties(prefix = "pkptuna.hazelcast")
+public record HazelcastRouterProperties(
+        Heartbeat heartbeat,
+        Consumer consumer
+) {
+    public record Heartbeat(long timeoutMillis) {}
+    public record Consumer(long pollingIntervalMillis) {}
+}
