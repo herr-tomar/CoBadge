@@ -1,28 +1,35 @@
-INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.673 s -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest
-[ERROR] Tests run: 4, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 1.704 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest
-[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testNotLeaderDoesNotProcessMessage -- Time elapsed: 0.034 s <<< FAILURE!
-org.mockito.exceptions.verification.NeverWantedButInvoked: 
+@Test
+public void testNotLeaderDoesNotProcessMessage() throws Exception {
+    // Arrange
+    router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry);
+    
+    // Mock the leader map before init
+    IMap<String, String> leaderMap = mock(IMap.class);
+    when(hazelcastInstance.getMap("router-leader-map")).thenReturn(leaderMap);
+    
+    // Simulate that a different instance is the leader
+    when(leaderMap.get("leader-myFlow")).thenReturn("some-other-instance-id");
 
-iMap.putIfAbsent(<any string>, <any string>);
-Never wanted here:
--> at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testNotLeaderDoesNotProcessMessage(GenericHazelcastRouterTest.java:156)
-But invoked here:
--> at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter$RoutingListener.onMessage(GenericHazelcastRouter.java:130) with arguments: [route-lock-test-corr-id, be29fb85-24ee-448d-b1bb-9d51ff564fca]
+    router.initRouters();
 
-	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testNotLeaderDoesNotProcessMessage(GenericHazelcastRouterTest.java:156)
-	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+    byte[] rawMessage = "data".getBytes();
+    Object deserialized = new Object();
+    String corrId = "test-corr-id";
 
-[INFO] 
-[INFO] Results:
-[INFO] 
-[ERROR] Failures: 
-[ERROR]   GenericHazelcastRouterTest.testNotLeaderDoesNotProcessMessage:156 
-iMap.putIfAbsent(<any string>, <any string>);
-Never wanted here:
--> at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testNotLeaderDoesNotProcessMessage(GenericHazelcastRouterTest.java:156)
-But invoked here:
--> at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter$RoutingListener.onMessage(GenericHazelcastRouter.java:130) with arguments: [route-lock-test-corr-id, be29fb85-24ee-448d-b1bb-9d51ff564fca]
+    when(handler.deserializeRequest(rawMessage)).thenReturn(deserialized);
+    when(handler.extractCorrelationId(deserialized)).thenReturn(corrId);
 
-[INFO] 
+    Message<byte[]> message = mock(Message.class);
+    when(message.getMessageObject()).thenReturn(rawMessage);
+
+    ArgumentCaptor<com.hazelcast.topic.MessageListener<byte[]>> captor =
+            ArgumentCaptor.forClass(com.hazelcast.topic.MessageListener.class);
+    verify(topic).addMessageListener(captor.capture());
+
+    // Act
+    captor.getValue().onMessage(message);
+
+    // Assert: No routing should happen since this instance is not the leader
+    verify(routerMap, never()).putIfAbsent(anyString(), anyString());
+    verify(targetMap, never()).put(anyString(), any());
+}
