@@ -1,26 +1,20 @@
 @Test
 public void testNotLeaderDoesNotProcessMessage() throws Exception {
-    // Arrange
-    router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry);
+    String testInstanceId = "instance-A";
+    String testLeaderId = "instance-B";
 
-    // Mock leader map before initRouters()
     IMap<String, String> leaderMap = mock(IMap.class);
+    IMap<String, String> routerMap = mock(IMap.class);
+    IMap<String, Object> targetMap = mock(IMap.class);
+
     when(hazelcastInstance.getMap("router-leader-map")).thenReturn(leaderMap);
-
-    // Force routerInstanceId to something different
-    String thisInstanceId = "instance-A";
-    String actualLeader = "instance-B";
-
-    // Manually inject the leader
-    when(leaderMap.get("leader-myFlow")).thenReturn(actualLeader);
-
-    // Mock other required maps
     when(hazelcastInstance.getMap("router-claim-map")).thenReturn(routerMap);
     when(hazelcastInstance.getMap(startsWith("map-"))).thenReturn(targetMap);
+    when(leaderMap.get("leader-myFlow")).thenReturn(testLeaderId);  // different from routerInstanceId
 
-    router.initRouters(); // registers listener
+    router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry, testInstanceId);
+    router.initRouters();
 
-    // Setup mocks for handler
     byte[] rawMessage = "data".getBytes();
     Object deserialized = new Object();
     String corrId = "test-corr-id";
@@ -28,18 +22,14 @@ public void testNotLeaderDoesNotProcessMessage() throws Exception {
     when(handler.deserializeRequest(rawMessage)).thenReturn(deserialized);
     when(handler.extractCorrelationId(deserialized)).thenReturn(corrId);
 
-    // Simulate incoming message
     Message<byte[]> message = mock(Message.class);
     when(message.getMessageObject()).thenReturn(rawMessage);
 
-    // Capture and invoke the listener
-    ArgumentCaptor<com.hazelcast.topic.MessageListener<byte[]>> captor =
-            ArgumentCaptor.forClass(com.hazelcast.topic.MessageListener.class);
+    ArgumentCaptor<MessageListener<byte[]>> captor = ArgumentCaptor.forClass(MessageListener.class);
     verify(topic).addMessageListener(captor.capture());
 
-    captor.getValue().onMessage(message); // triggers routing logic
+    captor.getValue().onMessage(message);
 
-    // Assert: should not route because this instance is not leader
     verify(routerMap, never()).putIfAbsent(anyString(), anyString());
     verify(targetMap, never()).put(anyString(), any());
 }
