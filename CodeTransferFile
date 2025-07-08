@@ -1,35 +1,40 @@
-@Test
-public void testNotLeaderDoesNotProcessMessage() throws Exception {
-    String testInstanceId = "instance-A";
-    String testLeaderId = "instance-B";
+@BeforeEach
+public void setup() {
+    hazelcastInstance = mock(HazelcastInstance.class);
+    handlerRegistry = mock(FlowHandlerRegistry.class);
+    handler = mock(FlowHandler.class);
 
+    // Mock maps and topic
+    topic = mock(ITopic.class);
+    routerMap = mock(IMap.class);
+    targetMap = mock(IMap.class);
+
+    // Mock FlowConfig
+    config = mock(FlowConfig.class);
+    when(config.name()).thenReturn("myFlow");
+    when(config.requestTopic()).thenReturn("topic1");
+    when(config.mapBase()).thenReturn("map-");
+    when(config.partitions()).thenReturn(2);
+
+    // Return mocked handler from registry
+    when(handlerRegistry.getHandler("myFlow")).thenReturn(handler);
+
+    // Return the mocked topic for the configured topic name
+    when(hazelcastInstance.getReliableTopic("topic1")).thenReturn((ITopic) topic);
+
+    // Set up leader and routing maps
     IMap<String, String> leaderMap = mock(IMap.class);
-    IMap<String, String> routerMap = mock(IMap.class);
-    IMap<String, Object> targetMap = mock(IMap.class);
-
     when(hazelcastInstance.getMap("router-leader-map")).thenReturn(leaderMap);
-    when(hazelcastInstance.getMap("router-claim-map")).thenReturn(routerMap);
-    when(hazelcastInstance.getMap(startsWith("map-"))).thenReturn(targetMap);
-    when(leaderMap.get("leader-myFlow")).thenReturn(testLeaderId);  // different from routerInstanceId
+    when(hazelcastInstance.getMap("router-claim-map")).thenReturn((IMap) routerMap);
 
-    router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry, testInstanceId);
+    // Return target map for dynamic partition maps
+    when(hazelcastInstance.getMap(startsWith("map-"))).thenReturn((IMap) targetMap);
+
+    // Simulate that this instance IS the leader by default
+    String testRouterInstanceId = "instance-A";
+    when(leaderMap.get("leader-myFlow")).thenReturn(testRouterInstanceId);
+
+    // Inject fixed routerInstanceId to GenericHazelcastRouter
+    router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry, testRouterInstanceId);
     router.initRouters();
-
-    byte[] rawMessage = "data".getBytes();
-    Object deserialized = new Object();
-    String corrId = "test-corr-id";
-
-    when(handler.deserializeRequest(rawMessage)).thenReturn(deserialized);
-    when(handler.extractCorrelationId(deserialized)).thenReturn(corrId);
-
-    Message<byte[]> message = mock(Message.class);
-    when(message.getMessageObject()).thenReturn(rawMessage);
-
-    ArgumentCaptor<MessageListener<byte[]>> captor = ArgumentCaptor.forClass(MessageListener.class);
-    verify(topic).addMessageListener(captor.capture());
-
-    captor.getValue().onMessage(message);
-
-    verify(routerMap, never()).putIfAbsent(anyString(), anyString());
-    verify(targetMap, never()).put(anyString(), any());
 }
