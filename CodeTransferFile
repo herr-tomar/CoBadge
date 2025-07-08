@@ -1,153 +1,33 @@
-package osplus.pkptuna.hazelcast.pubsub;
+package osplus.pkptuna.hazelcast.config;
 
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.map.IMap;
-import com.hazelcast.topic.ITopic;
-import com.hazelcast.topic.Message;
-import com.hazelcast.topic.MessageListener;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import osplus.pkptuna.hazelcast.config.FlowConfig;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+import jakarta.annotation.PostConstruct;
+import osplus.apl.core.api.AplComponent;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
 
-import java.util.List;
-import java.util.UUID;
+/**
+ * Bootstrap-Klasse zur Initialisierung der Hazelcast-Komponenten beim Start.
+ * Ruft nach dem Start {@code initRouters()} und {@code startPolling()} auf.
+ */
+@AplComponent
+public class HazelcastFlowBootstrap {
 
-import static org.mockito.Mockito.*;
+    private final GenericHazelcastRouter router;
+    private final GenericHazelcastConsumer consumer;
 
-public class GenericHazelcastRouterTest {
-
-    private HazelcastInstance hazelcastInstance;
-    private FlowHandlerRegistry handlerRegistry;
-    private FlowHandler<Object, Object> handler;
-
-    private ITopic<byte[]> topic;
-    private IMap<String, String> leaderMap;
-    private IMap<String, String> routerMap;
-    private IMap<String, Object> targetMap;
-
-    private FlowConfig config;
-    private GenericHazelcastRouter router;
-    private final String routerInstanceId = "instance-A";
-
-    @BeforeEach
-    public void setup() {
-        hazelcastInstance = mock(HazelcastInstance.class);
-        handlerRegistry = mock(FlowHandlerRegistry.class);
-        handler = mock(FlowHandler.class);
-
-        topic = mock(ITopic.class);
-        leaderMap = mock(IMap.class);
-        routerMap = mock(IMap.class);
-        targetMap = mock(IMap.class);
-
-        config = mock(FlowConfig.class);
-        when(config.name()).thenReturn("myFlow");
-        when(config.requestTopic()).thenReturn("topic1");
-        when(config.mapBase()).thenReturn("map-");
-        when(config.partitions()).thenReturn(2);
-
-        when(handlerRegistry.getHandler("myFlow")).thenReturn(handler);
-        when(hazelcastInstance.getReliableTopic("topic1")).thenReturn(topic);
-        when(hazelcastInstance.getMap("router-leader-map")).thenReturn(leaderMap);
-        when(hazelcastInstance.getMap("router-claim-map")).thenReturn(routerMap);
-        when(hazelcastInstance.getMap(startsWith("map-"))).thenReturn(targetMap);
-
-        router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry, routerInstanceId);
+    public HazelcastFlowBootstrap(GenericHazelcastRouter router,
+                                  GenericHazelcastConsumer consumer) {
+        this.router = router;
+        this.consumer = consumer;
     }
 
-    @Test
-    public void testMessageRoutedSuccessfully() throws Exception {
-        when(leaderMap.get("leader-myFlow")).thenReturn(routerInstanceId);
+    /**
+     * Wird nach Initialisierung automatisch aufgerufen.
+     * Startet das Routing und Polling für alle konfigurierten Flows.
+     */
+    @PostConstruct
+    public void startFlowInfra() {
         router.initRouters();
-
-        byte[] rawMessage = "test".getBytes();
-        Object deserialized = new Object();
-        String corrId = UUID.randomUUID().toString();
-
-        when(handler.deserializeRequest(rawMessage)).thenReturn(deserialized);
-        when(handler.extractCorrelationId(deserialized)).thenReturn(corrId);
-        when(routerMap.putIfAbsent(eq("route-lock-" + corrId), anyString())).thenReturn(null);
-
-        Message<byte[]> message = mock(Message.class);
-        when(message.getMessageObject()).thenReturn(rawMessage);
-
-        ArgumentCaptor<MessageListener<byte[]>> captor = ArgumentCaptor.forClass(MessageListener.class);
-        verify(topic).addMessageListener(captor.capture());
-
-        captor.getValue().onMessage(message);
-
-        verify(targetMap).put(eq(corrId), eq(deserialized));
-    }
-
-    @Test
-    public void testDuplicateMessageNotProcessed() throws Exception {
-        when(leaderMap.get("leader-myFlow")).thenReturn(routerInstanceId);
-        router.initRouters();
-
-        byte[] rawMessage = "test".getBytes();
-        Object deserialized = new Object();
-        String corrId = "duplicate-id";
-
-        when(handler.deserializeRequest(rawMessage)).thenReturn(deserialized);
-        when(handler.extractCorrelationId(deserialized)).thenReturn(corrId);
-        when(routerMap.putIfAbsent(eq("route-lock-" + corrId), anyString())).thenReturn("alreadyExists");
-
-        Message<byte[]> message = mock(Message.class);
-        when(message.getMessageObject()).thenReturn(rawMessage);
-
-        ArgumentCaptor<MessageListener<byte[]>> captor = ArgumentCaptor.forClass(MessageListener.class);
-        verify(topic).addMessageListener(captor.capture());
-
-        captor.getValue().onMessage(message);
-
-        verify(targetMap, never()).put(anyString(), any());
-    }
-
-    @Test
-    public void testRoutingHandlerThrowsException() throws Exception {
-        when(leaderMap.get("leader-myFlow")).thenReturn(routerInstanceId);
-        router.initRouters();
-
-        byte[] rawMessage = "bad".getBytes();
-
-        when(handler.deserializeRequest(rawMessage)).thenThrow(new RuntimeException("Failed"));
-
-        Message<byte[]> message = mock(Message.class);
-        when(message.getMessageObject()).thenReturn(rawMessage);
-
-        ArgumentCaptor<MessageListener<byte[]>> captor = ArgumentCaptor.forClass(MessageListener.class);
-        verify(topic).addMessageListener(captor.capture());
-
-        captor.getValue().onMessage(message);
-
-        verify(routerMap, never()).putIfAbsent(anyString(), anyString());
-        verify(targetMap, never()).put(anyString(), any());
-    }
-
-    @Test
-    public void testNotLeaderDoesNotProcessMessage() throws Exception {
-        when(leaderMap.get("leader-myFlow")).thenReturn("instance-B"); // different from current instance
-        router.initRouters();
-
-        byte[] rawMessage = "skip".getBytes();
-        Object deserialized = new Object();
-        String corrId = "not-leader-corr";
-
-        when(handler.deserializeRequest(rawMessage)).thenReturn(deserialized);
-        when(handler.extractCorrelationId(deserialized)).thenReturn(corrId);
-
-        Message<byte[]> message = mock(Message.class);
-        when(message.getMessageObject()).thenReturn(rawMessage);
-
-        ArgumentCaptor<MessageListener<byte[]>> captor = ArgumentCaptor.forClass(MessageListener.class);
-        verify(topic).addMessageListener(captor.capture());
-
-        captor.getValue().onMessage(message);
-
-        verify(routerMap, never()).putIfAbsent(anyString(), anyString());
-        verify(targetMap, never()).put(anyString(), any());
+        consumer.startPolling();
     }
 }
