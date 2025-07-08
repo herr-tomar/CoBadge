@@ -5,155 +5,194 @@ import com.hazelcast.map.IMap;
 import com.hazelcast.topic.ITopic;
 import com.hazelcast.topic.Message;
 import com.hazelcast.topic.MessageListener;
-import jakarta.annotation.PostConstruct;
-import org.springframework.beans.factory.annotation.Autowired;
-import osplus.apl.core.api.AplComponent;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import osplus.pkptuna.hazelcast.config.FlowConfig;
 import osplus.pkptuna.hazelcast.flows.FlowHandler;
 import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * Der {@code GenericHazelcastRouter} ist verantwortlich für das zentrale Routing eingehender Nachrichten
- * aus ReliableTopics in partitionierte IMaps. Der Router verwendet eine zentrale Leader Election mit Heartbeat,
- * um sicherzustellen, dass nur eine Instanz im Cluster aktiv routet.
- */
-@AplComponent
-public class GenericHazelcastRouter {
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.startsWith;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastRouter.class);
+public class GenericHazelcastRouterTest {
 
-    private final HazelcastInstance hazelcastInstance;
-    private final List<FlowConfig> flowConfigs;
-    private final FlowHandlerRegistry handlerRegistry;
-    private final String routerInstanceId;
-    private final Map<String, AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
+    private HazelcastInstance hazelcastInstance;
+    private FlowHandlerRegistry handlerRegistry;
+    private FlowHandler<Object, Object> handler;
 
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    @SuppressWarnings("rawtypes")
+    private ITopic topic;
+    @SuppressWarnings("rawtypes")
+    private IMap routerMap;
+    @SuppressWarnings("rawtypes")
+    private IMap targetMap;
+    private IMap leaderMap;
 
-    @Autowired
-    public GenericHazelcastRouter(HazelcastInstance hazelcastInstance,
-                                  List<FlowConfig> flowConfigs,
-                                  FlowHandlerRegistry handlerRegistry) {
-        this(hazelcastInstance, flowConfigs, handlerRegistry, UUID.randomUUID().toString());
+    private FlowConfig config;
+
+    private GenericHazelcastRouter router;
+
+    @BeforeEach
+    public void setup() {
+        hazelcastInstance = mock(HazelcastInstance.class);
+        handlerRegistry = mock(FlowHandlerRegistry.class);
+        handler = mock(FlowHandler.class);
+
+        // Mock maps and topic
+        topic = mock(ITopic.class);
+        routerMap = mock(IMap.class);
+        targetMap = mock(IMap.class);
+
+        // Mock FlowConfig
+        config = mock(FlowConfig.class);
+        when(config.name()).thenReturn("myFlow");
+        when(config.requestTopic()).thenReturn("topic1");
+        when(config.mapBase()).thenReturn("map-");
+        when(config.partitions()).thenReturn(2);
+
+        // Return mocked handler from registry
+        when(handlerRegistry.getHandler("myFlow")).thenReturn(handler);
+
+        // Return the mocked topic for the configured topic name
+        when(hazelcastInstance.getReliableTopic("topic1")).thenReturn((ITopic) topic);
+
+        // Set up leader and routing maps
+        IMap leaderMap = mock(IMap.class);
+        when(hazelcastInstance.getMap("router-leader-map")).thenReturn(leaderMap);
+        when(hazelcastInstance.getMap("router-claim-map")).thenReturn((IMap) routerMap);
+
+        // Return target map for dynamic partition maps
+        when(hazelcastInstance.getMap(startsWith("map-"))).thenReturn((IMap) targetMap);
+
+        // Simulate that this instance IS the leader by default
+        String testRouterInstanceId = "instance-A";
+        when(leaderMap.get("leader-myFlow")).thenReturn(testRouterInstanceId);
+
+        // Inject fixed routerInstanceId to GenericHazelcastRouter
+        router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry, testRouterInstanceId);
     }
 
-    public GenericHazelcastRouter(HazelcastInstance hazelcastInstance,
-                                  List<FlowConfig> flowConfigs,
-                                  FlowHandlerRegistry handlerRegistry,
-                                  String routerInstanceId) {
-        this.hazelcastInstance = hazelcastInstance;
-        this.flowConfigs = flowConfigs;
-        this.handlerRegistry = handlerRegistry;
-        this.routerInstanceId = routerInstanceId;
+    @Test
+    public void testMessageRoutedSuccessfully() throws Exception {
+
+        // Given: A router instance that is NOT the leader
+        String testInstanceId = "instance-A";
+
+        // Override the leaderMap behavior
+        IMap<String, String> leaderMap =  hazelcastInstance.getMap("router-leader-map");
+        when(leaderMap.get("leader-myFlow")).thenReturn(testInstanceId);
+
+        // Recreate router with overridden leader ID
+        router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry, testInstanceId);
+        router.initRouters();
+
+        byte[] rawMessage = "data".getBytes();
+        Object deserialized = new Object();
+        String corrId = UUID.randomUUID().toString();
+
+        when(handler.deserializeRequest(rawMessage)).thenReturn(deserialized);
+        when(handler.extractCorrelationId(deserialized)).thenReturn(corrId);
+        when(routerMap.putIfAbsent(eq("route-lock-" + corrId), anyString())).thenReturn(null);
+
+        Message<byte[]> message = mock(Message.class);
+        when(message.getMessageObject()).thenReturn(rawMessage);
+
+        ArgumentCaptor<com.hazelcast.topic.MessageListener<byte[]>> captor = ArgumentCaptor.forClass(com.hazelcast.topic.MessageListener.class);
+        verify(topic).addMessageListener(captor.capture());
+
+        captor.getValue().onMessage(message);
+
+        verify(targetMap).put(eq(corrId), eq(deserialized));
     }
 
-    @PostConstruct
-    public void initRouters() {
-        try {
-            IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
-            IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
+    @Test
+    public void testDuplicateMessageNotProcessed() throws Exception {
+        router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry);
+        router.initRouters();
 
-            Long lastHeartbeat = heartbeatMap.get("heartbeat");
-            boolean heartbeatStale = lastHeartbeat == null || System.currentTimeMillis() - lastHeartbeat > 5000;
+        byte[] rawMessage = "data".getBytes();
+        Object deserialized = new Object();
+        String corrId = "duplicate-id";
 
-            String currentLeader = leaderMap.get("active-router");
+        when(handler.deserializeRequest(rawMessage)).thenReturn(deserialized);
+        when(handler.extractCorrelationId(deserialized)).thenReturn(corrId);
+        when(routerMap.putIfAbsent(eq("route-lock-" + corrId), anyString())).thenReturn("alreadyExists");
 
-            if (heartbeatStale && (currentLeader == null || currentLeader.isBlank())) {
-                String claimed = leaderMap.putIfAbsent("active-router", routerInstanceId);
-                if (claimed == null || claimed.equals(routerInstanceId)) {
-                    LOGGER.info("This node is elected as the ACTIVE router (ID={})", routerInstanceId);
-                    startHeartbeat();
-                    subscribeToTopics();
-                } else {
-                    LOGGER.info("Another node won the leadership (ID={})", claimed);
-                }
-            } else {
-                LOGGER.info("Leadership already exists or heartbeat is alive (Leader={}, LastBeat={})",
-                        currentLeader, lastHeartbeat);
-            }
+        Message<byte[]> message = mock(Message.class);
+        when(message.getMessageObject()).thenReturn(rawMessage);
 
-        } catch (Exception e) {
-            LOGGER.error("Failed to initialize router", e);
-        }
+        ArgumentCaptor<com.hazelcast.topic.MessageListener<byte[]>> captor = ArgumentCaptor.forClass(com.hazelcast.topic.MessageListener.class);
+        verify(topic).addMessageListener(captor.capture());
+
+        captor.getValue().onMessage(message);
+
+        verify(targetMap, never()).put(anyString(), any());
     }
 
-    private void startHeartbeat() {
-        IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
-        scheduler.scheduleAtFixedRate(() -> {
-            heartbeatMap.put("heartbeat", System.currentTimeMillis());
-        }, 0, 3, TimeUnit.SECONDS);
-        LOGGER.info("Heartbeat started for router ID={}", routerInstanceId);
+    @Test
+    public void testRoutingHandlerThrowsException() throws Exception {
+        router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry);
+        router.initRouters();
+
+        byte[] rawMessage = "data".getBytes();
+
+        when(handler.deserializeRequest(rawMessage)).thenThrow(new RuntimeException("Handler failure"));
+
+        Message<byte[]> message = mock(Message.class);
+        when(message.getMessageObject()).thenReturn(rawMessage);
+
+        ArgumentCaptor<com.hazelcast.topic.MessageListener<byte[]>> captor = ArgumentCaptor.forClass(com.hazelcast.topic.MessageListener.class);
+        verify(topic).addMessageListener(captor.capture());
+
+        captor.getValue().onMessage(message);
+
+        verify(routerMap, never()).putIfAbsent(anyString(), anyString());
+        verify(targetMap, never()).put(anyString(), any());
     }
 
-    private void subscribeToTopics() {
-        if (flowConfigs == null || flowConfigs.isEmpty()) {
-            LOGGER.warn("No Hazelcast flow configurations found.");
-            return;
-        }
+    @Test
+    public void testNotLeaderDoesNotProcessMessage() throws Exception {
+        // Given: A router instance that is NOT the leader
+        String testInstanceId = "instance-A";
+        String testLeaderId = "instance-B"; // different than instance-A
 
-        for (FlowConfig config : flowConfigs) {
-            String flowName = config.name();
-            roundRobinCounters.putIfAbsent(flowName, new AtomicInteger(0));
+        // Override the leaderMap behavior
+        IMap<String, String> leaderMap =  hazelcastInstance.getMap("router-leader-map");
+        when(leaderMap.get("leader-myFlow")).thenReturn(testLeaderId);
 
-            @SuppressWarnings("unchecked")
-            FlowHandler<Object, Object> handler = (FlowHandler<Object, Object>) handlerRegistry.getHandler(flowName);
+        // Recreate router with overridden leader ID
+        router = new GenericHazelcastRouter(hazelcastInstance, List.of(config), handlerRegistry, testInstanceId);
+        router.initRouters();
 
-            if (handler == null) {
-                LOGGER.warn("No FlowHandler registered for flow: {}", flowName);
-                continue;
-            }
+        // Prepare test message
+        byte[] rawMessage = "data".getBytes();
+        Object deserialized = new Object();
+        String corrId = "test-corr-id";
 
-            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(config.requestTopic());
-            topic.addMessageListener(new RoutingListener(flowName, config, handler));
-            LOGGER.info("Listening on topic={} for flow={}", config.requestTopic(), flowName);
-        }
-    }
+        when(handler.deserializeRequest(rawMessage)).thenReturn(deserialized);
+        when(handler.extractCorrelationId(deserialized)).thenReturn(corrId);
 
-    private class RoutingListener<T> implements MessageListener<byte[]> {
+        // Fire message
+        Message<byte[]> message = mock(Message.class);
+        when(message.getMessageObject()).thenReturn(rawMessage);
 
-        private final String flowName;
-        private final FlowConfig config;
-        private final FlowHandler<T, ?> handler;
+        ArgumentCaptor<MessageListener<byte[]>> captor = ArgumentCaptor.forClass(MessageListener.class);
+        verify(topic).addMessageListener(captor.capture());
 
-        RoutingListener(String flowName, FlowConfig config, FlowHandler<T, ?> handler) {
-            this.flowName = flowName;
-            this.config = config;
-            this.handler = handler;
-        }
+        captor.getValue().onMessage(message);
 
-        @Override
-        public void onMessage(Message<byte[]> message) {
-            try {
-                T request = handler.deserializeRequest(message.getMessageObject());
-                String correlationId = handler.extractCorrelationId(request);
-                String lockKey = "route-lock-" + correlationId;
-
-                IMap<String, String> routerMap = hazelcastInstance.getMap("router-claim-map");
-                String uniqueId = UUID.randomUUID().toString();
-
-                String existing = routerMap.putIfAbsent(lockKey, uniqueId);
-                if (existing != null) {
-                    LOGGER.info("Skipped duplicate routing for correlationId={}", correlationId);
-                    return;
-                }
-
-                int index = roundRobinCounters.get(flowName).getAndIncrement() % config.partitions();
-                String mapKey = config.mapBase() + index;
-
-                hazelcastInstance.getMap(mapKey).put(correlationId, request);
-                LOGGER.info("Routed correlationId='{}' to map '{}'", correlationId, mapKey);
-
-            } catch (Exception e) {
-                LOGGER.error("Routing failure for flow '{}': {}", flowName, e.getMessage(), e);
-            }
-        }
+        // Then: Nothing should be routed
+        verify(routerMap, never()).putIfAbsent(anyString(), anyString());
+        verify(targetMap, never()).put(anyString(), any());
     }
 }
