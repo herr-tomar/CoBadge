@@ -40,10 +40,22 @@ public class GenericHazelcastRouter {
 
     /**
      * Initialisiert die Routing-Konfigurationen nach dem Start.
-     * Abonniert sich auf konfigurierten Hazelcast-Themen und registriert Listener.
+     * Führt eine einfache Leader Election durch: nur ein aktiver Router pro Cluster.
      */
     @PostConstruct
     public void initRouters() {
+        // Leader election
+        IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
+        String nodeId = UUID.randomUUID().toString();
+        String existingLeader = leaderMap.putIfAbsent("active-router", nodeId);
+
+        if (existingLeader != null) {
+            LOGGER.info("This node is passive. Active router is already running with ID={}", existingLeader);
+            return;
+        }
+
+        LOGGER.info("This node is elected as the active router (ID={}). Initializing listeners...", nodeId);
+
         if (flowConfigs == null || flowConfigs.isEmpty()) {
             LOGGER.warn("No Hazelcast flow configurations found.");
             return;
@@ -83,10 +95,6 @@ public class GenericHazelcastRouter {
             this.handler = handler;
         }
 
-        /**
-         * Verarbeitet eingehende Nachrichten, extrahiert Korrelation-ID,
-         * prüft auf Doppelausführung und routet sie zur passenden Map-Partition.
-         */
         @Override
         public void onMessage(Message<byte[]> message) {
             try {
