@@ -1,57 +1,149 @@
+syntax = "proto3";
 
-org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'osplus.pkptuna.hazelcast.config.FlowHandlerInitializer': Unsatisfied dependency expressed through constructor parameter 0: Error creating bean with name 'hazelcastFlowConfigs' defined in osplus.pkptuna.flows.FlowsModuleConfiguration: Failed to instantiate [java.util.List]: Factory method 'hazelcastFlowConfigs' threw exception with message: Cannot invoke "java.util.List.stream()" because the return value of "osplus.pkptuna.flows.bootstrap.HazelcastFlowConfigs.flows()" is null
-	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:804) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.ConstructorResolver.autowireConstructor(ConstructorResolver.java:240) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireConstructor(AbstractAutowireCapableBeanFactory.java:1395) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1232) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:569) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1222) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1188) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1123) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:987) ~[spring-context-6.2.8.jar:6.2.8]
-	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:627) ~[spring-context-6.2.8.jar:6.2.8]
-	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146) ~[spring-boot-3.5.3.jar:3.5.3]
-	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752) ~[spring-boot-3.5.3.jar:3.5.3]
-	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439) ~[spring-boot-3.5.3.jar:3.5.3]
-	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318) ~[spring-boot-3.5.3.jar:3.5.3]
-	at osplus.apl.core.AplCoreRunner.main(AplCoreRunner.java:248) ~[apl-core-runner-251.0.0-M7.jar:251.0.0-M7]
-Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'hazelcastFlowConfigs' defined in osplus.pkptuna.flows.FlowsModuleConfiguration: Failed to instantiate [java.util.List]: Factory method 'hazelcastFlowConfigs' threw exception with message: Cannot invoke "java.util.List.stream()" because the return value of "osplus.pkptuna.flows.bootstrap.HazelcastFlowConfigs.flows()" is null
-	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:657) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.ConstructorResolver.instantiateUsingFactoryMethod(ConstructorResolver.java:645) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateUsingFactoryMethod(AbstractAutowireCapableBeanFactory.java:1375) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1205) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:569) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.config.DependencyDescriptor.resolveCandidate(DependencyDescriptor.java:254) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1745) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1628) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:913) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:791) ~[spring-beans-6.2.8.jar:6.2.8]
-	... 19 common frames omitted
-Caused by: org.springframework.beans.BeanInstantiationException: Failed to instantiate [java.util.List]: Factory method 'hazelcastFlowConfigs' threw exception with message: Cannot invoke "java.util.List.stream()" because the return value of "osplus.pkptuna.flows.bootstrap.HazelcastFlowConfigs.flows()" is null
-	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:199) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiateWithFactoryMethod(SimpleInstantiationStrategy.java:88) ~[spring-beans-6.2.8.jar:6.2.8]
-	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiate(SimpleInstantiationStrategy.java:168) ~[spring-beans-6.2.8.jar:6.2.8]
-	at osplus.apl.core.AplInstantiationStrategy.instantiate(AplInstantiationStrategy.java:35) ~[apl-core-251.0.0-M7.jar:251.0.0-M7]
-	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:653) ~[spring-beans-6.2.8.jar:6.2.8]
-	... 33 common frames omitted
-Caused by: java.lang.NullPointerException: Cannot invoke "java.util.List.stream()" because the return value of "osplus.pkptuna.flows.bootstrap.HazelcastFlowConfigs.flows()" is null
-	at osplus.pkptuna.flows.FlowsModuleConfiguration.hazelcastFlowConfigs(FlowsModuleConfiguration.java:35) ~[classes/:na]
-	at osplus.pkptuna.flows.FlowsModuleConfiguration$$SpringCGLIB$$0.CGLIB$hazelcastFlowConfigs$0(<generated>) ~[classes/:na]
-	at osplus.pkptuna.flows.FlowsModuleConfiguration$$SpringCGLIB$$FastClass$$1.invoke(<generated>) ~[classes/:na]
-	at org.springframework.cglib.proxy.MethodProxy.invokeSuper(MethodProxy.java:258) ~[spring-core-6.2.8.jar:6.2.8]
-	at org.springframework.context.annotation.ConfigurationClassEnhancer$BeanMethodInterceptor.intercept(ConfigurationClassEnhancer.java:400) ~[spring-context-6.2.8.jar:6.2.8]
-	at osplus.pkptuna.flows.FlowsModuleConfiguration$$SpringCGLIB$$0.hazelcastFlowConfigs(<generated>) ~[classes/:na]
-	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
-	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
-	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:171) ~[spring-beans-6.2.8.jar:6.2.8]
-	... 37 common frames omitted
+package osplus.pkptuna.dispute.lookup.model;
+
+option java_package = "osplus.pkptuna.dispute.lookup.model";
+option java_outer_classname = "DisputeLookupProto";
+option java_multiple_files = true;
+
+// -----Vom Orchestrator gesendetes DTO
+message DisputeLookupRequestWrapperDto {
+  string correlationId = 1;
+  DisputeLookupRequestDto payload = 2;
+}
+
+message DisputeLookupRequestDto {
+  DisputeLookupRequestMetadataDto metadata = 1;
+  string issuerId = 2;
+  string cardReference = 3;
+}
+
+message DisputeLookupRequestMetadataDto {
+  string requestChannel = 1;
+  string messageType = 2;
+  string requestedBy = 3;
+  string businessContext = 4;
+}
+
+// -----Umgewandelte DTO für die Rückkehr zum Orchestrator vorgesehen
+message DisputeLookupResponseWrapperDto {
+  string correlationId = 1;
+  DisputeLookupResponseDto response = 2;
+}
+
+message DisputeLookupResponseDto {
+  bool disputeFolderExists = 1;
+  repeated DisputeFolderEntryDto disputeFolders = 2;
+}
+
+message DisputeFolderEntryDto {
+  string disputeFolderReference = 1;
+  string statusCode = 2;
+}
+
+// -----DTO für die vom IBO- Dispute-Lookup-Aufruf abgerufene Antwort
+message FullDisputeLookupResponseDto {
+  ResponseMetadataDto responseMetadata = 1;
+  repeated DisputeFolderDataDto data = 2;
+}
+
+message ResponseMetadataDto {
+  string correlationId = 1;
+  int32 statusCode = 2;
+  string statusMessage = 3;
+  string responseDateTime = 4;
+  int32 timeTakenMs = 5;
+}
+
+message DisputeFolderDataDto {
+  DisputeFolderIdentifierDto disputeFolderIdentifier = 1;
+  string statusCode = 2;
+}
+
+message DisputeFolderIdentifierDto {
+  string disputeFolderReference = 1;
+}
+
+
+-----------------------
+
+syntax = "proto3";
+
+package osplus.pkppuma.protobuf;
+
+option java_package = "osplus.pkppuma.protobuf";
+option java_outer_classname = "CardLookupProto";
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+
+// Eingabe-Datenobjekt für PAN-basierte Anfragen
+message PanTo {
+  int64 requestId = 1;
+  string ckrtPan = 2;
+  google.protobuf.Timestamp ckrtVerfallDtm = 3;
+}
+
+// Eingabe-Datenobjekt für Freund-bezogene Anfragen
+message FriendTo {
+  int64 requestId = 1;
+  int32 dkrtKtnr = 2;
+  int32 dkrtBlz = 3;
+  google.protobuf.Timestamp dkrtVerfallDtm = 4;
+  int32 dkrtFolgeNr = 5;
+  string dkrtFreizgkSchl = 6;
+}
+
+// Ausgabe-Datenobjekt (Karte)
+message CardTo {
+  int64 requestId = 1;
+  string ckrtPan = 2;
+  google.protobuf.Timestamp ckrtVerfallDtm = 3;
+  int32 dkrtKtnr = 4;
+  int32 dkrtBlz = 5;
+  google.protobuf.Timestamp dkrtVerfallDtm = 6;
+  int32 dkrtFolgeNr = 7;
+  string dkrtFreizgkSchl = 8;
+}
+
+// Anfrageobjekt für PAN-zu-Karten-Suche über interne Topics
+message CardLookupByPanTo {
+  string correlation_id = 1;
+  optional PanTo pan = 2;
+}
+
+// Anfrageobjekt für Freund-zu-Karten-Suche über interne Topics
+message CardLookupByFriendTo {
+  string correlation_id = 1;
+  optional FriendTo friend = 2;
+}
+
+// Antwortobjekt für PAN-zu-Karten-Suche
+message CardLookupByPanResponseTo {
+  enum ResultStatus {
+    SUCCESS = 0;
+    NOT_FOUND = 1;
+    ERROR = 2;
+  }
+
+  string correlation_id = 1;
+  optional CardTo card = 2;
+
+  ResultStatus status = 100;
+  string error_message = 101;
+}
+
+// Antwortobjekt für Freund-zu-Karten-Suche
+message CardLookupByFriendResponseTo {
+  enum ResultStatus {
+    SUCCESS = 0;
+    NOT_FOUND = 1;
+    ERROR = 2;
+  }
+
+  string correlation_id = 1;
+  optional CardTo card = 2;
+
+  ResultStatus status = 100;
+  string error_message = 101;
+}
