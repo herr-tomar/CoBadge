@@ -1,74 +1,5 @@
 syntax = "proto3";
 
-package osplus.pkptuna.dispute.lookup.model;
-
-option java_package = "osplus.pkptuna.dispute.lookup.model";
-option java_outer_classname = "DisputeLookupProto";
-option java_multiple_files = true;
-
-// -----Vom Orchestrator gesendetes DTO
-message DisputeLookupRequestWrapperDto {
-  string correlationId = 1;
-  DisputeLookupRequestDto payload = 2;
-}
-
-message DisputeLookupRequestDto {
-  DisputeLookupRequestMetadataDto metadata = 1;
-  string issuerId = 2;
-  string cardReference = 3;
-}
-
-message DisputeLookupRequestMetadataDto {
-  string requestChannel = 1;
-  string messageType = 2;
-  string requestedBy = 3;
-  string businessContext = 4;
-}
-
-// -----Umgewandelte DTO für die Rückkehr zum Orchestrator vorgesehen
-message DisputeLookupResponseWrapperDto {
-  string correlationId = 1;
-  DisputeLookupResponseDto response = 2;
-}
-
-message DisputeLookupResponseDto {
-  bool disputeFolderExists = 1;
-  repeated DisputeFolderEntryDto disputeFolders = 2;
-}
-
-message DisputeFolderEntryDto {
-  string disputeFolderReference = 1;
-  string statusCode = 2;
-}
-
-// -----DTO für die vom IBO- Dispute-Lookup-Aufruf abgerufene Antwort
-message FullDisputeLookupResponseDto {
-  ResponseMetadataDto responseMetadata = 1;
-  repeated DisputeFolderDataDto data = 2;
-}
-
-message ResponseMetadataDto {
-  string correlationId = 1;
-  int32 statusCode = 2;
-  string statusMessage = 3;
-  string responseDateTime = 4;
-  int32 timeTakenMs = 5;
-}
-
-message DisputeFolderDataDto {
-  DisputeFolderIdentifierDto disputeFolderIdentifier = 1;
-  string statusCode = 2;
-}
-
-message DisputeFolderIdentifierDto {
-  string disputeFolderReference = 1;
-}
-
-
------------------------
-
-syntax = "proto3";
-
 package osplus.pkppuma.protobuf;
 
 option java_package = "osplus.pkppuma.protobuf";
@@ -77,15 +8,77 @@ option java_multiple_files = true;
 
 import "google/protobuf/timestamp.proto";
 
-// Eingabe-Datenobjekt für PAN-basierte Anfragen
-message PanTo {
+// ====================
+// REQUEST WRAPPERS
+// ====================
+
+message CardLookupByPanRequestWrapperDto {
+  string correlationId = 1;
+  CardLookupByPanRequestDto payload = 2;
+}
+
+message CardLookupByFriendRequestWrapperDto {
+  string correlationId = 1;
+  CardLookupByFriendRequestDto payload = 2;
+}
+
+// ====================
+// REQUEST PAYLOADS
+// ====================
+
+message CardLookupByPanRequestDto {
+  PanDto pan = 1;
+}
+
+message CardLookupByFriendRequestDto {
+  FriendDto friend = 1;
+}
+
+// ====================
+// RESPONSE WRAPPERS
+// ====================
+
+message CardLookupByPanResponseWrapperDto {
+  string correlationId = 1;
+  CardLookupResponseDto response = 2;
+}
+
+message CardLookupByFriendResponseWrapperDto {
+  string correlationId = 1;
+  CardLookupResponseDto response = 2;
+}
+
+// ====================
+// RESPONSE PAYLOAD
+// ====================
+
+message CardLookupResponseDto {
+  CardDto card = 1;
+  ResultStatus status = 2;
+  string errorMessage = 3;
+}
+
+// ====================
+// ENUMS
+// ====================
+
+enum ResultStatus {
+  SUCCESS = 0;
+  NOT_FOUND = 1;
+  ERROR = 2;
+}
+
+// ====================
+// CORE DTOs
+// ====================
+
+message PanDto {
   int64 requestId = 1;
   string ckrtPan = 2;
   google.protobuf.Timestamp ckrtVerfallDtm = 3;
 }
 
-// Eingabe-Datenobjekt für Freund-bezogene Anfragen
-message FriendTo {
+message FriendDto {
   int64 requestId = 1;
   int32 dkrtKtnr = 2;
   int32 dkrtBlz = 3;
@@ -94,8 +87,7 @@ message FriendTo {
   string dkrtFreizgkSchl = 6;
 }
 
-// Ausgabe-Datenobjekt (Karte)
-message CardTo {
+message CardDto {
   int64 requestId = 1;
   string ckrtPan = 2;
   google.protobuf.Timestamp ckrtVerfallDtm = 3;
@@ -106,44 +98,3 @@ message CardTo {
   string dkrtFreizgkSchl = 8;
 }
 
-// Anfrageobjekt für PAN-zu-Karten-Suche über interne Topics
-message CardLookupByPanTo {
-  string correlation_id = 1;
-  optional PanTo pan = 2;
-}
-
-// Anfrageobjekt für Freund-zu-Karten-Suche über interne Topics
-message CardLookupByFriendTo {
-  string correlation_id = 1;
-  optional FriendTo friend = 2;
-}
-
-// Antwortobjekt für PAN-zu-Karten-Suche
-message CardLookupByPanResponseTo {
-  enum ResultStatus {
-    SUCCESS = 0;
-    NOT_FOUND = 1;
-    ERROR = 2;
-  }
-
-  string correlation_id = 1;
-  optional CardTo card = 2;
-
-  ResultStatus status = 100;
-  string error_message = 101;
-}
-
-// Antwortobjekt für Freund-zu-Karten-Suche
-message CardLookupByFriendResponseTo {
-  enum ResultStatus {
-    SUCCESS = 0;
-    NOT_FOUND = 1;
-    ERROR = 2;
-  }
-
-  string correlation_id = 1;
-  optional CardTo card = 2;
-
-  ResultStatus status = 100;
-  string error_message = 101;
-}
