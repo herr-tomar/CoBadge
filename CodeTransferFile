@@ -1,100 +1,70 @@
-syntax = "proto3";
+hazelcast:
+  topic:
+    panToCardReq: CardByPanLookupRequestReliableTopic
+    panToCardRes: CardByFriendLookupResponseReliableTopic
+    friendToCardReq: CardByFriendLookupRequestReliableTopic
+    friendToCardRes: CardByFriendLookupResponseReliableTopic
 
-package osplus.pkppuma.protobuf;
+--------------------
 
-option java_package = "osplus.pkppuma.protobuf";
-option java_outer_classname = "CardLookupProto";
-option java_multiple_files = true;
+package osplus.pkppuma.config;
 
-import "google/protobuf/timestamp.proto";
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Configuration;
+import osplus.pkppuma.configprops.HazelRelTopicConfigProps;
 
-// ====================
-// REQUEST WRAPPERS
-// ====================
-
-message CardLookupByPanRequestWrapperDto {
-  string correlationId = 1;
-  CardLookupByPanRequestDto payload = 2;
+@Configuration
+@ConfigurationPropertiesScan
+@EnableConfigurationProperties(HazelRelTopicConfigProps.class)
+public class ConfigPropsConfig {
 }
+--------------------
 
-message CardLookupByFriendRequestWrapperDto {
-  string correlationId = 1;
-  CardLookupByFriendRequestDto payload = 2;
+package osplus.pkppuma.configprops;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
+
+@ConfigurationProperties(prefix = "hazelcast.topic")
+@Validated
+public class HazelRelTopicConfigProps {
+
+    private String panToCardReq;
+    private String panToCardRes;
+    private String friendToCardReq;
+    private String friendToCardRes;
+
+    public String getPanToCardReq() {
+        return panToCardReq;
+    }
+
+    public void setPanToCardReq(String panToCardReq) {
+        this.panToCardReq = panToCardReq;
+    }
+
+    public String getPanToCardRes() {
+        return panToCardRes;
+    }
+
+    public void setPanToCardRes(String panToCardRes) {
+        this.panToCardRes = panToCardRes;
+    }
+
+    public String getFriendToCardReq() {
+        return friendToCardReq;
+    }
+
+    public void setFriendToCardReq(String friendToCardReq) {
+        this.friendToCardReq = friendToCardReq;
+    }
+
+    public String getFriendToCardRes() {
+        return friendToCardRes;
+    }
+
+    public void setFriendToCardRes(String friendToCardRes) {
+        this.friendToCardRes = friendToCardRes;
+    }
+
 }
-
-// ====================
-// REQUEST PAYLOADS
-// ====================
-
-message CardLookupByPanRequestDto {
-  PanDto pan = 1;
-}
-
-message CardLookupByFriendRequestDto {
-  FriendDto friend = 1;
-}
-
-// ====================
-// RESPONSE WRAPPERS
-// ====================
-
-message CardLookupByPanResponseWrapperDto {
-  string correlationId = 1;
-  CardLookupResponseDto response = 2;
-}
-
-message CardLookupByFriendResponseWrapperDto {
-  string correlationId = 1;
-  CardLookupResponseDto response = 2;
-}
-
-// ====================
-// RESPONSE PAYLOAD
-// ====================
-
-message CardLookupResponseDto {
-  CardDto card = 1;
-  ResultStatus status = 2;
-  string errorMessage = 3;
-}
-
-// ====================
-// ENUMS
-// ====================
-
-enum ResultStatus {
-  SUCCESS = 0;
-  NOT_FOUND = 1;
-  ERROR = 2;
-}
-
-// ====================
-// CORE DTOs
-// ====================
-
-message PanDto {
-  int64 requestId = 1;
-  string ckrtPan = 2;
-  google.protobuf.Timestamp ckrtVerfallDtm = 3;
-}
-
-message FriendDto {
-  int64 requestId = 1;
-  int32 dkrtKtnr = 2;
-  int32 dkrtBlz = 3;
-  google.protobuf.Timestamp dkrtVerfallDtm = 4;
-  int32 dkrtFolgeNr = 5;
-  string dkrtFreizgkSchl = 6;
-}
-
-message CardDto {
-  int64 requestId = 1;
-  string ckrtPan = 2;
-  google.protobuf.Timestamp ckrtVerfallDtm = 3;
-  int32 dkrtKtnr = 4;
-  int32 dkrtBlz = 5;
-  google.protobuf.Timestamp dkrtVerfallDtm = 6;
-  int32 dkrtFolgeNr = 7;
-  string dkrtFreizgkSchl = 8;
-}
-
