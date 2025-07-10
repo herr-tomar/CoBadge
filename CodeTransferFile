@@ -1,70 +1,183 @@
-hazelcast:
-  topic:
-    panToCardReq: CardByPanLookupRequestReliableTopic
-    panToCardRes: CardByFriendLookupResponseReliableTopic
-    friendToCardReq: CardByFriendLookupRequestReliableTopic
-    friendToCardRes: CardByFriendLookupResponseReliableTopic
+package osplus.pkptuna.service;
 
---------------------
+import com.hazelcast.core.HazelcastInstance;
+import jakarta.annotation.PostConstruct;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import osplus.apl.core.api.AplComponent;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.api.ApiResponse;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestMetadataDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseWrapperDto;
+import osplus.pkptuna.dispute.model.DisputeDetailRequestDto;
+import osplus.pkptuna.dispute.model.DisputeDetailRequestMetadataDto;
+import osplus.pkptuna.dispute.model.DisputeDetailRequestWrapperDto;
+import osplus.pkptuna.dispute.model.DisputeDetailResponseWrapperDto;
+import osplus.pkptuna.dispute.model.DisputeResponseDto;
+import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
+import osplus.pkptuna.rest.dispute.lookup.model.mapper.DisputeLookupResponseDtoMapper;
+import osplus.pkptuna.rest.dispute.model.mapper.DisputeResponseDtoMapper;
+import osplus.pkptuna.util.GenericResponseTracker;
+import osplus.pkptuna.util.HazelcastListenerUtils;
 
-package osplus.pkppuma.config;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
-import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
-import osplus.pkppuma.configprops.HazelRelTopicConfigProps;
+@AplComponent
+public class DisputeOrcaService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeOrcaService.class);
 
-@Configuration
-@ConfigurationPropertiesScan
-@EnableConfigurationProperties(HazelRelTopicConfigProps.class)
-public class ConfigPropsConfig {
-}
---------------------
+    private final HazelcastInstance hazelcastInstance;
+    private final DisputeLookupResponseDtoMapper disputeLookupResponseDtoMapper;
+    private final DisputeResponseDtoMapper disputeResponseDtoMapper;
+    private final ReliableTopicPublisher reliableTopicPublisher;
+    private final GenericResponseTracker<DisputeResponseDto> disputeDetailResponseTracker;
+    private final GenericResponseTracker<osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto> disputeLookupResponseTracker;
 
-package osplus.pkppuma.configprops;
-
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.validation.annotation.Validated;
-
-@ConfigurationProperties(prefix = "hazelcast.topic")
-@Validated
-public class HazelRelTopicConfigProps {
-
-    private String panToCardReq;
-    private String panToCardRes;
-    private String friendToCardReq;
-    private String friendToCardRes;
-
-    public String getPanToCardReq() {
-        return panToCardReq;
+    public DisputeOrcaService(HazelcastInstance hazelcastInstance,
+                              DisputeLookupResponseDtoMapper disputeLookupResponseDtoMapper,
+                              DisputeResponseDtoMapper disputeResponseDtoMapper,
+                              ReliableTopicPublisher reliableTopicPublisher,
+                              GenericResponseTracker<DisputeResponseDto> disputeDetailResponseTracker,
+                              GenericResponseTracker<DisputeLookupResponseDto> disputeLookupResponseTracker) {
+        this.hazelcastInstance = hazelcastInstance;
+        this.disputeLookupResponseDtoMapper = disputeLookupResponseDtoMapper;
+        this.disputeResponseDtoMapper = disputeResponseDtoMapper;
+        this.reliableTopicPublisher = reliableTopicPublisher;
+        this.disputeDetailResponseTracker = disputeDetailResponseTracker;
+        this.disputeLookupResponseTracker = disputeLookupResponseTracker;
     }
 
-    public void setPanToCardReq(String panToCardReq) {
-        this.panToCardReq = panToCardReq;
+    public ResponseEntity<ApiResponse<osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto>> lookupDisputeFolder(String issuerId, String cardReference) {
+        try {
+            String correlationId = UUID.randomUUID().toString();
+
+            DisputeLookupRequestMetadataDto metadataDto = DisputeLookupRequestMetadataDto.newBuilder()
+                    .setRequestChannel("APL-UI")
+                    .setMessageType("DISPUTE_LOOKUP")
+                    .setRequestedBy("UI-MANUAL-TEST")
+                    .setBusinessContext("test")
+                    .build();
+
+            DisputeLookupRequestDto request = DisputeLookupRequestDto.newBuilder()
+                    .setMetadata(metadataDto)
+                    .setIssuerId(issuerId)
+                    .setCardReference(cardReference)
+                    .build();
+
+            DisputeLookupRequestWrapperDto wrapper = DisputeLookupRequestWrapperDto.newBuilder()
+                    .setCorrelationId(correlationId)
+                    .setPayload(request)
+                    .build();
+
+            reliableTopicPublisher.sendMessage("DisputeLookupRequestReliableTopic",
+                    "DISPUTE-LOOKUP", wrapper);
+
+            disputeLookupResponseTracker.register(correlationId);
+            CompletableFuture<DisputeLookupResponseDto> future = disputeLookupResponseTracker.await(correlationId);
+
+            DisputeLookupResponseDto protoResponse = future.get(5, TimeUnit.SECONDS);
+
+            osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto restResponse =
+                    disputeLookupResponseDtoMapper.toRestDto(protoResponse);
+
+            return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
+
+        } catch (TimeoutException te) {
+            return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
+                    .body(new ApiResponse<>("timeout", "No response in 5 seconds", null));
+
+        } catch (Exception e) {
+            LOGGER.error("Failed to process publishDisputesLookupRequest", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ApiResponse<>("error", "Internal server error", null));
+        }
     }
 
-    public String getPanToCardRes() {
-        return panToCardRes;
+    public ResponseEntity<ApiResponse<osplus.pkptuna.rest.dispute.model.DisputeResponseDto>> publishDisputeDetailRequest(
+            String issuerId,
+            String disputeFolderReference,
+            String embed) {
+        try {
+            String correlationId = UUID.randomUUID().toString();
+
+            DisputeDetailRequestMetadataDto.Builder metaBuilder = DisputeDetailRequestMetadataDto.newBuilder()
+                    .setRequestChannel("APL-UI")
+                    .setMessageType("DISPUTE_FOLDER_DETAIL")
+                    .setRequestedBy("UI-MANUAL-TEST")
+                    .setBusinessContext("test");
+
+            if (embed != null && !embed.isBlank()) {
+                for (String val : embed.split("\\s*,\\s*")) {
+                    metaBuilder.addEmbed(val);
+                }
+            }
+
+            DisputeDetailRequestDto request = DisputeDetailRequestDto.newBuilder()
+                    .setMetadata(metaBuilder.build())
+                    .setIssuerId(issuerId)
+                    .setDisputeFolderReference(disputeFolderReference)
+                    .build();
+
+            DisputeDetailRequestWrapperDto wrapper = DisputeDetailRequestWrapperDto.newBuilder()
+                    .setCorrelationId(correlationId)
+                    .setPayload(request)
+                    .build();
+
+            reliableTopicPublisher.sendMessage("DisputeDetailRequestReliableTopic",
+                    "DISPUTE-DETAIL", wrapper);
+
+            disputeDetailResponseTracker.register(correlationId);
+            CompletableFuture<DisputeResponseDto> future = disputeDetailResponseTracker.await(correlationId);
+
+            DisputeResponseDto protoResponse = future.get(5, TimeUnit.SECONDS);
+            osplus.pkptuna.rest.dispute.model.DisputeResponseDto restResponse =
+                    disputeResponseDtoMapper.toRestDto(protoResponse);
+
+            return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
+
+        } catch (TimeoutException te) {
+            return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
+                    .body(new ApiResponse<>("timeout", "No response in 5 seconds", null));
+
+        } catch (Exception e) {
+            LOGGER.error("Failed to process publishDisputeDetailRequest", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ApiResponse<>("error", "Internal server error", null));
+        }
     }
 
-    public void setPanToCardRes(String panToCardRes) {
-        this.panToCardRes = panToCardRes;
-    }
 
-    public String getFriendToCardReq() {
-        return friendToCardReq;
-    }
+    /**
+     * Initialisiert nach dem Start der Bean die Listener für eingehende Antworten auf Hazelcast-Themen.
+     */
+    @PostConstruct
+    public void initResponseListeners() {
+        HazelcastListenerUtils.registerGenericResponseListener(
+                hazelcastInstance,
+                "DisputeDetailResponseReliableTopic",
+                DisputeDetailResponseWrapperDto.parser(),
+                DisputeDetailResponseWrapperDto::getCorrelationId,
+                DisputeDetailResponseWrapperDto::getResponse,
+                disputeDetailResponseTracker::complete,
+                LOGGER
+        );
 
-    public void setFriendToCardReq(String friendToCardReq) {
-        this.friendToCardReq = friendToCardReq;
-    }
-
-    public String getFriendToCardRes() {
-        return friendToCardRes;
-    }
-
-    public void setFriendToCardRes(String friendToCardRes) {
-        this.friendToCardRes = friendToCardRes;
+        HazelcastListenerUtils.registerGenericResponseListener(
+                hazelcastInstance,
+                "DisputeLookupResponseReliableTopic",
+                DisputeLookupResponseWrapperDto.parser(),
+                DisputeLookupResponseWrapperDto::getCorrelationId,
+                DisputeLookupResponseWrapperDto::getResponse,
+                disputeLookupResponseTracker::complete,
+                LOGGER
+        );
     }
 
 }
