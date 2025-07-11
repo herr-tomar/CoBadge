@@ -22,10 +22,6 @@ import osplus.pkppuma.service.CardOrcaService;
 
 import java.util.Map;
 
-/**
- * APL UI-Modul zur Bereitstellung von Kartensuchfunktionen über das APL-Runtime-Framework.
- * Dieses Modul bietet Dienste zur Kartenabfrage basierend auf PAN- oder Freunddaten.
- */
 @UiModule("cardUiModule")
 public class CardUiModule {
 
@@ -33,37 +29,38 @@ public class CardUiModule {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final JsonFormat.Parser PARSER = JsonFormat.parser().ignoringUnknownFields();
 
+    // Status constants
+    private static final String STATUS_SUCCESS = "success";
+    private static final String STATUS_ERROR = "error";
+    private static final String GENERIC_ERROR_MESSAGE = "Internal server error";
+
+    // Logging message constants
+    private static final String MSG_RECEIVED_PAN_REQUEST = "Received getCardByPan request: {}";
+    private static final String MSG_RECEIVED_FRIEND_REQUEST = "Received getCardByFriend request: {}";
+    private static final String MSG_RECEIVED_PUBLISH_PAN = "Received publishCardByPan request: {}";
+    private static final String MSG_RECEIVED_PUBLISH_FRIEND = "Received publishCardByFriend request: {}";
+
+    private static final String LOG_FAILED_GET_PAN = "Failed to handle getCardByPan: {}";
+    private static final String LOG_FAILED_GET_FRIEND = "Failed to handle getCardByFriend: {}";
+    private static final String LOG_FAILED_PUBLISH_PAN = "Failed to handle publishCardByPan: {}";
+    private static final String LOG_FAILED_PUBLISH_FRIEND = "Failed to handle publishCardByFriend: {}";
+
     private final MappingService mappingService;
     private final CardLookupResponseDtoMapper cardLookupResponseDtoMapper;
     private final CardOrcaService cardOrcaService;
 
-    /**
-     * Konstruktor zur Initialisierung des CardUiModules mit dem benötigten MappingService.
-     *
-     * @param mappingService Service zur Abfrage und Verarbeitung von Kartendaten
-     */
     public CardUiModule(MappingService mappingService,
                         CardLookupResponseDtoMapper cardLookupResponseDtoMapper,
                         CardOrcaService cardOrcaService) {
-
         this.mappingService = mappingService;
         this.cardLookupResponseDtoMapper = cardLookupResponseDtoMapper;
         this.cardOrcaService = cardOrcaService;
     }
 
-    /**
-     * UI-Service zur Abfrage einer Karte basierend auf PAN-Daten.
-     * Die Anfrage wird als JSON empfangen und in ein {@link PanDto} konvertiert.
-     *
-     * @param requestPayload JSON-Payload mit PAN-Informationen
-     * @return JSON-Repräsentation eines {@link CardDto}, oder ein leeres JSON-Objekt bei Fehlern
-     */
     @UiService(value = "getCardByPan", method = MethodType.POST, requiresAuthentication = false)
     @Deprecated
     public ResponseEntity<ApiResponse<osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto>> getCardByPan(@RequestBody Map<String, Object> requestPayload) {
-
-        LOGGER.info("Received getCardByPan request: {}", requestPayload);
-
+        LOGGER.info(MSG_RECEIVED_PAN_REQUEST, requestPayload);
         try {
             String json = MAPPER.writeValueAsString(requestPayload);
 
@@ -77,30 +74,21 @@ public class CardUiModule {
                     .setCard(cardDto)
                     .build();
 
-            osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto restResponse =
-                    cardLookupResponseDtoMapper.toRestDto(cardLookupResponseDto);
+            var restResponse = cardLookupResponseDtoMapper.toRestDto(cardLookupResponseDto);
 
-            return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
+            return ResponseEntity.ok(new ApiResponse<>(STATUS_SUCCESS, null, restResponse));
 
         } catch (Exception e) {
-            LOGGER.error("Failed to handle getCardByPan: {}", e.getMessage(), e);
+            LOGGER.error(LOG_FAILED_GET_PAN, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ApiResponse<>("error", "Internal server error", null));
+                    .body(new ApiResponse<>(STATUS_ERROR, GENERIC_ERROR_MESSAGE, null));
         }
     }
 
-    /**
-     * UI-Service zur Abfrage einer Karte basierend auf Freunddaten.
-     * Die Anfrage wird als JSON empfangen und in ein {@link FriendDto} konvertiert.
-     *
-     * @param requestPayload JSON-Payload mit Freundinformationen
-     * @return JSON-Repräsentation eines {@link CardDto}, oder ein leeres JSON-Objekt bei Fehlern
-     */
-    @Deprecated
     @UiService(value = "getCardByFriend", method = MethodType.POST, requiresAuthentication = false)
+    @Deprecated
     public ResponseEntity<ApiResponse<osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto>> getCardByFriend(@RequestBody Map<String, Object> requestPayload) {
-        LOGGER.info("Received getCardByFriend request: {}", requestPayload);
-
+        LOGGER.info(MSG_RECEIVED_FRIEND_REQUEST, requestPayload);
         try {
             String json = MAPPER.writeValueAsString(requestPayload);
 
@@ -114,50 +102,42 @@ public class CardUiModule {
                     .setCard(cardDto)
                     .build();
 
-            osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto restResponse =
-                    cardLookupResponseDtoMapper.toRestDto(cardLookupResponseDto);
+            var restResponse = cardLookupResponseDtoMapper.toRestDto(cardLookupResponseDto);
 
-            return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
+            return ResponseEntity.ok(new ApiResponse<>(STATUS_SUCCESS, null, restResponse));
 
         } catch (Exception e) {
-            LOGGER.error("Failed to handle getCardByFriend: {}", e.getMessage(), e);
+            LOGGER.error(LOG_FAILED_GET_FRIEND, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ApiResponse<>("error", "Internal server error", null));
+                    .body(new ApiResponse<>(STATUS_ERROR, GENERIC_ERROR_MESSAGE, null));
         }
     }
 
     @UiService(value = "publishGetCardByPan", method = MethodType.POST, requiresAuthentication = false)
     public ResponseEntity<ApiResponse<osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto>> getCardByPanOverHazelcast(@RequestBody Map<String, Object> requestPayload) {
-
-        LOGGER.info("Received publishCardByPan request: {}", requestPayload);
-
-        String json = null;
+        LOGGER.info(MSG_RECEIVED_PUBLISH_PAN, requestPayload);
         try {
-            json = MAPPER.writeValueAsString(requestPayload);
+            String json = MAPPER.writeValueAsString(requestPayload);
             return cardOrcaService.publishCardByPanRequest(json);
+
         } catch (JsonProcessingException e) {
-            LOGGER.error("Failed to handle publishCardByPan: {}", e.getMessage(), e);
+            LOGGER.error(LOG_FAILED_PUBLISH_PAN, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ApiResponse<>("error", "Internal server error", null));
+                    .body(new ApiResponse<>(STATUS_ERROR, GENERIC_ERROR_MESSAGE, null));
         }
     }
 
     @UiService(value = "publishGetCardByFriend", method = MethodType.POST, requiresAuthentication = false)
     public ResponseEntity<ApiResponse<osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto>> getCardByFriendOverHazelcast(@RequestBody Map<String, Object> requestPayload) {
-
-        LOGGER.info("Received publishCardByFriend request: {}", requestPayload);
-
+        LOGGER.info(MSG_RECEIVED_PUBLISH_FRIEND, requestPayload);
         try {
             String json = MAPPER.writeValueAsString(requestPayload);
             return cardOrcaService.publishCardByFriendRequest(json);
 
         } catch (JsonProcessingException e) {
-            LOGGER.error("Failed to handle publishCardByFriend: {}", e.getMessage(), e);
+            LOGGER.error(LOG_FAILED_PUBLISH_FRIEND, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ApiResponse<>("error", "Internal server error", null));
+                    .body(new ApiResponse<>(STATUS_ERROR, GENERIC_ERROR_MESSAGE, null));
         }
     }
 }
-------
-
-CardUiModule.java:88	osplus.pkppuma.uimodule	Error Prone	AvoidDuplicateLiterals
