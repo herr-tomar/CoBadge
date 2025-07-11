@@ -1,543 +1,247 @@
- LOGGER.info("Received getCardByPan request: {}", requestPayload);
+package osplus.pkppuma.flows.handlers;
 
-        try {
-            PanDto.Builder builder = PanDto.newBuilder();
-            JsonFormat.parser().ignoringUnknownFields().merge(requestPayload, builder);
-            PanDto panDto = builder.build();
---------------
-package osplus.apl.uui.service;
-
-import com.fasterxml.jackson.databind.JavaType;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.exc.InvalidFormatException;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import org.springframework.beans.factory.ObjectFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.core.MethodParameter;
-import org.springframework.http.HttpStatus;
-import org.springframework.security.access.AccessDeniedException;
-import osplus.apl.autoconfigure.UuiConfigurationProperties;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.hazelcast.core.HazelcastInstance;
+import jakarta.annotation.PostConstruct;
 import osplus.apl.core.api.AplComponent;
-import osplus.apl.core.api.validation.ValidationService;
-import osplus.apl.core.exception.CodingException;
-import osplus.apl.core.validation.entity.AplConstraintViolationException;
-import osplus.apl.uui.api.UiServiceException;
-import osplus.apl.uui.exception.InternalUuiServiceException;
-import osplus.apl.uui.message.InternalMessage;
-import osplus.apl.uui.message.InternalMessageType;
-import osplus.apl.uui.message.RequestMessageHolder;
-import osplus.apl.uui.service.security.ServiceMethodRequirementsServiceV1;
-import osplus.apl.uui.uielement.definition.UiElement;
-import osplus.apl.uui.uielement.definition.UiElementParameter;
-import osplus.apl.uui.uielement.definition.UiModule;
-import osplus.apl.uui.uielement.definition.UiModuleExtractor;
 import osplus.fi.core.logging.api.Logger;
 import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkppuma.card.lookup.model.CardLookupByFriendRequestDto;
+import osplus.pkppuma.card.lookup.model.CardLookupByFriendRequestWrapperDto;
+import osplus.pkppuma.card.lookup.model.CardLookupResponseDto;
+import osplus.pkppuma.card.service.MappingService;
+import osplus.pkppuma.card.lookup.model.CardLookupByFriendResponseWrapperDto;
+import osplus.pkppuma.hazelcast.flows.FlowHandler;
+import osplus.pkppuma.hazelcast.protobuf.impl.ProtobufDeserializer;
+import osplus.pkppuma.hazelcast.pubsub.ReliableTopicPublisher;
 
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Type;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
 /**
- * @see "CR85Dokumentation"
+ * FlowHandler für die Verarbeitung von Karten durch die Freunde-Suche
+ * Dieser Handler übernimmt die Deserialisierung, verarbeitet die Anfrage mit Hilfe des Services,
+ * verpackt die Antwort und publiziert sie auf einem Hazelcast Topic.
  */
-@AplComponent
-public class UiServiceRequestDispatcher implements UiServiceConstants {
+@AplComponent("card-by-friend-lookup")
+public class CardLookupByFriendFlowHandler implements FlowHandler<CardLookupByFriendRequestWrapperDto, CardLookupResponseDto> {
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(UiServiceRequestDispatcher.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(CardLookupByFriendFlowHandler.class);
+    public static final String CARD_LOOKUP_BY_FRIEND_FLOW_HANDLER = "card-by-friend-lookup";
+    public static final String CARD_LOOKUP_BY_FRIEND = "CARD_LOOKUP_BY_FRIEND";
 
-	private final UiModuleExtractor uiModuleExtractor;
-	private final ServiceMethodRequirementsServiceV1 serviceMethodRequirementsServiceV1;
-	private final ObjectFactory<RequestMessageHolder> requestMessageHolderObjectFactory;
-	private final ValidationService validationService;
-	private final UuiConfigurationProperties uuiConfigurationProperties;
-	private final ObjectMapper objectMapper;
-	private final List<UiServiceRequestHandler> uiServiceRequestHandlers;
+    private final MappingService mappingService;
+    private final ReliableTopicPublisher reliableTopicPublisher;
+    private final ProtobufDeserializer<CardLookupByFriendRequestWrapperDto> deserializer;
 
+    public CardLookupByFriendFlowHandler(MappingService mappingService,
+                                         ReliableTopicPublisher reliableTopicPublisher,
+                                         ProtobufDeserializer<CardLookupByFriendRequestWrapperDto> deserializer) {
+        this.mappingService = mappingService;
+        this.reliableTopicPublisher = reliableTopicPublisher;
+        this.deserializer = deserializer;
+    }
 
-	public UiServiceRequestDispatcher(UiModuleExtractor uiModuleExtractor,
-									  ServiceMethodRequirementsServiceV1 serviceMethodRequirementsServiceV1,
-									  ObjectFactory<RequestMessageHolder> requestMessageHolderObjectFactory,
-									  ValidationService validationService,
-									  UuiConfigurationProperties uuiConfigurationProperties,
-									  @Qualifier("uuiObjectMapper") ObjectMapper objectMapper,
-									  List<UiServiceRequestHandler> uiServiceRequestHandlers) {
-		this.uiModuleExtractor = uiModuleExtractor;
-		this.serviceMethodRequirementsServiceV1 = serviceMethodRequirementsServiceV1;
-		this.requestMessageHolderObjectFactory = requestMessageHolderObjectFactory;
-		this.validationService = validationService;
-		this.uuiConfigurationProperties = uuiConfigurationProperties;
-		this.objectMapper = objectMapper;
-		this.uiServiceRequestHandlers = uiServiceRequestHandlers;
-	}
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Deserialisiert das Eingangsbytearray in ein Protobuf-Wrapping DTO.
+     */
+    @Override
+    public CardLookupByFriendRequestWrapperDto deserializeRequest(byte[] data) throws InvalidProtocolBufferException {
+        try {
+            return deserializer.deserialize(data);
+        } catch (IOException e) {
+            LOGGER.error("Failed to deserialize request", e);
+            return CardLookupByFriendRequestWrapperDto.newBuilder().build();
+        }
+    }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Extrahiert die Korrelations-ID aus dem Request.
+     */
+    @Override
+    public String extractCorrelationId(CardLookupByFriendRequestWrapperDto request) {
+        return request.getCorrelationId();
+    }
 
-	public UiServiceResult dispatchService(UiModuleCallInformation uiModuleCallInformation) throws InternalUuiServiceException {
-		UiModule uiModule = null;
-		UiElement uiElement = null;
-		try {
-			uiModule = uiModuleExtractor.getUiModuleForRequest(uiModuleCallInformation);
-			uiElement = uiModule.methodDefinitionFor(uiModuleCallInformation);
-			return doDispatchService(new ServiceDefinitionHolder(uiModuleCallInformation,
-					uiModule,
-					uiElement, null));
-		} catch (InternalUuiServiceException e) {
-			LOGGER.error(e.getMessage(), e);
-			throw e;
-		}
-	}
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Verarbeitet die Anfrage durch Aufruf des zugehörigen Services.
+     */
+    @Override
+    public CardLookupResponseDto handleRequest(CardLookupByFriendRequestWrapperDto request) {
+        CardLookupByFriendRequestDto dto = request.getPayload();
+        CardLookupResponseDto cardLookupResponseDto = CardLookupResponseDto.newBuilder()
+                .setCard(mappingService.findCardByFriend(dto.getFriend()))
+                .build();
+        return cardLookupResponseDto;
+    }
 
-	UiServiceResult doDispatchService(ServiceDefinitionHolder serviceDefinitionHolder)
-			throws InternalUuiServiceException {
-		UiModuleCallInformation uiModuleCallInformation = serviceDefinitionHolder.uiModuleCallInformation();
-		UiElement uiElement = serviceDefinitionHolder.uiElement();
-		UiModule uiModule = serviceDefinitionHolder.uiModule();
-		try {
-			serviceMethodRequirementsServiceV1.checkServiceMethodCallRequirements(uiModuleCallInformation);
-		} catch (IllegalStateException e) {
-			return createResponseFromCheckServiceMethodCallRequirements(e);
-		}
-		UiServiceResult uiServiceResult;
-		try {
-			Object requestPayload = extractPayload(uiModuleCallInformation, uiElement);
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Verpackt das Ergebnis zusammen mit der Korrelations-ID in ein Wrapper-Objekt.
+     */
+    @Override
+    public Object wrapResponse(String correlationId, CardLookupResponseDto result) {
+        return CardLookupByFriendResponseWrapperDto.newBuilder()
+                .setCorrelationId(correlationId)
+                .setResponse(result)
+                .build();
+    }
 
-			Optional<UiServiceRequestHandler> uiServiceRequestHandler = resolveUiServiceRequestHandler(serviceDefinitionHolder);
-			if (uiServiceRequestHandler.isPresent()) {
-				uiServiceResult = uiServiceRequestHandler.get().handle(uiModuleCallInformation, uiModule, uiElement, requestPayload);
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Sendet die Antwort an das angegebene Hazelcast Topic.
+     */
+    @Override
+    public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Object response) {
+        CardLookupByFriendResponseWrapperDto dto = (CardLookupByFriendResponseWrapperDto) response;
+        reliableTopicPublisher.sendMessage(topicName, CARD_LOOKUP_BY_FRIEND, dto);
+    }
 
-				// validate response
-				Optional<Object> payloadObject = uiServiceResult.getPayloadObject();
-				if (uuiConfigurationProperties.isValidateResponse() && payloadObject.isPresent()) {
-					UiServiceResult validationErrorResult = validateResponseValue(uiModuleCallInformation, payloadObject.get());
-					if (validationErrorResult != null) {
-						return validationErrorResult;
-					}
-				}
-				addMessagesToUiServiceResult(uiServiceResult);
-				serviceMethodRequirementsServiceV1.storeServiceMethodCall(uiModuleCallInformation);
-				return uiServiceResult;
-			} else {
-				throw new CodingException("No UIServiceRequestHandler found for request - this is a coding error!");
-			}
+    @Override
+    /**
+     * {@inheritDoc}
+     * <p>
+     *  Gibt den Namen des Flows zurück (z.B. für Registrierung oder Logging).
+     */
+    public String getFlowName() {
+        return CARD_LOOKUP_BY_FRIEND_FLOW_HANDLER;
+    }
 
-		} catch (InvocationTargetException e) {
-			Throwable targetException = e.getTargetException();
-			if (targetException != null && UiServiceException.class.isInstance(targetException)) {
-				throw createAndLogInternalUuiServiceExceptionFromServiceException(uiModuleCallInformation, (UiServiceException) targetException);
-			} else if (targetException != null && AplConstraintViolationException.class.isInstance(targetException)) {
-				return handleValidationErrors(uiModuleCallInformation, e);
-			} else if (targetException != null && AccessDeniedException.class.isInstance(targetException)) {
-				throw createAndLogAccessDeniedException(uiModuleCallInformation, (AccessDeniedException) targetException);
-			} else {
-				throw createAndLogInternalUuiServiceException(uiModuleCallInformation, e.getCause());
-			}
-		} catch (InternalUuiServiceException e) {
-			LOGGER.error(e.getMessage(), e);
-			throw e;
-		} catch (AccessDeniedException e) {
-			throw createAndLogAccessDeniedException(uiModuleCallInformation, e);
-		} catch (IllegalAccessException | RuntimeException e) {
-			throw createAndLogInternalUuiServiceException(uiModuleCallInformation, e);
-		}
-	}
-
-	@Nullable
-	private UiServiceResult validateResponseValue(UiModuleCallInformation uiModuleCallInformation, Object returnValue) {
-		LOGGER.debug("Validation UIService response");
-		try {
-			validationService.validate(returnValue);
-		} catch (AplConstraintViolationException e) {
-			List<InternalMessage<?>> internalMessageList = createMessagesFromConstraintViolationException(e);
-			ObjectNode protocolResponse = JsonNodeFactory.instance.objectNode();
-			LOGGER.warn(() -> "Validation error in response from UiService '" + uiModuleCallInformation.getUiElementName()
-					+ "'in UiModule '" + uiModuleCallInformation.getUiModuleName() + "'");
-
-			if (internalMessageList != null && !internalMessageList.isEmpty()) {
-				protocolResponse.putPOJO(PROTOCOL_MESSAGES, internalMessageList);
-			}
-			return new UiServiceResult(protocolResponse, 940);
-		}
-		return null;
-	}
-
-	private void addMessagesToUiServiceResult(UiServiceResult uiServiceResult) {
-		List<InternalMessage<?>> internalMessageList = getAndClearMessages();
-		if (internalMessageList != null && !internalMessageList.isEmpty() && uiServiceResult.getResponse() instanceof ObjectNode jsonObject) {
-			jsonObject.putPOJO(PROTOCOL_MESSAGES, internalMessageList);
-		}
-	}
-
-	private Optional<UiServiceRequestHandler> resolveUiServiceRequestHandler(ServiceDefinitionHolder serviceDefinitionHolder) {
-		return uiServiceRequestHandlers.stream()
-				.filter(handler -> handler.handles(serviceDefinitionHolder))
-				.findFirst();
-	}
-
-	@Nullable
-	private Object extractPayload(UiModuleCallInformation uiModuleCallInformation, UiElement uiElement) {
-		return uiModuleCallInformation.getPayload()
-				.map(payload -> {
-					Type parameterType = null;
-					UiElementParameter bodyElementParameter = uiElement.getBodyElementParameter();
-					if (null == bodyElementParameter) {
-						InternalUuiServiceException internalUuiServiceException = new InternalUuiServiceException(HttpStatus.BAD_REQUEST.value(), "");
-						String msg = "Method which should be invoked takes no body parameter. A body was provided. " +
-								"This is a serious problem which can only be fixed by the application.\n" + uiElement;
-						LOGGER.error(msg, internalUuiServiceException);
-						throw internalUuiServiceException;
-					}
-					parameterType = bodyElementParameter.getParameterClass();
-					Method serviceMethod = uiElement.getServiceMethod();
-					MethodParameter methodParameter = new MethodParameter(serviceMethod, bodyElementParameter.getIndex());
-					parameterType = methodParameter.getGenericParameterType();
-					return convertPayload(payload, parameterType);
-				})
-				.orElse(null);
-	}
-
-	@Nullable
-	private Object convertPayload(JsonNode payload, Type parameterType) {
-		if (payload == null) {
-			return null;
-		}
-		if (parameterType == null) {
-			LOGGER.error("Got request with payload. Method defined without a parameter. We would hide payload - thus terminating request.");
-			throw new IllegalArgumentException("Can't convert input for module service.");
-		}
-		try {
-			JavaType javaType = objectMapper.getTypeFactory().constructType(parameterType);
-			return objectMapper.readerFor(javaType).readValue(payload);
-		} catch (InvalidFormatException e) {
-			LOGGER.error("Error in request data format", e);
-			String fields = e.getPath().stream().map(reference -> reference.getFieldName()).collect(Collectors.joining(","));
-			String errorMessage = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
-			InternalUuiServiceException internalUuiServiceException = new InternalUuiServiceException(HttpStatus.BAD_REQUEST.value(),
-					"Error in payload for UiElementCall", null);
-			internalUuiServiceException.setMessages(Collections.singletonList(new InternalMessage<>("APL-UUI-VALIDATION-002",
-					"Format Error at field(s) [" + fields + "] : " + errorMessage, InternalMessageType.ERROR, null)));
-			throw internalUuiServiceException;
-		} catch (IOException e) {
-			LOGGER.error("Error creating object from module service request payload", e);
-			throw new InternalUuiServiceException(HttpStatus.BAD_REQUEST.value(), "Invalid JSON provided", e);
-		}
-	}
-
-	@NotNull
-	private UiServiceResult createResponseFromCheckServiceMethodCallRequirements(IllegalStateException e) {
-		ObjectNode protocolResponse = JsonNodeFactory.instance.objectNode();
-		List<InternalMessage<?>> internalMessageList = Arrays.asList(
-				new InternalMessage<>(null, e.getMessage(), InternalMessageType.ERROR, null)
-		);
-		protocolResponse.putPOJO(PROTOCOL_MESSAGES, internalMessageList);
-		return new UiServiceResult(protocolResponse, HttpStatus.BAD_REQUEST.value());
-	}
-
-	private InternalUuiServiceException createAndLogAccessDeniedException(UiModuleCallInformation uiModuleCallInformation, AccessDeniedException e) {
-		InternalUuiServiceException internalUuiServiceException = new InternalUuiServiceException(e);
-		internalUuiServiceException.setStatusCode(HttpStatus.FORBIDDEN.value());
-		LOGGER.warn(() -> "Not allowed to call UiService '" + uiModuleCallInformation.getUiElementName() + "' in UiModule '" +
-				uiModuleCallInformation.getUiModuleName() + "' - ErrorID: " + internalUuiServiceException.getErrorId(), e);
-		return internalUuiServiceException;
-	}
-
-	private UiServiceResult handleValidationErrors(UiModuleCallInformation uiModuleCallInformation, InvocationTargetException e) {
-		AplConstraintViolationException aplConstraintViolationException = (AplConstraintViolationException) e.getTargetException();
-		ObjectNode protocolResponse = JsonNodeFactory.instance.objectNode();
-		List<InternalMessage<?>> internalMessageList = createMessagesFromConstraintViolationException(aplConstraintViolationException);
-		if (LOGGER.isDebugEnabled()) {
-			String violationDetails = aplConstraintViolationException.getAplConstraintViolationSet().stream()
-					.map(violation -> violation.getValidationSource() + " : " + violation.getValidationDescription())
-					.collect(Collectors.joining(", "));
-			LOGGER.debug("Validation error calling UiService '{}' in UiModule '{}' => {}",
-					uiModuleCallInformation.getUiElementName(), uiModuleCallInformation.getUiModuleName(), violationDetails);
-		} else {
-			LOGGER.warn(() -> "Validation error calling UiService '{}' in UiModule '{}'",
-					uiModuleCallInformation.getUiElementName(), uiModuleCallInformation.getUiModuleName());
-		}
-		if (internalMessageList != null && !internalMessageList.isEmpty()) {
-			protocolResponse.putPOJO(PROTOCOL_MESSAGES, internalMessageList);
-		}
-		return new UiServiceResult(protocolResponse, HttpStatus.BAD_REQUEST.value());
-	}
-
-	private List<InternalMessage<?>> createMessagesFromConstraintViolationException(AplConstraintViolationException aplConstraintViolationException) {
-		List<InternalMessage<?>> internalMessageList = getAndClearMessages();
-		aplConstraintViolationException.getAplConstraintViolationSet()
-				.forEach(constraintViolation -> {
-					String code = constraintViolation.getCode();
-					String message = constraintViolation.getMessage();
-					String description = constraintViolation.getValidationDescription();
-					InternalMessage<String> internalMessage = new InternalMessage<>(code, message, InternalMessageType.ERROR, description);
-					internalMessageList.add(internalMessage);
-				});
-		return internalMessageList;
-	}
-
-	@NotNull
-	private List<InternalMessage<?>> getAndClearMessages() {
-		return requestMessageHolderObjectFactory.getObject().getAndClearAllMessages();
-	}
-
-	private InternalUuiServiceException createAndLogInternalUuiServiceException(
-			UiModuleCallInformation uiModuleCallInformation,
-			Throwable throwable) {
-		InternalUuiServiceException internalUuiServiceException = new InternalUuiServiceException(throwable);
-		LOGGER.error(() -> "Error calling UiService '" + uiModuleCallInformation.getUiElementName()
-				+ "' in UiModule '" + uiModuleCallInformation.getUiModuleName()
-				+ "' - ErrorID: " + internalUuiServiceException.getErrorId(), throwable);
-		List<InternalMessage<?>> internalMessageList = getAndClearMessages();
-		if (internalMessageList != null && !internalMessageList.isEmpty()) {
-			internalUuiServiceException.setMessages(internalMessageList);
-		}
-		return internalUuiServiceException;
-	}
-
-	private InternalUuiServiceException createAndLogInternalUuiServiceExceptionFromServiceException(UiModuleCallInformation uiModuleCallInformation, UiServiceException targetException) {
-		InternalUuiServiceException internalUuiServiceException = createAndLogInternalUuiServiceException(uiModuleCallInformation, targetException);
-		internalUuiServiceException.setStatusCode(targetException.getReturnCode());
-		internalUuiServiceException.setPayload(targetException.getResponseObject());
-		List<InternalMessage<?>> internalMessageList = getAndClearMessages();
-		if (internalMessageList != null && !internalMessageList.isEmpty()) {
-			internalUuiServiceException.setMessages(internalMessageList);
-		}
-		return internalUuiServiceException;
-	}
+    @PostConstruct
+    void init() {
+        LOGGER.info("CardLookupByFriendFlowHandler loaded and initialised.");
+    }
 }
 
-----------------------
+
+--------------------
 
 
-2025-07-11 11:04:39.635  WARN 26824 --- [omcat-handler-0] o.a.uui.controller.UiServiceController  : Invalid JSON provided
+package osplus.pkppuma.flows.handlers;
 
-osplus.apl.uui.service.InternalUuiServiceException: Invalid JSON provided
-	at osplus.apl.uui.service.UiServiceRequestDispatcher.convertPayload(UiServiceRequestDispatcher.java:223) ~[apl-uui-251.0.0-M7.jar:251.0.0-M7]
-	at osplus.apl.uui.service.UiServiceRequestDispatcher.lambda$extractPayload$2(UiServiceRequestDispatcher.java:195) ~[apl-uui-251.0.0-M7.jar:251.0.0-M7]
-	at java.base/java.util.Optional.map(Optional.java:260) ~[na:na]
-	at osplus.apl.uui.service.UiServiceRequestDispatcher.extractPayload(UiServiceRequestDispatcher.java:181) ~[apl-uui-251.0.0-M7.jar:251.0.0-M7]
-	at osplus.apl.uui.service.UiServiceRequestDispatcher.doDispatchService(UiServiceRequestDispatcher.java:104) ~[apl-uui-251.0.0-M7.jar:251.0.0-M7]
-	at osplus.apl.uui.service.UiServiceRequestDispatcher.dispatchService(UiServiceRequestDispatcher.java:83) ~[apl-uui-251.0.0-M7.jar:251.0.0-M7]
-	at osplus.apl.uui.controller.UiServiceController.dispatchServiceInternal(UiServiceController.java:99) ~[apl-uui-251.0.0-M7.jar:251.0.0-M7]
-	at osplus.apl.core.administration.metrics.MetricsWriter$1.call(MetricsWriter.java:60) ~[apl-core-services-251.0.0-M7.jar:251.0.0-M7]
-	at io.micrometer.core.instrument.composite.CompositeTimer.recordCallable(CompositeTimer.java:129) ~[micrometer-core-1.15.1.jar:1.15.1]
-	at io.micrometer.core.instrument.Timer.lambda$wrap$3(Timer.java:209) ~[micrometer-core-1.15.1.jar:1.15.1]
-	at osplus.apl.core.administration.metrics.MetricsWriter.timer(MetricsWriter.java:43) ~[apl-core-services-251.0.0-M7.jar:251.0.0-M7]
-	at osplus.apl.uui.controller.UiServiceController.dispatchInternal(UiServiceController.java:91) ~[apl-uui-251.0.0-M7.jar:251.0.0-M7]
-	at osplus.apl.uui.controller.UiServiceController.handlePostService(UiServiceController.java:126) ~[apl-uui-251.0.0-M7.jar:251.0.0-M7]
-	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
-	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
-	at org.springframework.web.method.support.InvocableHandlerMethod.doInvoke(InvocableHandlerMethod.java:258) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.web.method.support.InvocableHandlerMethod.invokeForRequest(InvocableHandlerMethod.java:191) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.web.servlet.mvc.method.annotation.ServletInvocableHandlerMethod.invokeAndHandle(ServletInvocableHandlerMethod.java:118) ~[spring-webmvc-6.2.8.jar:6.2.8]
-	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.invokeHandlerMethod(RequestMappingHandlerAdapter.java:986) ~[spring-webmvc-6.2.8.jar:6.2.8]
-	at org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter.handleInternal(RequestMappingHandlerAdapter.java:891) ~[spring-webmvc-6.2.8.jar:6.2.8]
-	at org.springframework.web.servlet.mvc.method.AbstractHandlerMethodAdapter.handle(AbstractHandlerMethodAdapter.java:87) ~[spring-webmvc-6.2.8.jar:6.2.8]
-	at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1089) ~[spring-webmvc-6.2.8.jar:6.2.8]
-	at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:979) ~[spring-webmvc-6.2.8.jar:6.2.8]
-	at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1014) ~[spring-webmvc-6.2.8.jar:6.2.8]
-	at org.springframework.web.servlet.FrameworkServlet.doPost(FrameworkServlet.java:914) ~[spring-webmvc-6.2.8.jar:6.2.8]
-	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:590) ~[tomcat-embed-core-10.1.42.jar:6.0]
-	at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:885) ~[spring-webmvc-6.2.8.jar:6.2.8]
-	at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:658) ~[tomcat-embed-core-10.1.42.jar:6.0]
-	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:195) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at osplus.apl.core.administration.security.AdminWebAuthenticationFilter.doFilterInternal(AdminWebAuthenticationFilter.java:72) ~[apl-core-251.0.0-M7.jar:251.0.0-M7]
-	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at osplus.apl.core.administration.metrics.HealthEndpointPrometheusFilter.doFilterInternal(HealthEndpointPrometheusFilter.java:48) ~[apl-core-251.0.0-M7.jar:251.0.0-M7]
-	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at osplus.apl.core.dyns.filter.DynsLizenzKeyHeaderExtractorFilter.doFilter(DynsLizenzKeyHeaderExtractorFilter.java:35) ~[apl-core-dyns-client-251.0.0-M7.jar:251.0.0-M7]
-	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at osplus.apl.core.i18n.LocaleFilter.doFilter(LocaleFilter.java:29) ~[apl-core-251.0.0-M7.jar:251.0.0-M7]
-	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:108) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:108) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.security.web.FilterChainProxy.lambda$doFilterInternal$3(FilterChainProxy.java:231) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$FilterObservation$SimpleFilterObservation.lambda$wrap$1(ObservationFilterChainDecorator.java:479) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$AroundFilterObservation$SimpleAroundFilterObservation.lambda$wrap$1(ObservationFilterChainDecorator.java:340) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator.lambda$wrapSecured$0(ObservationFilterChainDecorator.java:82) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:128) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.access.intercept.AuthorizationFilter.doFilter(AuthorizationFilter.java:101) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.access.ExceptionTranslationFilter.doFilter(ExceptionTranslationFilter.java:125) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.access.ExceptionTranslationFilter.doFilter(ExceptionTranslationFilter.java:119) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at osplus.apl.core.authentication.filter.SecurityContextSettingFilter.doFilter(SecurityContextSettingFilter.java:70) ~[apl-core-251.0.0-M7.jar:251.0.0-M7]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.authentication.AnonymousAuthenticationFilter.doFilter(AnonymousAuthenticationFilter.java:100) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.servletapi.SecurityContextHolderAwareRequestFilter.doFilter(SecurityContextHolderAwareRequestFilter.java:179) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.savedrequest.RequestCacheAwareFilter.doFilter(RequestCacheAwareFilter.java:63) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.authentication.logout.LogoutFilter.doFilter(LogoutFilter.java:107) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.authentication.logout.LogoutFilter.doFilter(LogoutFilter.java:93) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.web.filter.CorsFilter.doFilterInternal(CorsFilter.java:91) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.header.HeaderWriterFilter.doHeadersAfter(HeaderWriterFilter.java:90) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.header.HeaderWriterFilter.doFilterInternal(HeaderWriterFilter.java:75) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.context.SecurityContextHolderFilter.doFilter(SecurityContextHolderFilter.java:82) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.context.SecurityContextHolderFilter.doFilter(SecurityContextHolderFilter.java:69) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.context.request.async.WebAsyncManagerIntegrationFilter.doFilterInternal(WebAsyncManagerIntegrationFilter.java:62) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:227) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.session.DisableEncodeUrlFilter.doFilterInternal(DisableEncodeUrlFilter.java:42) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:240) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$AroundFilterObservation$SimpleAroundFilterObservation.lambda$wrap$0(ObservationFilterChainDecorator.java:323) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:224) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:137) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.FilterChainProxy.doFilterInternal(FilterChainProxy.java:233) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.security.web.FilterChainProxy.doFilter(FilterChainProxy.java:191) ~[spring-security-web-6.5.1.jar:6.5.1]
-	at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:113) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.web.filter.ServletRequestPathFilter.doFilter(ServletRequestPathFilter.java:52) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:113) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.web.filter.CompositeFilter.doFilter(CompositeFilter.java:74) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.security.config.annotation.web.configuration.WebSecurityConfiguration$CompositeFilterChainProxy.doFilter(WebSecurityConfiguration.java:319) ~[spring-security-config-6.5.1.jar:6.5.1]
-	at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:113) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.web.servlet.handler.HandlerMappingIntrospector.lambda$createCacheFilter$4(HandlerMappingIntrospector.java:267) ~[spring-webmvc-6.2.8.jar:6.2.8]
-	at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:113) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.web.filter.CompositeFilter.doFilter(CompositeFilter.java:74) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.security.config.annotation.web.configuration.WebMvcSecurityConfiguration$CompositeFilterChainProxy.doFilter(WebMvcSecurityConfiguration.java:240) ~[spring-security-config-6.5.1.jar:6.5.1]
-	at org.springframework.web.filter.DelegatingFilterProxy.invokeDelegate(DelegatingFilterProxy.java:362) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.web.filter.DelegatingFilterProxy.doFilter(DelegatingFilterProxy.java:278) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at osplus.apl.core.context.AplContextHolderFilter.doFilter(AplContextHolderFilter.java:47) ~[apl-core-251.0.0-M7.jar:251.0.0-M7]
-	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at osplus.apl.uui.cache.UuiEtagFilter.doFilterInternal(UuiEtagFilter.java:46) ~[apl-uui-251.0.0-M7.jar:251.0.0-M7]
-	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at osplus.apl.core.development.session.AddLoadBalancerHeaderFilter.doFilter(AddLoadBalancerHeaderFilter.java:28) ~[apl-core-localdevelopment-251.0.0-M7.jar:251.0.0-M7]
-	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at osplus.apl.core.authentication.filter.UnauthorizedBlzHeaderExtractorFilter.doFilter(UnauthorizedBlzHeaderExtractorFilter.java:22) ~[apl-core-251.0.0-M7.jar:251.0.0-M7]
-	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at osplus.apl.core.session.AplSessionAttributeFilter.doFilter(AplSessionAttributeFilter.java:57) ~[apl-core-251.0.0-M7.jar:251.0.0-M7]
-	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.springframework.web.filter.ServerHttpObservationFilter.doFilterInternal(ServerHttpObservationFilter.java:114) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at osplus.apl.core.logging.InitializeMDCServletFilter.doFilter(InitializeMDCServletFilter.java:86) ~[apl-core-251.0.0-M7.jar:251.0.0-M7]
-	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at osplus.apl.core.exception.TraceAndExceptionFilter.doFilterInternal(TraceAndExceptionFilter.java:23) ~[apl-core-251.0.0-M7.jar:251.0.0-M7]
-	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:201) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:101) ~[spring-web-6.2.8.jar:6.2.8]
-	at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:164) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:140) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:167) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:90) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:483) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:116) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:93) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:74) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.valves.rewrite.RewriteValve.invoke(RewriteValve.java:607) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:344) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:398) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:63) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:903) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1769) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52) ~[tomcat-embed-core-10.1.42.jar:10.1.42]
-	at java.base/java.lang.VirtualThread.run(VirtualThread.java:309) ~[na:na]
-Caused by: com.fasterxml.jackson.databind.exc.MismatchedInputException: Cannot deserialize value of type `java.lang.String` from Object value (token `JsonToken.START_OBJECT`)
- at [Source: UNKNOWN; byte offset: #UNKNOWN]
-	at com.fasterxml.jackson.databind.exc.MismatchedInputException.from(MismatchedInputException.java:59) ~[jackson-databind-2.19.1.jar:2.19.1]
-	at com.fasterxml.jackson.databind.DeserializationContext.reportInputMismatch(DeserializationContext.java:1794) ~[jackson-databind-2.19.1.jar:2.19.1]
-	at com.fasterxml.jackson.databind.DeserializationContext.handleUnexpectedToken(DeserializationContext.java:1568) ~[jackson-databind-2.19.1.jar:2.19.1]
-	at com.fasterxml.jackson.databind.DeserializationContext.handleUnexpectedToken(DeserializationContext.java:1473) ~[jackson-databind-2.19.1.jar:2.19.1]
-	at com.fasterxml.jackson.databind.DeserializationContext.extractScalarFromObject(DeserializationContext.java:971) ~[jackson-databind-2.19.1.jar:2.19.1]
-	at com.fasterxml.jackson.databind.deser.std.StdDeserializer._parseString(StdDeserializer.java:1444) ~[jackson-databind-2.19.1.jar:2.19.1]
-	at com.fasterxml.jackson.databind.deser.std.StringDeserializer.deserialize(StringDeserializer.java:48) ~[jackson-databind-2.19.1.jar:2.19.1]
-	at com.fasterxml.jackson.databind.deser.std.StringDeserializer.deserialize(StringDeserializer.java:11) ~[jackson-databind-2.19.1.jar:2.19.1]
-	at com.fasterxml.jackson.databind.deser.DefaultDeserializationContext.readRootValue(DefaultDeserializationContext.java:342) ~[jackson-databind-2.19.1.jar:2.19.1]
-	at com.fasterxml.jackson.databind.ObjectReader._bindAndClose(ObjectReader.java:2130) ~[jackson-databind-2.19.1.jar:2.19.1]
-	at com.fasterxml.jackson.databind.ObjectReader.readValue(ObjectReader.java:1743) ~[jackson-databind-2.19.1.jar:2.19.1]
-	at osplus.apl.uui.service.UiServiceRequestDispatcher.convertPayload(UiServiceRequestDispatcher.java:211) ~[apl-uui-251.0.0-M7.jar:251.0.0-M7]
-	... 179 common frames omitted
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.hazelcast.core.HazelcastInstance;
+import jakarta.annotation.PostConstruct;
+import osplus.apl.core.api.AplComponent;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkppuma.card.lookup.model.CardLookupByPanRequestDto;
+import osplus.pkppuma.card.lookup.model.CardLookupByPanRequestWrapperDto;
+import osplus.pkppuma.card.lookup.model.CardLookupByPanResponseWrapperDto;
+import osplus.pkppuma.card.lookup.model.CardLookupResponseDto;
+import osplus.pkppuma.card.service.MappingService;
+import osplus.pkppuma.hazelcast.flows.FlowHandler;
+import osplus.pkppuma.hazelcast.protobuf.impl.ProtobufDeserializer;
+import osplus.pkppuma.hazelcast.pubsub.ReliableTopicPublisher;
 
+import java.io.IOException;
 
-------------------------
+/**
+ * FlowHandler für die Verarbeitung von Karten durch die PAN-Suche
+ * Dieser Handler übernimmt die Deserialisierung, verarbeitet die Anfrage mit Hilfe des Services,
+ * verpackt die Antwort und publiziert sie auf einem Hazelcast Topic.
+ */
+@AplComponent("card-by-pan-lookup")
+public class CardLookupByPanFlowHandler implements FlowHandler<CardLookupByPanRequestWrapperDto, CardLookupResponseDto> {
 
-POST http://localhost:8080/pkppuma/service/cardUiModule/v1/getCardByFriend/v1
-Accept: application/apl.universal.ui.v1+json
-Content-Type: application/apl.universal.ui.v1+json
+    private static final Logger LOGGER = LoggerFactory.getLogger(CardLookupByPanFlowHandler.class);
+    public static final String CARD_LOOKUP_BY_PAN_FLOW_HANDLER = "card-by-pan-lookup";
+    public static final String CARD_LOOKUP_BY_PAN = "CARD_LOOKUP_BY_PAN";
 
-{
-  "payload": {
-    "requestId": 12345,
-    "dkrtKtnr": 511086647,
-    "dkrtBlz": 94059310,
-    "dkrtFreizgkSchl": "1",
-    "dkrtFolgeNr": 0,
-    "dkrtVerfallDtm": "2025-05-06T00:00:00Z"
-  }
+    private final MappingService mappingService;
+    private final ReliableTopicPublisher reliableTopicPublisher;
+    private final ProtobufDeserializer<CardLookupByPanRequestWrapperDto> deserializer;
+
+    public CardLookupByPanFlowHandler(MappingService mappingService,
+                                      ReliableTopicPublisher reliableTopicPublisher,
+                                      ProtobufDeserializer<CardLookupByPanRequestWrapperDto> deserializer) {
+        this.mappingService = mappingService;
+        this.reliableTopicPublisher = reliableTopicPublisher;
+        this.deserializer = deserializer;
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Deserialisiert das Eingangsbytearray in ein Protobuf-Wrapping DTO.
+     */
+    @Override
+    public CardLookupByPanRequestWrapperDto deserializeRequest(byte[] data) throws InvalidProtocolBufferException {
+        try {
+            return deserializer.deserialize(data);
+        } catch (IOException e) {
+            LOGGER.error("Failed to deserialize request", e);
+            return CardLookupByPanRequestWrapperDto.newBuilder().build();
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Extrahiert die Korrelations-ID aus dem Request.
+     */
+    @Override
+    public String extractCorrelationId(CardLookupByPanRequestWrapperDto request) {
+        return request.getCorrelationId();
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Verarbeitet die Anfrage durch Aufruf des zugehörigen Services.
+     */
+    @Override
+    public CardLookupResponseDto handleRequest(CardLookupByPanRequestWrapperDto request) {
+        CardLookupByPanRequestDto dto = request.getPayload();
+        CardLookupResponseDto cardLookupResponseDto = CardLookupResponseDto.newBuilder()
+                .setCard(mappingService.findCardByPan(dto.getPan()))
+                .build();
+        return cardLookupResponseDto;
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Verpackt das Ergebnis zusammen mit der Korrelations-ID in ein Wrapper-Objekt.
+     */
+    @Override
+    public Object wrapResponse(String correlationId, CardLookupResponseDto result) {
+        return CardLookupByPanResponseWrapperDto.newBuilder()
+                .setCorrelationId(correlationId)
+                .setResponse(result)
+                .build();
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Sendet die Antwort an das angegebene Hazelcast Topic.
+     */
+    @Override
+    public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Object response) {
+        CardLookupByPanResponseWrapperDto dto = (CardLookupByPanResponseWrapperDto) response;
+        reliableTopicPublisher.sendMessage(topicName, CARD_LOOKUP_BY_PAN, dto);
+    }
+
+    @Override
+    /**
+     * {@inheritDoc}
+     * <p>
+     *  Gibt den Namen des Flows zurück (z.B. für Registrierung oder Logging).
+     */
+    public String getFlowName() {
+        return CARD_LOOKUP_BY_PAN_FLOW_HANDLER;
+    }
+
+    @PostConstruct
+    void init() {
+        LOGGER.info("CardLookupByPanFlowHandler loaded and initialised.");
+    }
 }
-
-----------------------
-
-  */
-    @UiService(value = "getCardByPan", method = MethodType.POST, requiresAuthentication = false)
-    @Deprecated
-    public ResponseEntity<ApiResponse<osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto>> getCardByPan(@RequestBody final String requestPayload) {
-
