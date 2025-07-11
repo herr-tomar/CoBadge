@@ -15,10 +15,10 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Testklasse für {@link CardLookupByFriendFlowHandler}.
+ * Testklasse für {@link CardLookupByPanFlowHandler}.
  */
 @ExtendWith(MockitoExtension.class)
-class CardLookupByFriendFlowHandlerTest {
+class CardLookupByPanFlowHandlerTest {
 
     @Mock
     private MappingService mappingService;
@@ -27,63 +27,63 @@ class CardLookupByFriendFlowHandlerTest {
     private ReliableTopicPublisher reliableTopicPublisher;
 
     @Mock
-    private ProtobufDeserializer<CardLookupByFriendRequestWrapperDto> deserializer;
+    private ProtobufDeserializer<CardLookupByPanRequestWrapperDto> deserializer;
 
     @Mock
     private HazelcastInstance hazelcastInstance;
 
     @Mock
-    private CardLookupByFriendRequestWrapperDto requestWrapperDto;
+    private CardLookupByPanRequestWrapperDto requestWrapperDto;
 
     @Mock
-    private CardLookupByFriendRequestDto requestDto;
+    private CardLookupByPanRequestDto requestDto;
 
     @Mock
-    private Object friend;
+    private PanDto panDto;
 
     @Mock
-    private Object card;
+    private CardDto cardDto;
 
-    private CardLookupByFriendFlowHandler handler;
+    private CardLookupByPanFlowHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new CardLookupByFriendFlowHandler(mappingService, reliableTopicPublisher, deserializer);
+        handler = new CardLookupByPanFlowHandler(mappingService, reliableTopicPublisher, deserializer);
     }
 
     @Test
     void shouldExtractCorrelationId() {
-        when(requestWrapperDto.getCorrelationId()).thenReturn("corr-id-123");
+        when(requestWrapperDto.getCorrelationId()).thenReturn("pan-corr-456");
 
         String result = handler.extractCorrelationId(requestWrapperDto);
 
-        assertEquals("corr-id-123", result);
+        assertEquals("pan-corr-456", result);
     }
 
     @Test
     void shouldHandleRequestAndCallService() {
         when(requestWrapperDto.getPayload()).thenReturn(requestDto);
-        when(requestDto.getFriend()).thenReturn(friend);
-        when(mappingService.findCardByFriend(friend)).thenReturn(card);
+        when(requestDto.getPan()).thenReturn(panDto);
+        when(mappingService.findCardByPan(panDto)).thenReturn(cardDto);
 
         CardLookupResponseDto result = handler.handleRequest(requestWrapperDto);
 
-        assertEquals(card, result.getCard());
+        assertEquals(cardDto, result.getCard());
     }
 
     @Test
     void shouldWrapResponseCorrectly() {
         CardLookupResponseDto response = CardLookupResponseDto.newBuilder()
-                .setCard(card)
+                .setCard(cardDto)
                 .build();
 
-        Object wrapped = handler.wrapResponse("corr-id-789", response);
+        Object wrapped = handler.wrapResponse("corr-id-pan", response);
 
-        assertTrue(wrapped instanceof CardLookupByFriendResponseWrapperDto);
+        assertTrue(wrapped instanceof CardLookupByPanResponseWrapperDto);
 
-        CardLookupByFriendResponseWrapperDto actual = (CardLookupByFriendResponseWrapperDto) wrapped;
+        CardLookupByPanResponseWrapperDto actual = (CardLookupByPanResponseWrapperDto) wrapped;
 
-        assertEquals("corr-id-789", actual.getCorrelationId());
-        assertEquals(card, actual.getResponse().getCard());
+        assertEquals("corr-id-pan", actual.getCorrelationId());
+        assertEquals(cardDto, actual.getResponse().getCard());
     }
 }
