@@ -1,183 +1,308 @@
-package osplus.pkptuna.service;
+package osplus.apl.uui.service;
 
-import com.hazelcast.core.HazelcastInstance;
-import jakarta.annotation.PostConstruct;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.springframework.beans.factory.ObjectFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import osplus.apl.autoconfigure.UuiConfigurationProperties;
 import osplus.apl.core.api.AplComponent;
+import osplus.apl.core.api.validation.ValidationService;
+import osplus.apl.core.exception.CodingException;
+import osplus.apl.core.validation.entity.AplConstraintViolationException;
+import osplus.apl.uui.api.UiServiceException;
+import osplus.apl.uui.exception.InternalUuiServiceException;
+import osplus.apl.uui.message.InternalMessage;
+import osplus.apl.uui.message.InternalMessageType;
+import osplus.apl.uui.message.RequestMessageHolder;
+import osplus.apl.uui.service.security.ServiceMethodRequirementsServiceV1;
+import osplus.apl.uui.uielement.definition.UiElement;
+import osplus.apl.uui.uielement.definition.UiElementParameter;
+import osplus.apl.uui.uielement.definition.UiModule;
+import osplus.apl.uui.uielement.definition.UiModuleExtractor;
 import osplus.fi.core.logging.api.Logger;
 import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkptuna.api.ApiResponse;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestMetadataDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseWrapperDto;
-import osplus.pkptuna.dispute.model.DisputeDetailRequestDto;
-import osplus.pkptuna.dispute.model.DisputeDetailRequestMetadataDto;
-import osplus.pkptuna.dispute.model.DisputeDetailRequestWrapperDto;
-import osplus.pkptuna.dispute.model.DisputeDetailResponseWrapperDto;
-import osplus.pkptuna.dispute.model.DisputeResponseDto;
-import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
-import osplus.pkptuna.rest.dispute.lookup.model.mapper.DisputeLookupResponseDtoMapper;
-import osplus.pkptuna.rest.dispute.model.mapper.DisputeResponseDtoMapper;
-import osplus.pkptuna.util.GenericResponseTracker;
-import osplus.pkptuna.util.HazelcastListenerUtils;
 
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Type;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
+/**
+ * @see "CR85Dokumentation"
+ */
 @AplComponent
-public class DisputeOrcaService {
-    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeOrcaService.class);
+public class UiServiceRequestDispatcher implements UiServiceConstants {
 
-    private final HazelcastInstance hazelcastInstance;
-    private final DisputeLookupResponseDtoMapper disputeLookupResponseDtoMapper;
-    private final DisputeResponseDtoMapper disputeResponseDtoMapper;
-    private final ReliableTopicPublisher reliableTopicPublisher;
-    private final GenericResponseTracker<DisputeResponseDto> disputeDetailResponseTracker;
-    private final GenericResponseTracker<osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto> disputeLookupResponseTracker;
+	private static final Logger LOGGER = LoggerFactory.getLogger(UiServiceRequestDispatcher.class);
 
-    public DisputeOrcaService(HazelcastInstance hazelcastInstance,
-                              DisputeLookupResponseDtoMapper disputeLookupResponseDtoMapper,
-                              DisputeResponseDtoMapper disputeResponseDtoMapper,
-                              ReliableTopicPublisher reliableTopicPublisher,
-                              GenericResponseTracker<DisputeResponseDto> disputeDetailResponseTracker,
-                              GenericResponseTracker<DisputeLookupResponseDto> disputeLookupResponseTracker) {
-        this.hazelcastInstance = hazelcastInstance;
-        this.disputeLookupResponseDtoMapper = disputeLookupResponseDtoMapper;
-        this.disputeResponseDtoMapper = disputeResponseDtoMapper;
-        this.reliableTopicPublisher = reliableTopicPublisher;
-        this.disputeDetailResponseTracker = disputeDetailResponseTracker;
-        this.disputeLookupResponseTracker = disputeLookupResponseTracker;
-    }
-
-    public ResponseEntity<ApiResponse<osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto>> lookupDisputeFolder(String issuerId, String cardReference) {
-        try {
-            String correlationId = UUID.randomUUID().toString();
-
-            DisputeLookupRequestMetadataDto metadataDto = DisputeLookupRequestMetadataDto.newBuilder()
-                    .setRequestChannel("APL-UI")
-                    .setMessageType("DISPUTE_LOOKUP")
-                    .setRequestedBy("UI-MANUAL-TEST")
-                    .setBusinessContext("test")
-                    .build();
-
-            DisputeLookupRequestDto request = DisputeLookupRequestDto.newBuilder()
-                    .setMetadata(metadataDto)
-                    .setIssuerId(issuerId)
-                    .setCardReference(cardReference)
-                    .build();
-
-            DisputeLookupRequestWrapperDto wrapper = DisputeLookupRequestWrapperDto.newBuilder()
-                    .setCorrelationId(correlationId)
-                    .setPayload(request)
-                    .build();
-
-            reliableTopicPublisher.sendMessage("DisputeLookupRequestReliableTopic",
-                    "DISPUTE-LOOKUP", wrapper);
-
-            disputeLookupResponseTracker.register(correlationId);
-            CompletableFuture<DisputeLookupResponseDto> future = disputeLookupResponseTracker.await(correlationId);
-
-            DisputeLookupResponseDto protoResponse = future.get(5, TimeUnit.SECONDS);
-
-            osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto restResponse =
-                    disputeLookupResponseDtoMapper.toRestDto(protoResponse);
-
-            return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
-
-        } catch (TimeoutException te) {
-            return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
-                    .body(new ApiResponse<>("timeout", "No response in 5 seconds", null));
-
-        } catch (Exception e) {
-            LOGGER.error("Failed to process publishDisputesLookupRequest", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ApiResponse<>("error", "Internal server error", null));
-        }
-    }
-
-    public ResponseEntity<ApiResponse<osplus.pkptuna.rest.dispute.model.DisputeResponseDto>> publishDisputeDetailRequest(
-            String issuerId,
-            String disputeFolderReference,
-            String embed) {
-        try {
-            String correlationId = UUID.randomUUID().toString();
-
-            DisputeDetailRequestMetadataDto.Builder metaBuilder = DisputeDetailRequestMetadataDto.newBuilder()
-                    .setRequestChannel("APL-UI")
-                    .setMessageType("DISPUTE_FOLDER_DETAIL")
-                    .setRequestedBy("UI-MANUAL-TEST")
-                    .setBusinessContext("test");
-
-            if (embed != null && !embed.isBlank()) {
-                for (String val : embed.split("\\s*,\\s*")) {
-                    metaBuilder.addEmbed(val);
-                }
-            }
-
-            DisputeDetailRequestDto request = DisputeDetailRequestDto.newBuilder()
-                    .setMetadata(metaBuilder.build())
-                    .setIssuerId(issuerId)
-                    .setDisputeFolderReference(disputeFolderReference)
-                    .build();
-
-            DisputeDetailRequestWrapperDto wrapper = DisputeDetailRequestWrapperDto.newBuilder()
-                    .setCorrelationId(correlationId)
-                    .setPayload(request)
-                    .build();
-
-            reliableTopicPublisher.sendMessage("DisputeDetailRequestReliableTopic",
-                    "DISPUTE-DETAIL", wrapper);
-
-            disputeDetailResponseTracker.register(correlationId);
-            CompletableFuture<DisputeResponseDto> future = disputeDetailResponseTracker.await(correlationId);
-
-            DisputeResponseDto protoResponse = future.get(5, TimeUnit.SECONDS);
-            osplus.pkptuna.rest.dispute.model.DisputeResponseDto restResponse =
-                    disputeResponseDtoMapper.toRestDto(protoResponse);
-
-            return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
-
-        } catch (TimeoutException te) {
-            return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
-                    .body(new ApiResponse<>("timeout", "No response in 5 seconds", null));
-
-        } catch (Exception e) {
-            LOGGER.error("Failed to process publishDisputeDetailRequest", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ApiResponse<>("error", "Internal server error", null));
-        }
-    }
+	private final UiModuleExtractor uiModuleExtractor;
+	private final ServiceMethodRequirementsServiceV1 serviceMethodRequirementsServiceV1;
+	private final ObjectFactory<RequestMessageHolder> requestMessageHolderObjectFactory;
+	private final ValidationService validationService;
+	private final UuiConfigurationProperties uuiConfigurationProperties;
+	private final ObjectMapper objectMapper;
+	private final List<UiServiceRequestHandler> uiServiceRequestHandlers;
 
 
-    /**
-     * Initialisiert nach dem Start der Bean die Listener für eingehende Antworten auf Hazelcast-Themen.
-     */
-    @PostConstruct
-    public void initResponseListeners() {
-        HazelcastListenerUtils.registerGenericResponseListener(
-                hazelcastInstance,
-                "DisputeDetailResponseReliableTopic",
-                DisputeDetailResponseWrapperDto.parser(),
-                DisputeDetailResponseWrapperDto::getCorrelationId,
-                DisputeDetailResponseWrapperDto::getResponse,
-                disputeDetailResponseTracker::complete,
-                LOGGER
-        );
+	public UiServiceRequestDispatcher(UiModuleExtractor uiModuleExtractor,
+									  ServiceMethodRequirementsServiceV1 serviceMethodRequirementsServiceV1,
+									  ObjectFactory<RequestMessageHolder> requestMessageHolderObjectFactory,
+									  ValidationService validationService,
+									  UuiConfigurationProperties uuiConfigurationProperties,
+									  @Qualifier("uuiObjectMapper") ObjectMapper objectMapper,
+									  List<UiServiceRequestHandler> uiServiceRequestHandlers) {
+		this.uiModuleExtractor = uiModuleExtractor;
+		this.serviceMethodRequirementsServiceV1 = serviceMethodRequirementsServiceV1;
+		this.requestMessageHolderObjectFactory = requestMessageHolderObjectFactory;
+		this.validationService = validationService;
+		this.uuiConfigurationProperties = uuiConfigurationProperties;
+		this.objectMapper = objectMapper;
+		this.uiServiceRequestHandlers = uiServiceRequestHandlers;
+	}
 
-        HazelcastListenerUtils.registerGenericResponseListener(
-                hazelcastInstance,
-                "DisputeLookupResponseReliableTopic",
-                DisputeLookupResponseWrapperDto.parser(),
-                DisputeLookupResponseWrapperDto::getCorrelationId,
-                DisputeLookupResponseWrapperDto::getResponse,
-                disputeLookupResponseTracker::complete,
-                LOGGER
-        );
-    }
 
+	public UiServiceResult dispatchService(UiModuleCallInformation uiModuleCallInformation) throws InternalUuiServiceException {
+		UiModule uiModule = null;
+		UiElement uiElement = null;
+		try {
+			uiModule = uiModuleExtractor.getUiModuleForRequest(uiModuleCallInformation);
+			uiElement = uiModule.methodDefinitionFor(uiModuleCallInformation);
+			return doDispatchService(new ServiceDefinitionHolder(uiModuleCallInformation,
+					uiModule,
+					uiElement, null));
+		} catch (InternalUuiServiceException e) {
+			LOGGER.error(e.getMessage(), e);
+			throw e;
+		}
+	}
+
+	UiServiceResult doDispatchService(ServiceDefinitionHolder serviceDefinitionHolder)
+			throws InternalUuiServiceException {
+		UiModuleCallInformation uiModuleCallInformation = serviceDefinitionHolder.uiModuleCallInformation();
+		UiElement uiElement = serviceDefinitionHolder.uiElement();
+		UiModule uiModule = serviceDefinitionHolder.uiModule();
+		try {
+			serviceMethodRequirementsServiceV1.checkServiceMethodCallRequirements(uiModuleCallInformation);
+		} catch (IllegalStateException e) {
+			return createResponseFromCheckServiceMethodCallRequirements(e);
+		}
+		UiServiceResult uiServiceResult;
+		try {
+			Object requestPayload = extractPayload(uiModuleCallInformation, uiElement);
+
+			Optional<UiServiceRequestHandler> uiServiceRequestHandler = resolveUiServiceRequestHandler(serviceDefinitionHolder);
+			if (uiServiceRequestHandler.isPresent()) {
+				uiServiceResult = uiServiceRequestHandler.get().handle(uiModuleCallInformation, uiModule, uiElement, requestPayload);
+
+				// validate response
+				Optional<Object> payloadObject = uiServiceResult.getPayloadObject();
+				if (uuiConfigurationProperties.isValidateResponse() && payloadObject.isPresent()) {
+					UiServiceResult validationErrorResult = validateResponseValue(uiModuleCallInformation, payloadObject.get());
+					if (validationErrorResult != null) {
+						return validationErrorResult;
+					}
+				}
+				addMessagesToUiServiceResult(uiServiceResult);
+				serviceMethodRequirementsServiceV1.storeServiceMethodCall(uiModuleCallInformation);
+				return uiServiceResult;
+			} else {
+				throw new CodingException("No UIServiceRequestHandler found for request - this is a coding error!");
+			}
+
+		} catch (InvocationTargetException e) {
+			Throwable targetException = e.getTargetException();
+			if (targetException != null && UiServiceException.class.isInstance(targetException)) {
+				throw createAndLogInternalUuiServiceExceptionFromServiceException(uiModuleCallInformation, (UiServiceException) targetException);
+			} else if (targetException != null && AplConstraintViolationException.class.isInstance(targetException)) {
+				return handleValidationErrors(uiModuleCallInformation, e);
+			} else if (targetException != null && AccessDeniedException.class.isInstance(targetException)) {
+				throw createAndLogAccessDeniedException(uiModuleCallInformation, (AccessDeniedException) targetException);
+			} else {
+				throw createAndLogInternalUuiServiceException(uiModuleCallInformation, e.getCause());
+			}
+		} catch (InternalUuiServiceException e) {
+			LOGGER.error(e.getMessage(), e);
+			throw e;
+		} catch (AccessDeniedException e) {
+			throw createAndLogAccessDeniedException(uiModuleCallInformation, e);
+		} catch (IllegalAccessException | RuntimeException e) {
+			throw createAndLogInternalUuiServiceException(uiModuleCallInformation, e);
+		}
+	}
+
+	@Nullable
+	private UiServiceResult validateResponseValue(UiModuleCallInformation uiModuleCallInformation, Object returnValue) {
+		LOGGER.debug("Validation UIService response");
+		try {
+			validationService.validate(returnValue);
+		} catch (AplConstraintViolationException e) {
+			List<InternalMessage<?>> internalMessageList = createMessagesFromConstraintViolationException(e);
+			ObjectNode protocolResponse = JsonNodeFactory.instance.objectNode();
+			LOGGER.warn(() -> "Validation error in response from UiService '" + uiModuleCallInformation.getUiElementName()
+					+ "'in UiModule '" + uiModuleCallInformation.getUiModuleName() + "'");
+
+			if (internalMessageList != null && !internalMessageList.isEmpty()) {
+				protocolResponse.putPOJO(PROTOCOL_MESSAGES, internalMessageList);
+			}
+			return new UiServiceResult(protocolResponse, 940);
+		}
+		return null;
+	}
+
+	private void addMessagesToUiServiceResult(UiServiceResult uiServiceResult) {
+		List<InternalMessage<?>> internalMessageList = getAndClearMessages();
+		if (internalMessageList != null && !internalMessageList.isEmpty() && uiServiceResult.getResponse() instanceof ObjectNode jsonObject) {
+			jsonObject.putPOJO(PROTOCOL_MESSAGES, internalMessageList);
+		}
+	}
+
+	private Optional<UiServiceRequestHandler> resolveUiServiceRequestHandler(ServiceDefinitionHolder serviceDefinitionHolder) {
+		return uiServiceRequestHandlers.stream()
+				.filter(handler -> handler.handles(serviceDefinitionHolder))
+				.findFirst();
+	}
+
+	@Nullable
+	private Object extractPayload(UiModuleCallInformation uiModuleCallInformation, UiElement uiElement) {
+		return uiModuleCallInformation.getPayload()
+				.map(payload -> {
+					Type parameterType = null;
+					UiElementParameter bodyElementParameter = uiElement.getBodyElementParameter();
+					if (null == bodyElementParameter) {
+						InternalUuiServiceException internalUuiServiceException = new InternalUuiServiceException(HttpStatus.BAD_REQUEST.value(), "");
+						String msg = "Method which should be invoked takes no body parameter. A body was provided. " +
+								"This is a serious problem which can only be fixed by the application.\n" + uiElement;
+						LOGGER.error(msg, internalUuiServiceException);
+						throw internalUuiServiceException;
+					}
+					parameterType = bodyElementParameter.getParameterClass();
+					Method serviceMethod = uiElement.getServiceMethod();
+					MethodParameter methodParameter = new MethodParameter(serviceMethod, bodyElementParameter.getIndex());
+					parameterType = methodParameter.getGenericParameterType();
+					return convertPayload(payload, parameterType);
+				})
+				.orElse(null);
+	}
+
+	@Nullable
+	private Object convertPayload(JsonNode payload, Type parameterType) {
+		if (payload == null) {
+			return null;
+		}
+		if (parameterType == null) {
+			LOGGER.error("Got request with payload. Method defined without a parameter. We would hide payload - thus terminating request.");
+			throw new IllegalArgumentException("Can't convert input for module service.");
+		}
+		try {
+			JavaType javaType = objectMapper.getTypeFactory().constructType(parameterType);
+			return objectMapper.readerFor(javaType).readValue(payload);
+		} catch (InvalidFormatException e) {
+			LOGGER.error("Error in request data format", e);
+			String fields = e.getPath().stream().map(reference -> reference.getFieldName()).collect(Collectors.joining(","));
+			String errorMessage = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
+			InternalUuiServiceException internalUuiServiceException = new InternalUuiServiceException(HttpStatus.BAD_REQUEST.value(),
+					"Error in payload for UiElementCall", null);
+			internalUuiServiceException.setMessages(Collections.singletonList(new InternalMessage<>("APL-UUI-VALIDATION-002",
+					"Format Error at field(s) [" + fields + "] : " + errorMessage, InternalMessageType.ERROR, null)));
+			throw internalUuiServiceException;
+		} catch (IOException e) {
+			LOGGER.error("Error creating object from module service request payload", e);
+			throw new InternalUuiServiceException(HttpStatus.BAD_REQUEST.value(), "Invalid JSON provided", e);
+		}
+	}
+
+	@NotNull
+	private UiServiceResult createResponseFromCheckServiceMethodCallRequirements(IllegalStateException e) {
+		ObjectNode protocolResponse = JsonNodeFactory.instance.objectNode();
+		List<InternalMessage<?>> internalMessageList = Arrays.asList(
+				new InternalMessage<>(null, e.getMessage(), InternalMessageType.ERROR, null)
+		);
+		protocolResponse.putPOJO(PROTOCOL_MESSAGES, internalMessageList);
+		return new UiServiceResult(protocolResponse, HttpStatus.BAD_REQUEST.value());
+	}
+
+	private InternalUuiServiceException createAndLogAccessDeniedException(UiModuleCallInformation uiModuleCallInformation, AccessDeniedException e) {
+		InternalUuiServiceException internalUuiServiceException = new InternalUuiServiceException(e);
+		internalUuiServiceException.setStatusCode(HttpStatus.FORBIDDEN.value());
+		LOGGER.warn(() -> "Not allowed to call UiService '" + uiModuleCallInformation.getUiElementName() + "' in UiModule '" +
+				uiModuleCallInformation.getUiModuleName() + "' - ErrorID: " + internalUuiServiceException.getErrorId(), e);
+		return internalUuiServiceException;
+	}
+
+	private UiServiceResult handleValidationErrors(UiModuleCallInformation uiModuleCallInformation, InvocationTargetException e) {
+		AplConstraintViolationException aplConstraintViolationException = (AplConstraintViolationException) e.getTargetException();
+		ObjectNode protocolResponse = JsonNodeFactory.instance.objectNode();
+		List<InternalMessage<?>> internalMessageList = createMessagesFromConstraintViolationException(aplConstraintViolationException);
+		if (LOGGER.isDebugEnabled()) {
+			String violationDetails = aplConstraintViolationException.getAplConstraintViolationSet().stream()
+					.map(violation -> violation.getValidationSource() + " : " + violation.getValidationDescription())
+					.collect(Collectors.joining(", "));
+			LOGGER.debug("Validation error calling UiService '{}' in UiModule '{}' => {}",
+					uiModuleCallInformation.getUiElementName(), uiModuleCallInformation.getUiModuleName(), violationDetails);
+		} else {
+			LOGGER.warn(() -> "Validation error calling UiService '{}' in UiModule '{}'",
+					uiModuleCallInformation.getUiElementName(), uiModuleCallInformation.getUiModuleName());
+		}
+		if (internalMessageList != null && !internalMessageList.isEmpty()) {
+			protocolResponse.putPOJO(PROTOCOL_MESSAGES, internalMessageList);
+		}
+		return new UiServiceResult(protocolResponse, HttpStatus.BAD_REQUEST.value());
+	}
+
+	private List<InternalMessage<?>> createMessagesFromConstraintViolationException(AplConstraintViolationException aplConstraintViolationException) {
+		List<InternalMessage<?>> internalMessageList = getAndClearMessages();
+		aplConstraintViolationException.getAplConstraintViolationSet()
+				.forEach(constraintViolation -> {
+					String code = constraintViolation.getCode();
+					String message = constraintViolation.getMessage();
+					String description = constraintViolation.getValidationDescription();
+					InternalMessage<String> internalMessage = new InternalMessage<>(code, message, InternalMessageType.ERROR, description);
+					internalMessageList.add(internalMessage);
+				});
+		return internalMessageList;
+	}
+
+	@NotNull
+	private List<InternalMessage<?>> getAndClearMessages() {
+		return requestMessageHolderObjectFactory.getObject().getAndClearAllMessages();
+	}
+
+	private InternalUuiServiceException createAndLogInternalUuiServiceException(
+			UiModuleCallInformation uiModuleCallInformation,
+			Throwable throwable) {
+		InternalUuiServiceException internalUuiServiceException = new InternalUuiServiceException(throwable);
+		LOGGER.error(() -> "Error calling UiService '" + uiModuleCallInformation.getUiElementName()
+				+ "' in UiModule '" + uiModuleCallInformation.getUiModuleName()
+				+ "' - ErrorID: " + internalUuiServiceException.getErrorId(), throwable);
+		List<InternalMessage<?>> internalMessageList = getAndClearMessages();
+		if (internalMessageList != null && !internalMessageList.isEmpty()) {
+			internalUuiServiceException.setMessages(internalMessageList);
+		}
+		return internalUuiServiceException;
+	}
+
+	private InternalUuiServiceException createAndLogInternalUuiServiceExceptionFromServiceException(UiModuleCallInformation uiModuleCallInformation, UiServiceException targetException) {
+		InternalUuiServiceException internalUuiServiceException = createAndLogInternalUuiServiceException(uiModuleCallInformation, targetException);
+		internalUuiServiceException.setStatusCode(targetException.getReturnCode());
+		internalUuiServiceException.setPayload(targetException.getResponseObject());
+		List<InternalMessage<?>> internalMessageList = getAndClearMessages();
+		if (internalMessageList != null && !internalMessageList.isEmpty()) {
+			internalUuiServiceException.setMessages(internalMessageList);
+		}
+		return internalUuiServiceException;
+	}
 }
