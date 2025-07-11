@@ -1,3 +1,104 @@
+package osplus.pkptuna.flows.handlers;
+
+import com.hazelcast.core.HazelcastInstance;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import osplus.pkptuna.dispute.model.*;
+
+import osplus.pkptuna.dispute.service.DisputeDetailService;
+import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
+import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.when;
+
+/**
+ * Testklasse für {@link DisputeDetailFlowHandler}.
+ * Überprüft das Extrahieren der Korrelation-ID, den Aufruf des Service und das Verpacken der Antwort.
+ */
+@ExtendWith(MockitoExtension.class)
+class DisputeDetailFlowHandlerTest {
+
+    @Mock
+    private DisputeDetailService disputeDetailService;
+
+    @Mock
+    private ReliableTopicPublisher reliableTopicPublisher;
+
+    @Mock
+    private ProtobufDeserializer<DisputeDetailRequestWrapperDto> deserializer;
+
+    @Mock
+    private HazelcastInstance hazelcastInstance;
+
+    private DisputeDetailFlowHandler handler;
+
+    @BeforeEach
+    void setUp() {
+        handler = new DisputeDetailFlowHandler(
+                disputeDetailService,
+                reliableTopicPublisher,
+                deserializer);
+    }
+
+    /**
+     * Testet die Extraktion der Korrelation-ID aus dem Request.
+     */
+    @Test
+    void shouldExtractCorrelationId() {
+        DisputeDetailRequestWrapperDto request = DisputeDetailRequestWrapperDto.newBuilder()
+                .setCorrelationId("12345")
+                .build();
+
+        String result = handler.extractCorrelationId(request);
+
+        assertEquals("12345", result);
+    }
+
+    /**
+     * Testet, ob der Handler den Service mit korrekten Parametern aufruft.
+     */
+    @Test
+    void shouldHandleRequestAndCallService() {
+        DisputeDetailRequestDto payload = DisputeDetailRequestDto.newBuilder()
+                .setIssuerId("issuer")
+                .setDisputeFolderReference("ref")
+                .setMetadata(DisputeDetailRequestMetadataDto.newBuilder().addEmbed("x"))
+                .build();
+
+        DisputeDetailRequestWrapperDto request = DisputeDetailRequestWrapperDto.newBuilder()
+                .setPayload(payload)
+                .build();
+
+        DisputeResponseDto expectedResponse = DisputeResponseDto.newBuilder().build();
+        when(disputeDetailService.getDisputeFolderDetails("issuer", "ref", List.of("x")))
+                .thenReturn(expectedResponse);
+
+        DisputeResponseDto response = handler.handleRequest(request);
+
+        assertEquals(expectedResponse, response);
+    }
+
+    /**
+     * Testet, ob das Response-Objekt korrekt verpackt wird.
+     */
+    @Test
+    void shouldWrapResponseCorrectly() {
+        DisputeResponseDto response = DisputeResponseDto.newBuilder().build();
+        Object wrapped = handler.wrapResponse("abc", response);
+
+        assertTrue(wrapped instanceof DisputeDetailResponseWrapperDto);
+        assertEquals("abc", ((DisputeDetailResponseWrapperDto) wrapped).getCorrelationId());
+    }
+}
+----
+
 package osplus.pkppuma.flows.handlers;
 
 import com.google.protobuf.InvalidProtocolBufferException;
