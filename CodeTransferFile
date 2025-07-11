@@ -1,3 +1,10 @@
+ LOGGER.info("Received getCardByPan request: {}", requestPayload);
+
+        try {
+            PanDto.Builder builder = PanDto.newBuilder();
+            JsonFormat.parser().ignoringUnknownFields().merge(requestPayload, builder);
+            PanDto panDto = builder.build();
+--------------
 package osplus.apl.uui.service;
 
 import com.fasterxml.jackson.databind.JavaType;
