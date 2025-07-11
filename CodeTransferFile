@@ -1,4 +1,4 @@
-package osplus.pkptuna.flows.handlers;
+package osplus.pkppuma.flows.handlers;
 
 import com.hazelcast.core.HazelcastInstance;
 import org.junit.jupiter.api.BeforeEach;
@@ -6,43 +6,39 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import osplus.pkptuna.dispute.model.*;
+import osplus.pkppuma.card.lookup.model.*;
+import osplus.pkppuma.card.service.MappingService;
+import osplus.pkppuma.hazelcast.protobuf.impl.ProtobufDeserializer;
+import osplus.pkppuma.hazelcast.pubsub.ReliableTopicPublisher;
 
-import osplus.pkptuna.dispute.service.DisputeDetailService;
-import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
-import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
-
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
 
 /**
- * Testklasse für {@link DisputeDetailFlowHandler}.
- * Überprüft das Extrahieren der Korrelation-ID, den Aufruf des Service und das Verpacken der Antwort.
+ * Testklasse für {@link CardLookupByFriendFlowHandler}.
+ * Überprüft das Extrahieren der Korrelation-ID, den Aufruf des Services und das Verpacken der Antwort.
  */
 @ExtendWith(MockitoExtension.class)
-class DisputeDetailFlowHandlerTest {
+class CardLookupByFriendFlowHandlerTest {
 
     @Mock
-    private DisputeDetailService disputeDetailService;
+    private MappingService mappingService;
 
     @Mock
     private ReliableTopicPublisher reliableTopicPublisher;
 
     @Mock
-    private ProtobufDeserializer<DisputeDetailRequestWrapperDto> deserializer;
+    private ProtobufDeserializer<CardLookupByFriendRequestWrapperDto> deserializer;
 
     @Mock
     private HazelcastInstance hazelcastInstance;
 
-    private DisputeDetailFlowHandler handler;
+    private CardLookupByFriendFlowHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new DisputeDetailFlowHandler(
-                disputeDetailService,
+        handler = new CardLookupByFriendFlowHandler(
+                mappingService,
                 reliableTopicPublisher,
                 deserializer);
     }
@@ -52,297 +48,141 @@ class DisputeDetailFlowHandlerTest {
      */
     @Test
     void shouldExtractCorrelationId() {
-        DisputeDetailRequestWrapperDto request = DisputeDetailRequestWrapperDto.newBuilder()
-                .setCorrelationId("12345")
+        CardLookupByFriendRequestWrapperDto request = CardLookupByFriendRequestWrapperDto.newBuilder()
+                .setCorrelationId("corr-123")
                 .build();
 
         String result = handler.extractCorrelationId(request);
 
-        assertEquals("12345", result);
+        assertEquals("corr-123", result);
     }
 
     /**
-     * Testet, ob der Handler den Service mit korrekten Parametern aufruft.
+     * Testet, ob der Handler den Service korrekt aufruft.
      */
     @Test
     void shouldHandleRequestAndCallService() {
-        DisputeDetailRequestDto payload = DisputeDetailRequestDto.newBuilder()
-                .setIssuerId("issuer")
-                .setDisputeFolderReference("ref")
-                .setMetadata(DisputeDetailRequestMetadataDto.newBuilder().addEmbed("x"))
+        CardLookupByFriendRequestDto payload = CardLookupByFriendRequestDto.newBuilder()
+                .setFriend("John Doe")
                 .build();
 
-        DisputeDetailRequestWrapperDto request = DisputeDetailRequestWrapperDto.newBuilder()
+        CardLookupByFriendRequestWrapperDto request = CardLookupByFriendRequestWrapperDto.newBuilder()
                 .setPayload(payload)
                 .build();
 
-        DisputeResponseDto expectedResponse = DisputeResponseDto.newBuilder().build();
-        when(disputeDetailService.getDisputeFolderDetails("issuer", "ref", List.of("x")))
-                .thenReturn(expectedResponse);
+        CardLookupResponseDto expected = CardLookupResponseDto.newBuilder().setCard("CARD-XYZ").build();
 
-        DisputeResponseDto response = handler.handleRequest(request);
+        when(mappingService.findCardByFriend("John Doe")).thenReturn("CARD-XYZ");
 
-        assertEquals(expectedResponse, response);
+        CardLookupResponseDto result = handler.handleRequest(request);
+
+        assertEquals(expected, result);
     }
 
     /**
-     * Testet, ob das Response-Objekt korrekt verpackt wird.
+     * Testet, ob das Response korrekt verpackt wird.
      */
     @Test
     void shouldWrapResponseCorrectly() {
-        DisputeResponseDto response = DisputeResponseDto.newBuilder().build();
-        Object wrapped = handler.wrapResponse("abc", response);
+        CardLookupResponseDto response = CardLookupResponseDto.newBuilder().setCard("C123").build();
+        Object wrapped = handler.wrapResponse("cid-999", response);
 
-        assertTrue(wrapped instanceof DisputeDetailResponseWrapperDto);
-        assertEquals("abc", ((DisputeDetailResponseWrapperDto) wrapped).getCorrelationId());
+        assertTrue(wrapped instanceof CardLookupByFriendResponseWrapperDto);
+        assertEquals("cid-999", ((CardLookupByFriendResponseWrapperDto) wrapped).getCorrelationId());
     }
 }
 ----
 
 package osplus.pkppuma.flows.handlers;
 
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.hazelcast.core.HazelcastInstance;
-import jakarta.annotation.PostConstruct;
-import osplus.apl.core.api.AplComponent;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkppuma.card.lookup.model.CardLookupByFriendRequestDto;
-import osplus.pkppuma.card.lookup.model.CardLookupByFriendRequestWrapperDto;
-import osplus.pkppuma.card.lookup.model.CardLookupResponseDto;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import osplus.pkppuma.card.lookup.model.*;
 import osplus.pkppuma.card.service.MappingService;
-import osplus.pkppuma.card.lookup.model.CardLookupByFriendResponseWrapperDto;
-import osplus.pkppuma.hazelcast.flows.FlowHandler;
 import osplus.pkppuma.hazelcast.protobuf.impl.ProtobufDeserializer;
 import osplus.pkppuma.hazelcast.pubsub.ReliableTopicPublisher;
 
-import java.io.IOException;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.when;
 
 /**
- * FlowHandler für die Verarbeitung von Karten durch die Freunde-Suche
- * Dieser Handler übernimmt die Deserialisierung, verarbeitet die Anfrage mit Hilfe des Services,
- * verpackt die Antwort und publiziert sie auf einem Hazelcast Topic.
+ * Testklasse für {@link CardLookupByPanFlowHandler}.
+ * Überprüft das Extrahieren der Korrelation-ID, den Aufruf des Services und das Verpacken der Antwort.
  */
-@AplComponent("card-by-friend-lookup")
-public class CardLookupByFriendFlowHandler implements FlowHandler<CardLookupByFriendRequestWrapperDto, CardLookupResponseDto> {
+@ExtendWith(MockitoExtension.class)
+class CardLookupByPanFlowHandlerTest {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(CardLookupByFriendFlowHandler.class);
-    public static final String CARD_LOOKUP_BY_FRIEND_FLOW_HANDLER = "card-by-friend-lookup";
-    public static final String CARD_LOOKUP_BY_FRIEND = "CARD_LOOKUP_BY_FRIEND";
+    @Mock
+    private MappingService mappingService;
 
-    private final MappingService mappingService;
-    private final ReliableTopicPublisher reliableTopicPublisher;
-    private final ProtobufDeserializer<CardLookupByFriendRequestWrapperDto> deserializer;
+    @Mock
+    private ReliableTopicPublisher reliableTopicPublisher;
 
-    public CardLookupByFriendFlowHandler(MappingService mappingService,
-                                         ReliableTopicPublisher reliableTopicPublisher,
-                                         ProtobufDeserializer<CardLookupByFriendRequestWrapperDto> deserializer) {
-        this.mappingService = mappingService;
-        this.reliableTopicPublisher = reliableTopicPublisher;
-        this.deserializer = deserializer;
+    @Mock
+    private ProtobufDeserializer<CardLookupByPanRequestWrapperDto> deserializer;
+
+    @Mock
+    private HazelcastInstance hazelcastInstance;
+
+    private CardLookupByPanFlowHandler handler;
+
+    @BeforeEach
+    void setUp() {
+        handler = new CardLookupByPanFlowHandler(
+                mappingService,
+                reliableTopicPublisher,
+                deserializer);
     }
 
     /**
-     * {@inheritDoc}
-     * <p>
-     * Deserialisiert das Eingangsbytearray in ein Protobuf-Wrapping DTO.
+     * Testet die Extraktion der Korrelation-ID aus dem Request.
      */
-    @Override
-    public CardLookupByFriendRequestWrapperDto deserializeRequest(byte[] data) throws InvalidProtocolBufferException {
-        try {
-            return deserializer.deserialize(data);
-        } catch (IOException e) {
-            LOGGER.error("Failed to deserialize request", e);
-            return CardLookupByFriendRequestWrapperDto.newBuilder().build();
-        }
-    }
-
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Extrahiert die Korrelations-ID aus dem Request.
-     */
-    @Override
-    public String extractCorrelationId(CardLookupByFriendRequestWrapperDto request) {
-        return request.getCorrelationId();
-    }
-
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Verarbeitet die Anfrage durch Aufruf des zugehörigen Services.
-     */
-    @Override
-    public CardLookupResponseDto handleRequest(CardLookupByFriendRequestWrapperDto request) {
-        CardLookupByFriendRequestDto dto = request.getPayload();
-        CardLookupResponseDto cardLookupResponseDto = CardLookupResponseDto.newBuilder()
-                .setCard(mappingService.findCardByFriend(dto.getFriend()))
+    @Test
+    void shouldExtractCorrelationId() {
+        CardLookupByPanRequestWrapperDto request = CardLookupByPanRequestWrapperDto.newBuilder()
+                .setCorrelationId("pan-corr-1")
                 .build();
-        return cardLookupResponseDto;
+
+        String result = handler.extractCorrelationId(request);
+
+        assertEquals("pan-corr-1", result);
     }
 
     /**
-     * {@inheritDoc}
-     * <p>
-     * Verpackt das Ergebnis zusammen mit der Korrelations-ID in ein Wrapper-Objekt.
+     * Testet, ob der Handler den Service korrekt aufruft.
      */
-    @Override
-    public Object wrapResponse(String correlationId, CardLookupResponseDto result) {
-        return CardLookupByFriendResponseWrapperDto.newBuilder()
-                .setCorrelationId(correlationId)
-                .setResponse(result)
+    @Test
+    void shouldHandleRequestAndCallService() {
+        CardLookupByPanRequestDto payload = CardLookupByPanRequestDto.newBuilder()
+                .setPan("1234567890123456")
                 .build();
-    }
 
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Sendet die Antwort an das angegebene Hazelcast Topic.
-     */
-    @Override
-    public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Object response) {
-        CardLookupByFriendResponseWrapperDto dto = (CardLookupByFriendResponseWrapperDto) response;
-        reliableTopicPublisher.sendMessage(topicName, CARD_LOOKUP_BY_FRIEND, dto);
-    }
-
-    @Override
-    /**
-     * {@inheritDoc}
-     * <p>
-     *  Gibt den Namen des Flows zurück (z.B. für Registrierung oder Logging).
-     */
-    public String getFlowName() {
-        return CARD_LOOKUP_BY_FRIEND_FLOW_HANDLER;
-    }
-
-    @PostConstruct
-    void init() {
-        LOGGER.info("CardLookupByFriendFlowHandler loaded and initialised.");
-    }
-}
-
-
---------------------
-
-
-package osplus.pkppuma.flows.handlers;
-
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.hazelcast.core.HazelcastInstance;
-import jakarta.annotation.PostConstruct;
-import osplus.apl.core.api.AplComponent;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkppuma.card.lookup.model.CardLookupByPanRequestDto;
-import osplus.pkppuma.card.lookup.model.CardLookupByPanRequestWrapperDto;
-import osplus.pkppuma.card.lookup.model.CardLookupByPanResponseWrapperDto;
-import osplus.pkppuma.card.lookup.model.CardLookupResponseDto;
-import osplus.pkppuma.card.service.MappingService;
-import osplus.pkppuma.hazelcast.flows.FlowHandler;
-import osplus.pkppuma.hazelcast.protobuf.impl.ProtobufDeserializer;
-import osplus.pkppuma.hazelcast.pubsub.ReliableTopicPublisher;
-
-import java.io.IOException;
-
-/**
- * FlowHandler für die Verarbeitung von Karten durch die PAN-Suche
- * Dieser Handler übernimmt die Deserialisierung, verarbeitet die Anfrage mit Hilfe des Services,
- * verpackt die Antwort und publiziert sie auf einem Hazelcast Topic.
- */
-@AplComponent("card-by-pan-lookup")
-public class CardLookupByPanFlowHandler implements FlowHandler<CardLookupByPanRequestWrapperDto, CardLookupResponseDto> {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(CardLookupByPanFlowHandler.class);
-    public static final String CARD_LOOKUP_BY_PAN_FLOW_HANDLER = "card-by-pan-lookup";
-    public static final String CARD_LOOKUP_BY_PAN = "CARD_LOOKUP_BY_PAN";
-
-    private final MappingService mappingService;
-    private final ReliableTopicPublisher reliableTopicPublisher;
-    private final ProtobufDeserializer<CardLookupByPanRequestWrapperDto> deserializer;
-
-    public CardLookupByPanFlowHandler(MappingService mappingService,
-                                      ReliableTopicPublisher reliableTopicPublisher,
-                                      ProtobufDeserializer<CardLookupByPanRequestWrapperDto> deserializer) {
-        this.mappingService = mappingService;
-        this.reliableTopicPublisher = reliableTopicPublisher;
-        this.deserializer = deserializer;
-    }
-
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Deserialisiert das Eingangsbytearray in ein Protobuf-Wrapping DTO.
-     */
-    @Override
-    public CardLookupByPanRequestWrapperDto deserializeRequest(byte[] data) throws InvalidProtocolBufferException {
-        try {
-            return deserializer.deserialize(data);
-        } catch (IOException e) {
-            LOGGER.error("Failed to deserialize request", e);
-            return CardLookupByPanRequestWrapperDto.newBuilder().build();
-        }
-    }
-
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Extrahiert die Korrelations-ID aus dem Request.
-     */
-    @Override
-    public String extractCorrelationId(CardLookupByPanRequestWrapperDto request) {
-        return request.getCorrelationId();
-    }
-
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Verarbeitet die Anfrage durch Aufruf des zugehörigen Services.
-     */
-    @Override
-    public CardLookupResponseDto handleRequest(CardLookupByPanRequestWrapperDto request) {
-        CardLookupByPanRequestDto dto = request.getPayload();
-        CardLookupResponseDto cardLookupResponseDto = CardLookupResponseDto.newBuilder()
-                .setCard(mappingService.findCardByPan(dto.getPan()))
+        CardLookupByPanRequestWrapperDto request = CardLookupByPanRequestWrapperDto.newBuilder()
+                .setPayload(payload)
                 .build();
-        return cardLookupResponseDto;
+
+        CardLookupResponseDto expected = CardLookupResponseDto.newBuilder().setCard("CARD-PAN-XYZ").build();
+
+        when(mappingService.findCardByPan("1234567890123456")).thenReturn("CARD-PAN-XYZ");
+
+        CardLookupResponseDto result = handler.handleRequest(request);
+
+        assertEquals(expected, result);
     }
 
     /**
-     * {@inheritDoc}
-     * <p>
-     * Verpackt das Ergebnis zusammen mit der Korrelations-ID in ein Wrapper-Objekt.
+     * Testet, ob das Response korrekt verpackt wird.
      */
-    @Override
-    public Object wrapResponse(String correlationId, CardLookupResponseDto result) {
-        return CardLookupByPanResponseWrapperDto.newBuilder()
-                .setCorrelationId(correlationId)
-                .setResponse(result)
-                .build();
-    }
+    @Test
+    void shouldWrapResponseCorrectly() {
+        CardLookupResponseDto response = CardLookupResponseDto.newBuilder().setCard("CARD-ABC").build();
+        Object wrapped = handler.wrapResponse("pan-corr-id", response);
 
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Sendet die Antwort an das angegebene Hazelcast Topic.
-     */
-    @Override
-    public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Object response) {
-        CardLookupByPanResponseWrapperDto dto = (CardLookupByPanResponseWrapperDto) response;
-        reliableTopicPublisher.sendMessage(topicName, CARD_LOOKUP_BY_PAN, dto);
-    }
-
-    @Override
-    /**
-     * {@inheritDoc}
-     * <p>
-     *  Gibt den Namen des Flows zurück (z.B. für Registrierung oder Logging).
-     */
-    public String getFlowName() {
-        return CARD_LOOKUP_BY_PAN_FLOW_HANDLER;
-    }
-
-    @PostConstruct
-    void init() {
-        LOGGER.info("CardLookupByPanFlowHandler loaded and initialised.");
+        assertTrue(wrapped instanceof CardLookupByPanResponseWrapperDto);
+        assertEquals("pan-corr-id", ((CardLookupByPanResponseWrapperDto) wrapped).getCorrelationId());
     }
 }
