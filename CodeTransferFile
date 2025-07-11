@@ -39,7 +39,10 @@ class CardLookupByFriendFlowHandlerTest {
     private CardLookupByFriendRequestDto requestDto;
 
     @Mock
-    private Object friendObject; // assuming it's a complex Friend DTO or domain model
+    private Object friend;
+
+    @Mock
+    private Object card;
 
     private CardLookupByFriendFlowHandler handler;
 
@@ -60,31 +63,27 @@ class CardLookupByFriendFlowHandlerTest {
     @Test
     void shouldHandleRequestAndCallService() {
         when(requestWrapperDto.getPayload()).thenReturn(requestDto);
-        when(requestDto.getFriend()).thenReturn(friendObject);
-        when(mappingService.findCardByFriend(friendObject)).thenReturn("CARD-123");
+        when(requestDto.getFriend()).thenReturn(friend);
+        when(mappingService.findCardByFriend(friend)).thenReturn(card);
 
         CardLookupResponseDto result = handler.handleRequest(requestWrapperDto);
 
-        assertEquals("CARD-123", result.getCard());
+        assertEquals(card, result.getCard());
     }
 
     @Test
     void shouldWrapResponseCorrectly() {
         CardLookupResponseDto response = CardLookupResponseDto.newBuilder()
-                .setCard("CARD-XYZ")
+                .setCard(card)
                 .build();
 
         Object wrapped = handler.wrapResponse("corr-id-789", response);
 
         assertTrue(wrapped instanceof CardLookupByFriendResponseWrapperDto);
+
         CardLookupByFriendResponseWrapperDto actual = (CardLookupByFriendResponseWrapperDto) wrapped;
 
         assertEquals("corr-id-789", actual.getCorrelationId());
-        assertEquals("CARD-XYZ", actual.getResponse().getCard());
+        assertEquals(card, actual.getResponse().getCard());
     }
 }
-
-
------
-
-
