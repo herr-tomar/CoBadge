@@ -1,10 +1,163 @@
-spring:
-  config:
-    import: "classpath:dispute-application.yaml"
+package osplus.pkppuma.uimodule;
 
-hazelcast:
-  topic:
-    dispute-detail-lookup-req: DisputeLookupRequestReliableTopic
-    dispute-detail-lookup-res: DisputeLookupResponseReliableTopic
-    disputes-lookup-res: DisputeDetailRequestReliableTopic
-    disputes-lookup-req: DisputeDetailResponseReliableTopic
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.protobuf.util.JsonFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.RequestBody;
+import osplus.apl.uui.api.MethodType;
+import osplus.apl.uui.api.UiModule;
+import osplus.apl.uui.api.UiService;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkppuma.api.ApiResponse;
+import osplus.pkppuma.card.lookup.model.CardDto;
+import osplus.pkppuma.card.lookup.model.CardLookupResponseDto;
+import osplus.pkppuma.card.lookup.model.FriendDto;
+import osplus.pkppuma.card.lookup.model.PanDto;
+import osplus.pkppuma.card.service.MappingService;
+import osplus.pkppuma.rest.card.lookup.model.mapper.CardLookupResponseDtoMapper;
+import osplus.pkppuma.service.CardOrcaService;
+
+import java.util.Map;
+
+/**
+ * APL UI-Modul zur Bereitstellung von Kartensuchfunktionen über das APL-Runtime-Framework.
+ * Dieses Modul bietet Dienste zur Kartenabfrage basierend auf PAN- oder Freunddaten.
+ */
+@UiModule("cardUiModule")
+public class CardUiModule {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(CardUiModule.class);
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final JsonFormat.Parser PARSER = JsonFormat.parser().ignoringUnknownFields();
+
+    private final MappingService mappingService;
+    private final CardLookupResponseDtoMapper cardLookupResponseDtoMapper;
+    private final CardOrcaService cardOrcaService;
+
+    /**
+     * Konstruktor zur Initialisierung des CardUiModules mit dem benötigten MappingService.
+     *
+     * @param mappingService Service zur Abfrage und Verarbeitung von Kartendaten
+     */
+    public CardUiModule(MappingService mappingService,
+                        CardLookupResponseDtoMapper cardLookupResponseDtoMapper,
+                        CardOrcaService cardOrcaService) {
+
+        this.mappingService = mappingService;
+        this.cardLookupResponseDtoMapper = cardLookupResponseDtoMapper;
+        this.cardOrcaService = cardOrcaService;
+    }
+
+    /**
+     * UI-Service zur Abfrage einer Karte basierend auf PAN-Daten.
+     * Die Anfrage wird als JSON empfangen und in ein {@link PanDto} konvertiert.
+     *
+     * @param requestPayload JSON-Payload mit PAN-Informationen
+     * @return JSON-Repräsentation eines {@link CardDto}, oder ein leeres JSON-Objekt bei Fehlern
+     */
+    @UiService(value = "getCardByPan", method = MethodType.POST, requiresAuthentication = false)
+    @Deprecated
+    public ResponseEntity<ApiResponse<osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto>> getCardByPan(@RequestBody Map<String, Object> requestPayload) {
+
+        LOGGER.info("Received getCardByPan request: {}", requestPayload);
+
+        try {
+            String json = MAPPER.writeValueAsString(requestPayload);
+
+            PanDto.Builder builder = PanDto.newBuilder();
+            PARSER.merge(json, builder);
+            PanDto panDto = builder.build();
+
+            CardDto cardDto = mappingService.findCardByPan(panDto);
+
+            CardLookupResponseDto cardLookupResponseDto = CardLookupResponseDto.newBuilder()
+                    .setCard(cardDto)
+                    .build();
+
+            osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto restResponse =
+                    cardLookupResponseDtoMapper.toRestDto(cardLookupResponseDto);
+
+            return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
+
+        } catch (Exception e) {
+            LOGGER.error("Failed to handle getCardByPan: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ApiResponse<>("error", "Internal server error", null));
+        }
+    }
+
+    /**
+     * UI-Service zur Abfrage einer Karte basierend auf Freunddaten.
+     * Die Anfrage wird als JSON empfangen und in ein {@link FriendDto} konvertiert.
+     *
+     * @param requestPayload JSON-Payload mit Freundinformationen
+     * @return JSON-Repräsentation eines {@link CardDto}, oder ein leeres JSON-Objekt bei Fehlern
+     */
+    @Deprecated
+    @UiService(value = "getCardByFriend", method = MethodType.POST, requiresAuthentication = false)
+    public ResponseEntity<ApiResponse<osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto>> getCardByFriend(@RequestBody Map<String, Object> requestPayload) {
+        LOGGER.info("Received getCardByFriend request: {}", requestPayload);
+
+        try {
+            String json = MAPPER.writeValueAsString(requestPayload);
+
+            FriendDto.Builder builder = FriendDto.newBuilder();
+            PARSER.merge(json, builder);
+            FriendDto friendDto = builder.build();
+
+            CardDto cardDto = mappingService.findCardByFriend(friendDto);
+
+            CardLookupResponseDto cardLookupResponseDto = CardLookupResponseDto.newBuilder()
+                    .setCard(cardDto)
+                    .build();
+
+            osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto restResponse =
+                    cardLookupResponseDtoMapper.toRestDto(cardLookupResponseDto);
+
+            return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
+
+        } catch (Exception e) {
+            LOGGER.error("Failed to handle getCardByFriend: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ApiResponse<>("error", "Internal server error", null));
+        }
+    }
+
+    @UiService(value = "publishGetCardByPan", method = MethodType.POST, requiresAuthentication = false)
+    public ResponseEntity<ApiResponse<osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto>> getCardByPanOverHazelcast(@RequestBody Map<String, Object> requestPayload) {
+
+        LOGGER.info("Received publishCardByPan request: {}", requestPayload);
+
+        String json = null;
+        try {
+            json = MAPPER.writeValueAsString(requestPayload);
+            return cardOrcaService.publishCardByPanRequest(json);
+        } catch (JsonProcessingException e) {
+            LOGGER.error("Failed to handle publishCardByPan: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ApiResponse<>("error", "Internal server error", null));
+        }
+    }
+
+    @UiService(value = "publishGetCardByFriend", method = MethodType.POST, requiresAuthentication = false)
+    public ResponseEntity<ApiResponse<osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto>> getCardByFriendOverHazelcast(@RequestBody Map<String, Object> requestPayload) {
+
+        LOGGER.info("Received publishCardByFriend request: {}", requestPayload);
+
+        try {
+            String json = MAPPER.writeValueAsString(requestPayload);
+            return cardOrcaService.publishCardByFriendRequest(json);
+
+        } catch (JsonProcessingException e) {
+            LOGGER.error("Failed to handle publishCardByFriend: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ApiResponse<>("error", "Internal server error", null));
+        }
+    }
+}
+------
+
+CardUiModule.java:88	osplus.pkppuma.uimodule	Error Prone	AvoidDuplicateLiterals
