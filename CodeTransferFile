@@ -1,13 +1,21 @@
-	at org.springframework.boot.context.properties.ConstructorBound.from(ConstructorBound.java:44)
-	... 61 more
-Caused by: java.lang.NullPointerException: Cannot invoke "okhttp3.mockwebserver.MockWebServer.url(String)" because "osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest.mockWebServer" is null
-	at osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest.lambda$overrideProps$0(DisputeDetailServiceImplTest.java:47)
-	at org.springframework.util.function.SupplierUtils.resolve(SupplierUtils.java:52)
-	at org.springframework.test.context.support.DynamicValuesPropertySource.getProperty(DynamicValuesPropertySource.java:65)
-	at com.ulisesbocchio.jasyptspringboot.caching.CachingDelegateEncryptablePropertySource.getProperty(CachingDelegateEncryptablePropertySource.java:58)
-	at com.ulisesbocchio.jasyptspringboot.wrapper.EncryptableMapPropertySourceWrapper.getProperty(EncryptableMapPropertySourceWrapper.java:40)
-	at org.springframework.boot.context.properties.source.SpringConfigurationPropertySource.getPropertySourceProperty(SpringConfigurationPropertySource.java:108)
-	at org.springframework.boot.context.properties.source.SpringIterableConfigurationPropertySource.getConfigurationProperty(SpringIterableConfigurationPropertySource.java:111)
-	at org.springframework.boot.context.properties.bind.Binder.findProperty(Binder.java:459)
-	at org.springframework.boot.context.properties.bind.Binder.bindObject(Binder.java:405)
-	at org.springframework.boot.context.properties.bind.Binder.bind(Binder.java:357)
+n: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.004 s -- in osplus.pkptuna.dispute.service.impl.DisputeServiceImplTest
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+[ERROR] Tests run: 2, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 11.87 s <<< FAILURE! -- in osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest
+[ERROR] osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest.assertThatDisputeFolderDetailsReturnsExpectedResult -- Time elapsed: 0.266 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: 
+expected: "116855"
+ but was: ""
+	at osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest.assertThatDisputeFolderDetailsReturnsExpectedResult(DisputeDetailServiceImplTest.java:126)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+[INFO] 
+[INFO] Results:
+[INFO] 
+[ERROR] Failures: 
+[ERROR]   DisputeDetailServiceImplTest.assertThatDisputeFolderDetailsReturnsExpectedResult:126 
+expected: "116855"
+ but was: ""
+[INFO] 
+[ERROR] Tests run: 4, Failures: 1, Errors: 0, Skipped: 0
+[INFO] 
