@@ -1,16 +1,94 @@
-[INFO] Running osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest
-OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
-[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.113 s -- in osplus.pkptuna.dispute.service.impl.DisputeServiceImplTest
-OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
-[ERROR] Tests run: 2, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 11.84 s <<< FAILURE! -- in osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest
-[ERROR] osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest.assertThatDisputeFolderDetailsReturnsExpectedResult -- Time elapsed: 0.280 s <<< FAILURE!
-org.opentest4j.AssertionFailedError: 
-[Expected data section] 
-Expecting value to be true but was false
-	at osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest.assertThatDisputeFolderDetailsReturnsExpectedResult(DisputeDetailServiceImplTest.java:104)
-	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-[INFO] 
-[INFO] Results:
-[INFO] 
+package osplus.pkptuna.dispute.service.impl;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.dispute.config.DisputeServiceProperties;
+import osplus.pkptuna.dispute.model.DisputeResponseDto;
+import osplus.pkptuna.dispute.service.DisputeDetailService;
+import osplus.pkptuna.protobuf.util.ProtobufJsonUtil;
+
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.List;
+
+import static osplus.pkptuna.protobuf.util.ProtobufJsonUtil.fixTimestamps;
+
+
+/**
+ * Implementierung des {@link DisputeDetailService} zur Ermittlung detaillierter Informationen
+ * eines Dispute-Ordners über eine externe API mithilfe von WebClient.
+ */
+public class DisputeDetailServiceImpl implements DisputeDetailService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeDetailServiceImpl.class);
+
+    private final WebClient webClient;
+    private final String username;
+    private final String password;
+    private final String disputeDetailPath;
+
+    /**
+     * Konstruktor für {@code DisputeDetailServiceImpl}.
+     *
+     * @param webClient WebClient für HTTP-Anfragen
+     * @param props Konfigurationseigenschaften mit Authentifizierungsdaten und API-Endpunkten
+     */
+    public DisputeDetailServiceImpl(final WebClient webClient, final DisputeServiceProperties props) {
+        this.username = props.auth().username();
+        this.password = props.auth().password();
+        this.disputeDetailPath = props.paths().disputeDetails();
+        this.webClient = webClient;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * Ruft detaillierte Informationen eines Dispute-Ordners anhand der übergebenen Parameter ab.
+     */
+    @Override
+    public DisputeResponseDto getDisputeFolderDetails(String issuerId, String disputeFolderRef, List<String> embeds) {
+        try {
+            String basicAuth = Base64.getEncoder().encodeToString(
+                    (username + ":" + password).getBytes(StandardCharsets.UTF_8)
+            );
+
+            String json = webClient.get()
+                    .uri(uriBuilder -> {
+                        URI uri = uriBuilder
+                                .path(disputeDetailPath)
+                                .build(issuerId, disputeFolderRef);
+
+                        if (embeds != null && !embeds.isEmpty()) {
+                            uriBuilder.queryParam("embed", String.join(",", embeds));
+                        }
+
+                        return uri;
+                    })
+                    .header("WL-Correlation-ID", "pkptuna-" + System.currentTimeMillis())
+                    .header("WL-Origin", "pkptuna-service")
+                    .header(HttpHeaders.AUTHORIZATION, "Basic " + basicAuth)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+
+            DisputeResponseDto.Builder builder = DisputeResponseDto.newBuilder();
+            if (json!=null) {
+                String fixedJson = fixTimestamps(json);
+                return ProtobufJsonUtil.parseJsonToProto(fixedJson, builder).build();
+            } else {
+                return DisputeResponseDto.newBuilder().build();
+            }
+
+        } catch (WebClientResponseException e) {
+            LOGGER.warn("Error from external dispute API: {}, body={}", e.getStatusCode(), e.getResponseBodyAsString());
+        } catch (Exception e) {
+            LOGGER.error("Exception during dispute detail retrieval", e);
+        }
+
+        return DisputeResponseDto.newBuilder().build();
+    }
+}
