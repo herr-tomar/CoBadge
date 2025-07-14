@@ -1,143 +1,141 @@
-package osplus.pkppuma.uimodule;
+package osplus.pkptuna.dispute.service.impl;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.util.JsonFormat;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.RequestBody;
-import osplus.apl.uui.api.MethodType;
-import osplus.apl.uui.api.UiModule;
-import osplus.apl.uui.api.UiService;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkppuma.api.ApiResponse;
-import osplus.pkppuma.card.lookup.model.CardDto;
-import osplus.pkppuma.card.lookup.model.CardLookupResponseDto;
-import osplus.pkppuma.card.lookup.model.FriendDto;
-import osplus.pkppuma.card.lookup.model.PanDto;
-import osplus.pkppuma.card.service.MappingService;
-import osplus.pkppuma.rest.card.lookup.model.mapper.CardLookupResponseDtoMapper;
-import osplus.pkppuma.service.CardOrcaService;
+import com.google.protobuf.util.Timestamps;
+import okhttp3.mockwebserver.MockResponse;
+import okhttp3.mockwebserver.MockWebServer;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.http.HttpHeaders;
+import org.springframework.web.reactive.function.client.WebClient;
+import osplus.pkptuna.dispute.config.DisputeServiceProperties;
+import osplus.pkptuna.dispute.model.AmountDto;
+import osplus.pkptuna.dispute.model.DataDto;
+import osplus.pkptuna.dispute.model.DisputeFolderIdentifierDto;
+import osplus.pkptuna.dispute.model.DisputeResponseDto;
+import osplus.pkptuna.dispute.model.LinksDto;
+import osplus.pkptuna.dispute.model.ResponseMetadataDto;
 
-import java.util.Map;
+import static org.assertj.core.api.Assertions.assertThat;
 
-@UiModule("cardUiModule")
-public class CardUiModule {
+class DisputeDetailServiceImplTest {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(CardUiModule.class);
-    private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final JsonFormat.Parser PARSER = JsonFormat.parser().ignoringUnknownFields();
+    private DisputeDetailServiceImpl disputeDetailService;
+    private MockWebServer mockWebServer;
 
-    // Status constants
-    private static final String STATUS_SUCCESS = "success";
-    private static final String STATUS_ERROR = "error";
-    private static final String GENERIC_ERROR_MESSAGE = "Internal server error";
+    @BeforeEach
+    void setUp() throws Exception {
+        mockWebServer = new MockWebServer();
+        mockWebServer.start();
 
-    // Logging message constants
-    private static final String MSG_RECEIVED_PAN_REQUEST = "Received getCardByPan request: {}";
-    private static final String MSG_RECEIVED_FRIEND_REQUEST = "Received getCardByFriend request: {}";
-    private static final String MSG_RECEIVED_PUBLISH_PAN = "Received publishCardByPan request: {}";
-    private static final String MSG_RECEIVED_PUBLISH_FRIEND = "Received publishCardByFriend request: {}";
+        WebClient webClient = WebClient.builder()
+                .baseUrl(mockWebServer.url("/").toString())
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, "application/json")
+                .build();
 
-    private static final String LOG_FAILED_GET_PAN = "Failed to handle getCardByPan: {}";
-    private static final String LOG_FAILED_GET_FRIEND = "Failed to handle getCardByFriend: {}";
-    private static final String LOG_FAILED_PUBLISH_PAN = "Failed to handle publishCardByPan: {}";
-    private static final String LOG_FAILED_PUBLISH_FRIEND = "Failed to handle publishCardByFriend: {}";
+        DisputeServiceProperties props = Mockito.mock(DisputeServiceProperties.class);
+        DisputeServiceProperties.Auth auth = Mockito.mock(DisputeServiceProperties.Auth.class);
+        DisputeServiceProperties.Paths paths = Mockito.mock(DisputeServiceProperties.Paths.class);
 
-    private final MappingService mappingService;
-    private final CardLookupResponseDtoMapper cardLookupResponseDtoMapper;
-    private final CardOrcaService cardOrcaService;
+        Mockito.when(props.auth()).thenReturn(auth);
+        Mockito.when(props.paths()).thenReturn(paths);
+        Mockito.when(auth.username()).thenReturn("testuser");
+        Mockito.when(auth.password()).thenReturn("testpass");
+        Mockito.when(paths.disputeDetails()).thenReturn("/issuers/{issuerId}/disputes/{disputeFolderReference}");
 
-    public CardUiModule(MappingService mappingService,
-                        CardLookupResponseDtoMapper cardLookupResponseDtoMapper,
-                        CardOrcaService cardOrcaService) {
-        this.mappingService = mappingService;
-        this.cardLookupResponseDtoMapper = cardLookupResponseDtoMapper;
-        this.cardOrcaService = cardOrcaService;
+        disputeDetailService = new DisputeDetailServiceImpl(webClient, props);
     }
 
-    @UiService(value = "getCardByPan", method = MethodType.POST, requiresAuthentication = false)
-    @Deprecated
-    public ResponseEntity<ApiResponse<osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto>> getCardByPan(@RequestBody Map<String, Object> requestPayload) {
-        LOGGER.info(MSG_RECEIVED_PAN_REQUEST, requestPayload);
-        try {
-            String json = MAPPER.writeValueAsString(requestPayload);
-
-            PanDto.Builder builder = PanDto.newBuilder();
-            PARSER.merge(json, builder);
-            PanDto panDto = builder.build();
-
-            CardDto cardDto = mappingService.findCardByPan(panDto);
-
-            CardLookupResponseDto cardLookupResponseDto = CardLookupResponseDto.newBuilder()
-                    .setCard(cardDto)
-                    .build();
-
-            var restResponse = cardLookupResponseDtoMapper.toRestDto(cardLookupResponseDto);
-
-            return ResponseEntity.ok(new ApiResponse<>(STATUS_SUCCESS, null, restResponse));
-
-        } catch (Exception e) {
-            LOGGER.error(LOG_FAILED_GET_PAN, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ApiResponse<>(STATUS_ERROR, GENERIC_ERROR_MESSAGE, null));
-        }
+    @AfterEach
+    void tearDown() throws Exception {
+        mockWebServer.shutdown();
     }
 
-    @UiService(value = "getCardByFriend", method = MethodType.POST, requiresAuthentication = false)
-    @Deprecated
-    public ResponseEntity<ApiResponse<osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto>> getCardByFriend(@RequestBody Map<String, Object> requestPayload) {
-        LOGGER.info(MSG_RECEIVED_FRIEND_REQUEST, requestPayload);
-        try {
-            String json = MAPPER.writeValueAsString(requestPayload);
+    @Test
+    void assertThatDisputeFolderDetailsReturnsExpectedResult() throws Exception {
+        // Build links
+        LinksDto links = LinksDto.newBuilder()
+                .setSelf("/x/{x}?x=x")
+                .setNext("/x/{x}?page[offset]=2")
+                .build();
 
-            FriendDto.Builder builder = FriendDto.newBuilder();
-            PARSER.merge(json, builder);
-            FriendDto friendDto = builder.build();
+        // Build responseMetadata
+        ResponseMetadataDto metadata = ResponseMetadataDto.newBuilder()
+                .setCorrelationId("test-correlation-id")
+                .setLinks(links)
+                .setStatusMessage("Executed successfully")
+                .setStatusCode(200)
+                .setResponseDateTime(Timestamps.parse("2025-06-20T08:27:48.516Z"))
+                .setTimeTakenMs(40)
+                .build();
 
-            CardDto cardDto = mappingService.findCardByFriend(friendDto);
+        // Build disputeFolderIdentifier
+        DisputeFolderIdentifierDto folderId = DisputeFolderIdentifierDto.newBuilder()
+                .setDisputeFolderReference("116855")
+                .setIssuerDisputeExternalReference("")
+                .build();
 
-            CardLookupResponseDto cardLookupResponseDto = CardLookupResponseDto.newBuilder()
-                    .setCard(cardDto)
-                    .build();
+        // Build transactionAmount
+        AmountDto transactionAmount = AmountDto.newBuilder()
+                .setValue(4100)
+                .setExponent(2)
+                .setIsoCode("EUR")
+                .build();
 
-            var restResponse = cardLookupResponseDtoMapper.toRestDto(cardLookupResponseDto);
+        // Build main data section
+        DataDto data = DataDto.newBuilder()
+                .setIssuerId("1001")
+                .setDisputeFolderIdentifier(folderId)
+                .setTransactionAmount(transactionAmount)
+                .setTransactionTime(Timestamps.parse("2024-12-09T23:00:00Z"))
+                .setAcquirerReferenceData("02012704346316430260382")
+                .setStatusCode("OPEN")
+                .setCreationDate(Timestamps.parse("2024-12-11T08:56:48.490Z"))
+                .setLastMessageDate(Timestamps.parse("2024-12-11T08:56:48.472Z"))
+                .setTransmissionDate(Timestamps.parse("2024-12-09T23:00:00Z"))
+                .build();
 
-            return ResponseEntity.ok(new ApiResponse<>(STATUS_SUCCESS, null, restResponse));
+        // Build full DisputeResponseDto
+        DisputeResponseDto fullResponse = DisputeResponseDto.newBuilder()
+                .setResponseMetadata(metadata)
+                .setData(data)
+                .build();
 
-        } catch (Exception e) {
-            LOGGER.error(LOG_FAILED_GET_FRIEND, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ApiResponse<>(STATUS_ERROR, GENERIC_ERROR_MESSAGE, null));
-        }
+
+        // Convert proto to JSON
+        String jsonResponse = JsonFormat.printer()
+                .includingDefaultValueFields()
+                .print(fullResponse);
+
+        // Mock HTTP response
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(jsonResponse));
+
+        // Call service
+        DisputeResponseDto result = disputeDetailService.getDisputeFolderDetails("1001", "116855", null);
+
+        // Assertions
+        assertThat(result).isNotNull();
+        assertThat(result.getData().getDisputeFolderIdentifier().getDisputeFolderReference()).isEqualTo("116855");
+        assertThat(result.getData().getStatusCode()).isEqualTo("OPEN");
+        assertThat(result.getData().getIssuerId()).isEqualTo("1001");
     }
 
-    @UiService(value = "publishGetCardByPan", method = MethodType.POST, requiresAuthentication = false)
-    public ResponseEntity<ApiResponse<osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto>> getCardByPanOverHazelcast(@RequestBody Map<String, Object> requestPayload) {
-        LOGGER.info(MSG_RECEIVED_PUBLISH_PAN, requestPayload);
-        try {
-            String json = MAPPER.writeValueAsString(requestPayload);
-            return cardOrcaService.publishCardByPanRequest(json);
+    @Test
+    void assertThatDisputeFolderDetailsReturnsEmptyOnNullResponse() {
+        // Simulate null body (server returns empty body)
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(""));
 
-        } catch (JsonProcessingException e) {
-            LOGGER.error(LOG_FAILED_PUBLISH_PAN, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ApiResponse<>(STATUS_ERROR, GENERIC_ERROR_MESSAGE, null));
-        }
-    }
+        // Call service
+        DisputeResponseDto result = disputeDetailService.getDisputeFolderDetails("1001", "116855", null);
 
-    @UiService(value = "publishGetCardByFriend", method = MethodType.POST, requiresAuthentication = false)
-    public ResponseEntity<ApiResponse<osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto>> getCardByFriendOverHazelcast(@RequestBody Map<String, Object> requestPayload) {
-        LOGGER.info(MSG_RECEIVED_PUBLISH_FRIEND, requestPayload);
-        try {
-            String json = MAPPER.writeValueAsString(requestPayload);
-            return cardOrcaService.publishCardByFriendRequest(json);
-
-        } catch (JsonProcessingException e) {
-            LOGGER.error(LOG_FAILED_PUBLISH_FRIEND, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ApiResponse<>(STATUS_ERROR, GENERIC_ERROR_MESSAGE, null));
-        }
+        // Expect fallback empty DTO
+        assertThat(result).isNotNull();
+        assertThat(result.hasData()).isFalse();
     }
 }
