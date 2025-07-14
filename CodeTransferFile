@@ -1,7 +1,168 @@
-Caused by: org.springframework.beans.factory.NoSuchBeanDefinitionException: No qualifying bean of type 'osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImpl' available: expected at least 1 bean which qualifies as autowire candidate. Dependency annotations: {@org.springframework.beans.factory.annotation.Autowired(required=true)}
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.raiseNoMatchingBeanFound(DefaultListableBeanFactory.java:2284)
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1708)
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1628)
-	at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor$AutowiredFieldElement.resolveFieldValue(AutowiredAnnotationBeanPostProcessor.java:785)
-	... 23 more
-[INFO] 
+package osplus.pkptuna.dispute.service.impl;
+
+import com.google.protobuf.util.JsonFormat;
+import com.google.protobuf.util.Timestamps;
+import okhttp3.mockwebserver.MockResponse;
+import okhttp3.mockwebserver.MockWebServer;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.web.reactive.function.client.WebClient;
+import osplus.apl.core.test.utils.AplTestRunner;
+import osplus.apl.core.test.utils.BaseAplTest;
+import osplus.pkptuna.dispute.config.DisputeConfig;
+import osplus.pkptuna.dispute.config.DisputeServiceProperties;
+import osplus.pkptuna.dispute.model.AmountDto;
+import osplus.pkptuna.dispute.model.DataDto;
+import osplus.pkptuna.dispute.model.DisputeFolderIdentifierDto;
+import osplus.pkptuna.dispute.model.DisputeResponseDto;
+import osplus.pkptuna.dispute.model.LinksDto;
+import osplus.pkptuna.dispute.model.ResponseMetadataDto;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+@SpringBootTest(classes = {AplTestRunner.class, DisputeConfig.class},
+        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+        properties= {"apl.application.name=uui",
+        "apl.application.version=0.0.1-TEST"})
+@AutoConfigureMockMvc
+class DisputeDetailServiceImplTest extends BaseAplTest {
+
+    @Autowired
+    private DisputeDetailServiceImpl disputeDetailService;
+
+    @MockitoBean
+    private DisputeServiceProperties props;
+
+    @MockitoBean
+    private DisputeServiceProperties.Auth auth;
+
+    @MockitoBean
+    private DisputeServiceProperties.Paths paths;
+
+    private MockWebServer mockWebServer;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        mockWebServer = new MockWebServer();
+        mockWebServer.start();
+
+        Mockito.when(props.auth()).thenReturn(auth);
+        Mockito.when(props.paths()).thenReturn(paths);
+        Mockito.when(auth.username()).thenReturn("testuser");
+        Mockito.when(auth.password()).thenReturn("testpass");
+        Mockito.when(paths.disputeDetails()).thenReturn("/issuers/{issuerId}/disputes/{disputeFolderReference}");
+    }
+
+    @AfterEach
+    void tearDown() throws Exception {
+        mockWebServer.shutdown();
+    }
+
+    @Test
+    void assertThatDisputeFolderDetailsReturnsExpectedResult() throws Exception {
+        // Build links
+        LinksDto links = LinksDto.newBuilder()
+                .setSelf("/x/{x}?x=x")
+                .setNext("/x/{x}?page[offset]=2")
+                .build();
+
+        // Build responseMetadata
+        ResponseMetadataDto metadata = ResponseMetadataDto.newBuilder()
+                .setCorrelationId("test-correlation-id")
+                .setLinks(links)
+                .setStatusMessage("Executed successfully")
+                .setStatusCode(200)
+                .setResponseDateTime(Timestamps.parse("2025-06-20T08:27:48.516Z"))
+                .setTimeTakenMs(40)
+                .build();
+
+        // Build disputeFolderIdentifier
+        DisputeFolderIdentifierDto folderId = DisputeFolderIdentifierDto.newBuilder()
+                .setDisputeFolderReference("116855")
+                .setIssuerDisputeExternalReference("")
+                .build();
+
+        // Build transactionAmount
+        AmountDto transactionAmount = AmountDto.newBuilder()
+                .setValue(4100)
+                .setExponent(2)
+                .setIsoCode("EUR")
+                .build();
+
+        // Build main data section
+        DataDto data = DataDto.newBuilder()
+                .setIssuerId("1001")
+                .setDisputeFolderIdentifier(folderId)
+                .setTransactionAmount(transactionAmount)
+                .setTransactionTime(Timestamps.parse("2024-12-09T23:00:00Z"))
+                .setAcquirerReferenceData("02012704346316430260382")
+                .setStatusCode("OPEN")
+                .setCreationDate(Timestamps.parse("2024-12-11T08:56:48.490Z"))
+                .setLastMessageDate(Timestamps.parse("2024-12-11T08:56:48.472Z"))
+                .setTransmissionDate(Timestamps.parse("2024-12-09T23:00:00Z"))
+                .build();
+
+        // Build full DisputeResponseDto
+        DisputeResponseDto fullResponse = DisputeResponseDto.newBuilder()
+                .setResponseMetadata(metadata)
+                .setData(data)
+                .build();
+
+
+        // Convert proto to JSON
+        String jsonResponse = JsonFormat.printer()
+                .includingDefaultValueFields()
+                .print(fullResponse);
+
+        // Mock HTTP response
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(jsonResponse));
+
+        // Call service
+        DisputeResponseDto result = disputeDetailService.getDisputeFolderDetails("1001", "116855", null);
+
+        // Assertions
+        assertThat(result).isNotNull();
+        assertThat(result.getData().getDisputeFolderIdentifier().getDisputeFolderReference()).isEqualTo("116855");
+        assertThat(result.getData().getStatusCode()).isEqualTo("OPEN");
+        assertThat(result.getData().getIssuerId()).isEqualTo("1001");
+    }
+
+    @Test
+    void assertThatDisputeFolderDetailsReturnsEmptyOnNullResponse() {
+        // Simulate null body (server returns empty body)
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(""));
+
+        // Call service
+        DisputeResponseDto result = disputeDetailService.getDisputeFolderDetails("1001", "116855", null);
+
+        // Expect fallback empty DTO
+        assertThat(result).isNotNull();
+        assertThat(result.hasData()).isFalse();
+    }
+
+    @Configuration
+    static class TestConfig {
+        @Bean
+        public WebClient webClient() {
+            return WebClient.builder()
+                    .baseUrl("http://localhost:8080")
+                    .defaultHeader(HttpHeaders.CONTENT_TYPE, "application/json")
+                    .build();
+        }
+
+
+    }
+}
