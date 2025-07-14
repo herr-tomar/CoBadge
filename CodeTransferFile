@@ -1,145 +1,74 @@
-package osplus.pkptuna.dispute.service.impl;
+@Test
+void assertThatDisputeFolderDetailsReturnsExpectedResult() throws Exception {
+    // Arrange – prepare expected response
+    DisputeResponseDto expectedResponse = DisputeResponseDto.newBuilder()
+            .setResponseMetadata(ResponseMetadataDto.newBuilder()
+                    .setCorrelationId("test-correlation-id")
+                    .setLinks(LinksDto.newBuilder()
+                            .setSelf("/x/{x}?x=x")
+                            .setNext("/x/{x}?page[offset]=2"))
+                    .setStatusMessage("Executed successfully")
+                    .setStatusCode(200)
+                    .setResponseDateTime(Timestamps.parse("2025-06-20T08:27:48.516Z"))
+                    .setTimeTakenMs(40))
+            .setData(DataDto.newBuilder()
+                    .setIssuerId("1001")
+                    .setDisputeFolderIdentifier(DisputeFolderIdentifierDto.newBuilder()
+                            .setDisputeFolderReference("116855")
+                            .setIssuerDisputeExternalReference(""))
+                    .setTransactionAmount(AmountDto.newBuilder()
+                            .setValue(4100)
+                            .setExponent(2)
+                            .setIsoCode("EUR"))
+                    .setTransactionTime(Timestamps.parse("2024-12-09T23:00:00Z"))
+                    .setAcquirerReferenceData("02012704346316430260382")
+                    .setStatusCode("OPEN")
+                    .setCreationDate(Timestamps.parse("2024-12-11T08:56:48.490Z"))
+                    .setLastMessageDate(Timestamps.parse("2024-12-11T08:56:48.472Z"))
+                    .setTransmissionDate(Timestamps.parse("2024-12-09T23:00:00Z")))
+            .build();
 
-import com.google.protobuf.util.JsonFormat;
-import com.google.protobuf.util.Timestamps;
-import okhttp3.mockwebserver.MockResponse;
-import okhttp3.mockwebserver.MockWebServer;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import osplus.apl.core.test.utils.AplTestRunner;
-import osplus.apl.core.test.utils.BaseAplTest;
-import osplus.pkptuna.dispute.model.AmountDto;
-import osplus.pkptuna.dispute.model.DataDto;
-import osplus.pkptuna.dispute.model.DisputeFolderIdentifierDto;
-import osplus.pkptuna.dispute.model.DisputeResponseDto;
-import osplus.pkptuna.dispute.model.LinksDto;
-import osplus.pkptuna.dispute.model.ResponseMetadataDto;
+    String jsonResponse = JsonFormat.printer()
+            .includingDefaultValueFields()
+            .print(expectedResponse);
 
-import java.io.IOException;
+    mockWebServer.enqueue(new MockResponse()
+            .setResponseCode(200)
+            .setHeader("Content-Type", "application/json")
+            .setBody(jsonResponse));
 
-import static org.assertj.core.api.Assertions.assertThat;
+    // Act
+    DisputeResponseDto result = disputeDetailService.getDisputeFolderDetails("1001", "116855", null);
 
-@SpringBootTest(classes = {AplTestRunner.class, ProjecteigeneTestConfiguration.class},
-        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
-        properties= {
-        "apl.application.name=uui",
-        "apl.application.version=0.0.1-TEST" })
+    // Assert
+    assertThat(result).as("Response should not be null").isNotNull();
+    assertThat(result.hasData()).as("Expected data section").isTrue();
 
-@AutoConfigureMockMvc
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class DisputeDetailServiceImplTest extends BaseAplTest {
+    DataDto data = result.getData();
 
-    @Autowired
-    private DisputeDetailServiceImpl disputeDetailService;
-
-    private static MockWebServer mockWebServer;
-
-    @DynamicPropertySource
-    static void overrideProps(DynamicPropertyRegistry registry) throws IOException {
-
-        mockWebServer = new MockWebServer();
-        mockWebServer.start();
-
-        registry.add("dispute.base-url", () -> mockWebServer.url("/").toString());
-        registry.add("dispute.auth.username", () -> "testuser");
-        registry.add("dispute.auth.password", () -> "testpass");
-        registry.add("dispute.paths.dispute-details", () -> "/issuers/{issuerId}/disputes/{disputeFolderReference}");
-    }
-
-    @AfterEach
-    void tearDown() throws Exception {
-        mockWebServer.shutdown();
-    }
-
-    @Test
-    void assertThatDisputeFolderDetailsReturnsExpectedResult() throws Exception {
-        // Build links
-        LinksDto links = LinksDto.newBuilder()
-                .setSelf("/x/{x}?x=x")
-                .setNext("/x/{x}?page[offset]=2")
-                .build();
-
-        // Build responseMetadata
-        ResponseMetadataDto metadata = ResponseMetadataDto.newBuilder()
-                .setCorrelationId("test-correlation-id")
-                .setLinks(links)
-                .setStatusMessage("Executed successfully")
-                .setStatusCode(200)
-                .setResponseDateTime(Timestamps.parse("2025-06-20T08:27:48.516Z"))
-                .setTimeTakenMs(40)
-                .build();
-
-        // Build disputeFolderIdentifier
-        DisputeFolderIdentifierDto folderId = DisputeFolderIdentifierDto.newBuilder()
-                .setDisputeFolderReference("116855")
-                .setIssuerDisputeExternalReference("")
-                .build();
-
-        // Build transactionAmount
-        AmountDto transactionAmount = AmountDto.newBuilder()
-                .setValue(4100)
-                .setExponent(2)
-                .setIsoCode("EUR")
-                .build();
-
-        // Build main data section
-        DataDto data = DataDto.newBuilder()
-                .setIssuerId("1001")
-                .setDisputeFolderIdentifier(folderId)
-                .setTransactionAmount(transactionAmount)
-                .setTransactionTime(Timestamps.parse("2024-12-09T23:00:00Z"))
-                .setAcquirerReferenceData("02012704346316430260382")
-                .setStatusCode("OPEN")
-                .setCreationDate(Timestamps.parse("2024-12-11T08:56:48.490Z"))
-                .setLastMessageDate(Timestamps.parse("2024-12-11T08:56:48.472Z"))
-                .setTransmissionDate(Timestamps.parse("2024-12-09T23:00:00Z"))
-                .build();
-
-        // Build full DisputeResponseDto
-        DisputeResponseDto fullResponse = DisputeResponseDto.newBuilder()
-                .setResponseMetadata(metadata)
-                .setData(data)
-                .build();
+    assertThat(data.getIssuerId()).as("Issuer ID mismatch").isEqualTo("1001");
+    assertThat(data.getStatusCode()).as("Status Code mismatch").isEqualTo("OPEN");
+    assertThat(data.getDisputeFolderIdentifier().getDisputeFolderReference())
+            .as("Folder reference mismatch")
+            .isEqualTo("116855");
+}
 
 
-        // Convert proto to JSON
-        String jsonResponse = JsonFormat.printer()
-                .includingDefaultValueFields()
-                .print(fullResponse);
+----
 
-        // Mock HTTP response
-        mockWebServer.enqueue(new MockResponse()
-                .setResponseCode(200)
-                .setBody(jsonResponse));
 
-        // Call service
-        DisputeResponseDto result = disputeDetailService.getDisputeFolderDetails("1001", "116855", null);
+@Test
+void assertThatDisputeFolderDetailsReturnsEmptyOnNullResponse() {
+    // Arrange – simulate an empty response
+    mockWebServer.enqueue(new MockResponse()
+            .setResponseCode(200)
+            .setHeader("Content-Type", "application/json")
+            .setBody(""));
 
-        // Assertions
-        assertThat(result).isNotNull();
-        assertThat(result.getData().getDisputeFolderIdentifier().getDisputeFolderReference()).isEqualTo("116855");
-        assertThat(result.getData().getStatusCode()).isEqualTo("OPEN");
-        assertThat(result.getData().getIssuerId()).isEqualTo("1001");
-    }
+    // Act
+    DisputeResponseDto result = disputeDetailService.getDisputeFolderDetails("1001", "116855", null);
 
-    @Test
-    void assertThatDisputeFolderDetailsReturnsEmptyOnNullResponse() {
-        // Simulate null body (server returns empty body)
-        mockWebServer.enqueue(new MockResponse()
-                .setResponseCode(200)
-                .setBody(""));
-
-        // Call service
-        DisputeResponseDto result = disputeDetailService.getDisputeFolderDetails("1001", "116855", null);
-
-        // Expect fallback empty DTO
-        assertThat(result).isNotNull();
-        assertThat(result.hasData()).isFalse();
-    }
+    // Assert – expect fallback empty response
+    assertThat(result).as("Response should not be null").isNotNull();
+    assertThat(result.hasData()).as("Expected no data in response").isFalse();
 }
