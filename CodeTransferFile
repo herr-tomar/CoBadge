@@ -11,14 +11,9 @@ import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.web.reactive.function.client.WebClient;
 import osplus.apl.core.test.utils.AplTestRunner;
 import osplus.apl.core.test.utils.BaseAplTest;
-import osplus.pkptuna.dispute.config.DisputeConfig;
 import osplus.pkptuna.dispute.config.DisputeServiceProperties;
 import osplus.pkptuna.dispute.model.AmountDto;
 import osplus.pkptuna.dispute.model.DataDto;
@@ -29,7 +24,7 @@ import osplus.pkptuna.dispute.model.ResponseMetadataDto;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(classes = {AplTestRunner.class, DisputeConfig.class},
+@SpringBootTest(classes = {AplTestRunner.class, ProjecteigeneTestConfiguration.class},
         webEnvironment = SpringBootTest.WebEnvironment.MOCK,
         properties= {"apl.application.name=uui",
         "apl.application.version=0.0.1-TEST"})
@@ -151,18 +146,5 @@ class DisputeDetailServiceImplTest extends BaseAplTest {
         // Expect fallback empty DTO
         assertThat(result).isNotNull();
         assertThat(result.hasData()).isFalse();
-    }
-
-    @Configuration
-    static class TestConfig {
-        @Bean
-        public WebClient webClient() {
-            return WebClient.builder()
-                    .baseUrl("http://localhost:8080")
-                    .defaultHeader(HttpHeaders.CONTENT_TYPE, "application/json")
-                    .build();
-        }
-
-
     }
 }
