@@ -1,74 +1,16 @@
-@Test
-void assertThatDisputeFolderDetailsReturnsExpectedResult() throws Exception {
-    // Arrange – prepare expected response
-    DisputeResponseDto expectedResponse = DisputeResponseDto.newBuilder()
-            .setResponseMetadata(ResponseMetadataDto.newBuilder()
-                    .setCorrelationId("test-correlation-id")
-                    .setLinks(LinksDto.newBuilder()
-                            .setSelf("/x/{x}?x=x")
-                            .setNext("/x/{x}?page[offset]=2"))
-                    .setStatusMessage("Executed successfully")
-                    .setStatusCode(200)
-                    .setResponseDateTime(Timestamps.parse("2025-06-20T08:27:48.516Z"))
-                    .setTimeTakenMs(40))
-            .setData(DataDto.newBuilder()
-                    .setIssuerId("1001")
-                    .setDisputeFolderIdentifier(DisputeFolderIdentifierDto.newBuilder()
-                            .setDisputeFolderReference("116855")
-                            .setIssuerDisputeExternalReference(""))
-                    .setTransactionAmount(AmountDto.newBuilder()
-                            .setValue(4100)
-                            .setExponent(2)
-                            .setIsoCode("EUR"))
-                    .setTransactionTime(Timestamps.parse("2024-12-09T23:00:00Z"))
-                    .setAcquirerReferenceData("02012704346316430260382")
-                    .setStatusCode("OPEN")
-                    .setCreationDate(Timestamps.parse("2024-12-11T08:56:48.490Z"))
-                    .setLastMessageDate(Timestamps.parse("2024-12-11T08:56:48.472Z"))
-                    .setTransmissionDate(Timestamps.parse("2024-12-09T23:00:00Z")))
-            .build();
-
-    String jsonResponse = JsonFormat.printer()
-            .includingDefaultValueFields()
-            .print(expectedResponse);
-
-    mockWebServer.enqueue(new MockResponse()
-            .setResponseCode(200)
-            .setHeader("Content-Type", "application/json")
-            .setBody(jsonResponse));
-
-    // Act
-    DisputeResponseDto result = disputeDetailService.getDisputeFolderDetails("1001", "116855", null);
-
-    // Assert
-    assertThat(result).as("Response should not be null").isNotNull();
-    assertThat(result.hasData()).as("Expected data section").isTrue();
-
-    DataDto data = result.getData();
-
-    assertThat(data.getIssuerId()).as("Issuer ID mismatch").isEqualTo("1001");
-    assertThat(data.getStatusCode()).as("Status Code mismatch").isEqualTo("OPEN");
-    assertThat(data.getDisputeFolderIdentifier().getDisputeFolderReference())
-            .as("Folder reference mismatch")
-            .isEqualTo("116855");
-}
-
-
-----
-
-
-@Test
-void assertThatDisputeFolderDetailsReturnsEmptyOnNullResponse() {
-    // Arrange – simulate an empty response
-    mockWebServer.enqueue(new MockResponse()
-            .setResponseCode(200)
-            .setHeader("Content-Type", "application/json")
-            .setBody(""));
-
-    // Act
-    DisputeResponseDto result = disputeDetailService.getDisputeFolderDetails("1001", "116855", null);
-
-    // Assert – expect fallback empty response
-    assertThat(result).as("Response should not be null").isNotNull();
-    assertThat(result.hasData()).as("Expected no data in response").isFalse();
-}
+[INFO] Running osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.113 s -- in osplus.pkptuna.dispute.service.impl.DisputeServiceImplTest
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+[ERROR] Tests run: 2, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 11.84 s <<< FAILURE! -- in osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest
+[ERROR] osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest.assertThatDisputeFolderDetailsReturnsExpectedResult -- Time elapsed: 0.280 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: 
+[Expected data section] 
+Expecting value to be true but was false
+	at osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest.assertThatDisputeFolderDetailsReturnsExpectedResult(DisputeDetailServiceImplTest.java:104)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+[INFO] 
+[INFO] Results:
+[INFO] 
