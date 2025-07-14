@@ -1,141 +1,90 @@
-package osplus.pkptuna.dispute.service.impl;
-
-import com.google.protobuf.util.JsonFormat;
-import com.google.protobuf.util.Timestamps;
-import okhttp3.mockwebserver.MockResponse;
-import okhttp3.mockwebserver.MockWebServer;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-import org.springframework.http.HttpHeaders;
-import org.springframework.web.reactive.function.client.WebClient;
-import osplus.pkptuna.dispute.config.DisputeServiceProperties;
-import osplus.pkptuna.dispute.model.AmountDto;
-import osplus.pkptuna.dispute.model.DataDto;
-import osplus.pkptuna.dispute.model.DisputeFolderIdentifierDto;
-import osplus.pkptuna.dispute.model.DisputeResponseDto;
-import osplus.pkptuna.dispute.model.LinksDto;
-import osplus.pkptuna.dispute.model.ResponseMetadataDto;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
-class DisputeDetailServiceImplTest {
-
-    private DisputeDetailServiceImpl disputeDetailService;
-    private MockWebServer mockWebServer;
-
-    @BeforeEach
-    void setUp() throws Exception {
-        mockWebServer = new MockWebServer();
-        mockWebServer.start();
-
-        WebClient webClient = WebClient.builder()
-                .baseUrl(mockWebServer.url("/").toString())
-                .defaultHeader(HttpHeaders.CONTENT_TYPE, "application/json")
-                .build();
-
-        DisputeServiceProperties props = Mockito.mock(DisputeServiceProperties.class);
-        DisputeServiceProperties.Auth auth = Mockito.mock(DisputeServiceProperties.Auth.class);
-        DisputeServiceProperties.Paths paths = Mockito.mock(DisputeServiceProperties.Paths.class);
-
-        Mockito.when(props.auth()).thenReturn(auth);
-        Mockito.when(props.paths()).thenReturn(paths);
-        Mockito.when(auth.username()).thenReturn("testuser");
-        Mockito.when(auth.password()).thenReturn("testpass");
-        Mockito.when(paths.disputeDetails()).thenReturn("/issuers/{issuerId}/disputes/{disputeFolderReference}");
-
-        disputeDetailService = new DisputeDetailServiceImpl(webClient, props);
-    }
-
-    @AfterEach
-    void tearDown() throws Exception {
-        mockWebServer.shutdown();
-    }
-
-    @Test
-    void assertThatDisputeFolderDetailsReturnsExpectedResult() throws Exception {
-        // Build links
-        LinksDto links = LinksDto.newBuilder()
-                .setSelf("/x/{x}?x=x")
-                .setNext("/x/{x}?page[offset]=2")
-                .build();
-
-        // Build responseMetadata
-        ResponseMetadataDto metadata = ResponseMetadataDto.newBuilder()
-                .setCorrelationId("test-correlation-id")
-                .setLinks(links)
-                .setStatusMessage("Executed successfully")
-                .setStatusCode(200)
-                .setResponseDateTime(Timestamps.parse("2025-06-20T08:27:48.516Z"))
-                .setTimeTakenMs(40)
-                .build();
-
-        // Build disputeFolderIdentifier
-        DisputeFolderIdentifierDto folderId = DisputeFolderIdentifierDto.newBuilder()
-                .setDisputeFolderReference("116855")
-                .setIssuerDisputeExternalReference("")
-                .build();
-
-        // Build transactionAmount
-        AmountDto transactionAmount = AmountDto.newBuilder()
-                .setValue(4100)
-                .setExponent(2)
-                .setIsoCode("EUR")
-                .build();
-
-        // Build main data section
-        DataDto data = DataDto.newBuilder()
-                .setIssuerId("1001")
-                .setDisputeFolderIdentifier(folderId)
-                .setTransactionAmount(transactionAmount)
-                .setTransactionTime(Timestamps.parse("2024-12-09T23:00:00Z"))
-                .setAcquirerReferenceData("02012704346316430260382")
-                .setStatusCode("OPEN")
-                .setCreationDate(Timestamps.parse("2024-12-11T08:56:48.490Z"))
-                .setLastMessageDate(Timestamps.parse("2024-12-11T08:56:48.472Z"))
-                .setTransmissionDate(Timestamps.parse("2024-12-09T23:00:00Z"))
-                .build();
-
-        // Build full DisputeResponseDto
-        DisputeResponseDto fullResponse = DisputeResponseDto.newBuilder()
-                .setResponseMetadata(metadata)
-                .setData(data)
-                .build();
-
-
-        // Convert proto to JSON
-        String jsonResponse = JsonFormat.printer()
-                .includingDefaultValueFields()
-                .print(fullResponse);
-
-        // Mock HTTP response
-        mockWebServer.enqueue(new MockResponse()
-                .setResponseCode(200)
-                .setBody(jsonResponse));
-
-        // Call service
-        DisputeResponseDto result = disputeDetailService.getDisputeFolderDetails("1001", "116855", null);
-
-        // Assertions
-        assertThat(result).isNotNull();
-        assertThat(result.getData().getDisputeFolderIdentifier().getDisputeFolderReference()).isEqualTo("116855");
-        assertThat(result.getData().getStatusCode()).isEqualTo("OPEN");
-        assertThat(result.getData().getIssuerId()).isEqualTo("1001");
-    }
-
-    @Test
-    void assertThatDisputeFolderDetailsReturnsEmptyOnNullResponse() {
-        // Simulate null body (server returns empty body)
-        mockWebServer.enqueue(new MockResponse()
-                .setResponseCode(200)
-                .setBody(""));
-
-        // Call service
-        DisputeResponseDto result = disputeDetailService.getDisputeFolderDetails("1001", "116855", null);
-
-        // Expect fallback empty DTO
-        assertThat(result).isNotNull();
-        assertThat(result.hasData()).isFalse();
-    }
-}
+ERROR] osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest.assertThatDisputeFolderDetailsReturnsExpectedResult -- Time elapsed: 0.015 s <<< ERROR!
+java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@61b65d54 testClass = osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest, locations = [], classes = [osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest.TestConfig], contextInitializerClasses = [], activeProfiles = [], propertySourceDescriptors = [PropertySourceDescriptor[locations=[], ignoreResourceNotFound=false, name=null, propertySourceFactory=null, encoding=null]], propertySourceProperties = ["spring.main.allow-bean-definition-overriding=true", "org.springframework.boot.test.context.SpringBootTestContextBootstrapper=true"], contextCustomizers = [org.springframework.boot.test.context.filter.ExcludeFilterContextCustomizer@5b3f61ff, org.springframework.boot.test.json.DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer@1b8a29df, org.springframework.boot.test.mock.mockito.MockitoContextCustomizer@bfa62f89, org.springframework.boot.test.web.client.TestRestTemplateContextCustomizer@5be49b60, org.springframework.boot.test.web.reactive.server.WebTestClientContextCustomizer@327af41b, org.springframework.boot.test.web.reactor.netty.DisableReactorResourceFactoryGlobalResourcesContextCustomizerFactory$DisableReactorResourceFactoryGlobalResourcesContextCustomizerCustomizer@39d9314d, org.springframework.boot.test.autoconfigure.OnFailureConditionReportContextCustomizerFactory$OnFailureConditionReportContextCustomizer@5c45d770, org.springframework.boot.test.autoconfigure.actuate.observability.ObservabilityContextCustomizerFactory$DisableObservabilityContextCustomizer@1f, org.springframework.boot.test.autoconfigure.properties.PropertyMappingContextCustomizer@0, org.springframework.boot.test.autoconfigure.web.servlet.WebDriverContextCustomizer@4f6f416f, org.springframework.test.context.support.DynamicPropertiesContextCustomizer@0, org.springframework.boot.test.context.SpringBootTestAnnotation@b492619e], resourceBasePath = "src/main/webapp", contextLoader = org.springframework.boot.test.context.SpringBootContextLoader, parent = null]
+	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:180)
+	at org.springframework.test.context.support.DefaultTestContext.getApplicationContext(DefaultTestContext.java:130)
+	at org.springframework.test.context.web.ServletTestExecutionListener.setUpRequestContextIfNecessary(ServletTestExecutionListener.java:200)
+	at org.springframework.test.context.web.ServletTestExecutionListener.prepareTestInstance(ServletTestExecutionListener.java:139)
+	at org.springframework.test.context.TestContextManager.prepareTestInstance(TestContextManager.java:260)
+	at org.springframework.test.context.junit.jupiter.SpringExtension.postProcessTestInstance(SpringExtension.java:159)
+	at java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.accept(ForEachOps.java:184)
+	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:197)
+	at java.base/java.util.stream.ReferencePipeline$2$1.accept(ReferencePipeline.java:179)
+	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:197)
+	at java.base/java.util.ArrayList$ArrayListSpliterator.forEachRemaining(ArrayList.java:1708)
+	at java.base/java.util.stream.AbstractPipeline.copyInto(AbstractPipeline.java:509)
+	at java.base/java.util.stream.AbstractPipeline.wrapAndCopyInto(AbstractPipeline.java:499)
+	at java.base/java.util.stream.ForEachOps$ForEachOp.evaluateSequential(ForEachOps.java:151)
+	at java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.evaluateSequential(ForEachOps.java:174)
+	at java.base/java.util.stream.AbstractPipeline.evaluate(AbstractPipeline.java:234)
+	at java.base/java.util.stream.ReferencePipeline.forEach(ReferencePipeline.java:596)
+	at java.base/java.util.Optional.orElseGet(Optional.java:364)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'disputeDetailService' defined in osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest$TestConfig: Failed to instantiate [osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImpl]: Factory method 'disputeDetailService' threw exception with message: Cannot invoke "osplus.pkptuna.dispute.config.DisputeServiceProperties$Auth.username()" because the return value of "osplus.pkptuna.dispute.config.DisputeServiceProperties.auth()" is null
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:657)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiateUsingFactoryMethod(ConstructorResolver.java:645)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateUsingFactoryMethod(AbstractAutowireCapableBeanFactory.java:1375)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1205)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:569)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1222)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1188)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1123)
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:987)
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:627)
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
+	at org.springframework.boot.test.context.SpringBootContextLoader.lambda$loadContext$3(SpringBootContextLoader.java:144)
+	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:58)
+	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:46)
+	at org.springframework.boot.SpringApplication.withHook(SpringApplication.java:1461)
+	at org.springframework.boot.test.context.SpringBootContextLoader$ContextLoaderHook.run(SpringBootContextLoader.java:563)
+	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:144)
+	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:110)
+	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContextInternal(DefaultCacheAwareContextLoaderDelegate.java:225)
+	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:152)
+	... 19 more
+Caused by: org.springframework.beans.BeanInstantiationException: Failed to instantiate [osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImpl]: Factory method 'disputeDetailService' threw exception with message: Cannot invoke "osplus.pkptuna.dispute.config.DisputeServiceProperties$Auth.username()" because the return value of "osplus.pkptuna.dispute.config.DisputeServiceProperties.auth()" is null
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:199)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiateWithFactoryMethod(SimpleInstantiationStrategy.java:88)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiate(SimpleInstantiationStrategy.java:168)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:653)
+	... 45 more
+Caused by: java.lang.NullPointerException: Cannot invoke "osplus.pkptuna.dispute.config.DisputeServiceProperties$Auth.username()" because the return value of "osplus.pkptuna.dispute.config.DisputeServiceProperties.auth()" is null
+	at osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImpl.<init>(DisputeDetailServiceImpl.java:41)
+	at osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest$TestConfig.disputeDetailService(DisputeDetailServiceImplTest.java:162)
+	at osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest$TestConfig$$SpringCGLIB$$0.CGLIB$disputeDetailService$0(<generated>)
+	at osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest$TestConfig$$SpringCGLIB$$FastClass$$1.invoke(<generated>)
+	at org.springframework.cglib.proxy.MethodProxy.invokeSuper(MethodProxy.java:258)
+	at org.springframework.context.annotation.ConfigurationClassEnhancer$BeanMethodInterceptor.intercept(ConfigurationClassEnhancer.java:400)
+	at osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest$TestConfig$$SpringCGLIB$$0.disputeDetailService(<generated>)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:171)
+	... 48 more
+[ERROR] osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest.assertThatDisputeFolderDetailsReturnsEmptyOnNullResponse -- Time elapsed: 0.001 s <<< ERROR!
+java.lang.IllegalStateException: ApplicationContext failure threshold (1) exceeded: skipping repeated attempt to load context for [WebMergedContextConfiguration@61b65d54 testClass = osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest, locations = [], classes = [osplus.pkptuna.dispute.service.impl.DisputeDetailServiceImplTest.TestConfig], contextInitializerClasses = [], activeProfiles = [], propertySourceDescriptors = [PropertySourceDescriptor[locations=[], ignoreResourceNotFound=false, name=null, propertySourceFactory=null, encoding=null]], propertySourceProperties = ["spring.main.allow-bean-definition-overriding=true", "org.springframework.boot.test.context.SpringBootTestContextBootstrapper=true"], contextCustomizers = [org.springframework.boot.test.context.filter.ExcludeFilterContextCustomizer@5b3f61ff, org.springframework.boot.test.json.DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer@1b8a29df, org.springframework.boot.test.mock.mockito.MockitoContextCustomizer@bfa62f89, org.springframework.boot.test.web.client.TestRestTemplateContextCustomizer@5be49b60, org.springframework.boot.test.web.reactive.server.WebTestClientContextCustomizer@327af41b, org.springframework.boot.test.web.reactor.netty.DisableReactorResourceFactoryGlobalResourcesContextCustomizerFactory$DisableReactorResourceFactoryGlobalResourcesContextCustomizerCustomizer@39d9314d, org.springframework.boot.test.autoconfigure.OnFailureConditionReportContextCustomizerFactory$OnFailureConditionReportContextCustomizer@5c45d770, org.springframework.boot.test.autoconfigure.actuate.observability.ObservabilityContextCustomizerFactory$DisableObservabilityContextCustomizer@1f, org.springframework.boot.test.autoconfigure.properties.PropertyMappingContextCustomizer@0, org.springframework.boot.test.autoconfigure.web.servlet.WebDriverContextCustomizer@4f6f416f, org.springframework.test.context.support.DynamicPropertiesContextCustomizer@0, org.springframework.boot.test.context.SpringBootTestAnnotation@b492619e], resourceBasePath = "src/main/webapp", contextLoader = org.springframework.boot.test.context.SpringBootContextLoader, parent = null]
+	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:145)
+	at org.springframework.test.context.support.DefaultTestContext.getApplicationContext(DefaultTestContext.java:130)
+	at org.springframework.test.context.web.ServletTestExecutionListener.setUpRequestContextIfNecessary(ServletTestExecutionListener.java:200)
+	at org.springframework.test.context.web.ServletTestExecutionListener.prepareTestInstance(ServletTestExecutionListener.java:139)
+	at org.springframework.test.context.TestContextManager.prepareTestInstance(TestContextManager.java:260)
+	at org.springframework.test.context.junit.jupiter.SpringExtension.postProcessTestInstance(SpringExtension.java:159)
+	at java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.accept(ForEachOps.java:184)
+	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:197)
+	at java.base/java.util.stream.ReferencePipeline$2$1.accept(ReferencePipeline.java:179)
+	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:197)
+	at java.base/java.util.ArrayList$ArrayListSpliterator.forEachRemaining(ArrayList.java:1708)
+	at java.base/java.util.stream.AbstractPipeline.copyInto(AbstractPipeline.java:509)
+	at java.base/java.util.stream.AbstractPipeline.wrapAndCopyInto(AbstractPipeline.java:499)
+	at java.base/java.util.stream.ForEachOps$ForEachOp.evaluateSequential(ForEachOps.java:151)
+	at java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.evaluateSequential(ForEachOps.java:174)
+	at java.base/java.util.stream.AbstractPipeline.evaluate(AbstractPipeline.java:234)
+	at java.base/java.util.stream.ReferencePipeline.forEach(ReferencePipeline.java:596)
+	at java.base/java.util.Optional.orElseGet(Optional.java:364)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
