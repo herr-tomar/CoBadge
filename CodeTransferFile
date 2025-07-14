@@ -1,54 +1,14 @@
-@Test
-void assertThatDisputeFolderDetailsReturnsExpectedResult() throws Exception {
-    // Given
-    DisputeFolderIdentifierDto folderId = DisputeFolderIdentifierDto.newBuilder()
-            .setDisputeFolderReference("116855")
-            .build();
 
-    AmountDto transactionAmount = AmountDto.newBuilder()
-            .setValue(4100)
-            .setExponent(2)
-            .setIsoCode("EUR")
-            .build();
-
-    DataDto data = DataDto.newBuilder()
-            .setIssuerId("1001")
-            .setDisputeFolderIdentifier(folderId)
-            .setTransactionAmount(transactionAmount)
-            .setTransactionTime(Timestamps.parse("2024-12-09T23:00:00Z"))
-            .setStatusCode("OPEN")
-            .build();
-
-    ResponseMetadataDto metadata = ResponseMetadataDto.newBuilder()
-            .setCorrelationId("test-correlation-id")
-            .setStatusCode(200)
-            .build();
-
-    DisputeResponseDto expectedResponse = DisputeResponseDto.newBuilder()
-            .setResponseMetadata(metadata)
-            .setData(data)
-            .build();
-
-    String jsonResponse = JsonFormat.printer()
-            .includingDefaultValueFields()
-            .print(expectedResponse);
-
-    System.out.println("Sending Mock JSON: " + jsonResponse);
-
-    mockWebServer.enqueue(new MockResponse()
-            .setResponseCode(200)
-            .setBody(jsonResponse)
-            .addHeader("Content-Type", "application/json"));
-
-    // When
-    DisputeResponseDto result = disputeDetailService.getDisputeFolderDetails("1001", "116855", null);
-
-    // Then
-    System.out.println("Parsed Result: " + result);
-    assertThat(result).isNotNull();
-    assertThat(result.hasData()).as("Expected data section").isTrue();
-    assertThat(result.getData().getDisputeFolderIdentifier().getDisputeFolderReference())
-            .as("Expected disputeFolderReference").isEqualTo("116855");
-    assertThat(result.getData().getIssuerId()).isEqualTo("1001");
-    assertThat(result.getData().getStatusCode()).isEqualTo("OPEN");
 }
+2025-07-14T17:24:54.527+02:00 ERROR 32604 --- [uui] [           main] o.p.d.s.impl.DisputeDetailServiceImpl    : Exception during dispute detail retrieval
+
+java.lang.IllegalArgumentException: URI with undefined scheme
+	at java.net.http/jdk.internal.net.http.common.Utils.newIAE(Utils.java:326) ~[java.net.http:na]
+	Suppressed: reactor.core.publisher.FluxOnAssembly$OnAssemblyException: 
+Error has been observed at the following site(s):
+	*__checkpoint ⇢ Request to GET $external.base-url%7D/issuers/1001/disputes/116855 [DefaultWebClient]
+Original Stack Trace:
+		at java.net.http/jdk.internal.net.http.common.Utils.newIAE(Utils.java:326) ~[java.net.http:na]
+		at java.net.http/jdk.internal.net.http.HttpRequestBuilderImpl.checkURI(HttpRequestBuilderImpl.java:79) ~[java.net.http:na]
+		at java.net.http/jdk.internal.net.http.HttpRequestBuilderImpl.<init>(HttpRequestBuilderImpl.java:55) ~[java.net.http:na]
+		at java.net.http/java.net.http.HttpRequest.newB
