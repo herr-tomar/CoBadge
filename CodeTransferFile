@@ -1,3 +1,14 @@
+dispute:
+  base-url: http://4.239.136.24:43001
+  auth:
+    username: WS_OSPLUS_IBO/FI_STD_SERVICE_CONTRACT/DEFAULT_MANDATOR
+    password: DEFAULT_MANDATOR
+  paths:
+    lookup-disputes: /api/v2/issuers/{issuerId}/cards/{cardReference}/disputes
+    dispute-details: /api/v2/issuers/{issuerId}/disputes/{disputeFolderReference}
+
+----------------------------------------------------
+
 package osplus.pkptuna.dispute.service.impl;
 
 import com.google.protobuf.util.JsonFormat;
@@ -26,8 +37,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(classes = {AplTestRunner.class, ProjecteigeneTestConfiguration.class},
         webEnvironment = SpringBootTest.WebEnvironment.MOCK,
-        properties= {"apl.application.name=uui",
-        "apl.application.version=0.0.1-TEST"})
+        properties= {
+        "apl.application.name=uui",
+        "apl.application.version=0.0.1-TEST",
+                "dispute.auth.username=testuser",
+                "dispute.auth.password=testpass",
+                "dispute.paths.dispute-details=/issuers/{issuerId}/disputes/{disputeFolderReference}"})
+
+
 @AutoConfigureMockMvc
 class DisputeDetailServiceImplTest extends BaseAplTest {
 
@@ -147,4 +164,31 @@ class DisputeDetailServiceImplTest extends BaseAplTest {
         assertThat(result).isNotNull();
         assertThat(result.hasData()).isFalse();
     }
+}
+
+-------------------------
+
+package osplus.pkptuna.dispute.service.impl;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.reactive.function.client.WebClient;
+import osplus.pkptuna.dispute.config.DisputeServiceProperties;
+
+@Configuration
+public class ProjecteigeneTestConfiguration {
+
+    @Bean
+    public WebClient webClient(@Value("$external.basr-url}") String baseUrl) {
+        return WebClient.builder()
+                .baseUrl(baseUrl)
+                .build();
+    }
+
+    @Bean
+    public DisputeDetailServiceImpl disputeDetailService(WebClient webClient, DisputeServiceProperties props) {
+        return new DisputeDetailServiceImpl(webClient, props);
+    }
+
 }
