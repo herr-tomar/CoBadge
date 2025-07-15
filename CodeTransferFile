@@ -1,102 +1,102 @@
-package osplus.pkptuna.hazelcast.flows;
-
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.hazelcast.core.HazelcastInstance;
-
-/**
- * Diese Schnittstelle definiert den vollständigen Verarbeitungszyklus eines
- * Nachrichtenflusses (Flow) in einem verteilten System mit Hazelcast.
- *
- * @param <Req> der Typ der eingehenden Anfrage (Deserialisiert)
- * @param <Res> der Typ der Antwort
- */
-public interface FlowHandler<Req, Res> {
-
-    /**
-     * Deserialisiert die empfangenen Daten in ein Anfrageobjekt.
-     *
-     * @param data das empfangene Byte-Array
-     * @return deserialisierte Anfrage
-     * @throws InvalidProtocolBufferException bei Deserialisierungsfehlern
-     */
-    Req deserializeRequest(byte[] data) throws InvalidProtocolBufferException;
-
-    /**
-     * Extrahiert die eindeutige Korrelations-ID aus einer Anfrage.
-     *
-     * @param request das Anfrageobjekt
-     * @return Korrelations-ID als String
-     */
-    String extractCorrelationId(Req request);
-
-    /**
-     * Führt die fachliche Verarbeitung einer Anfrage durch.
-     *
-     * @param request die eingehende Anfrage
-     * @return Ergebnis der Verarbeitung
-     */
-    Res handleRequest(Req request);
-
-    /**
-     * Verpackt das Antwortobjekt gemeinsam mit der Korrelations-ID.
-     *
-     * @param correlationId eindeutige ID der Anfrage
-     * @param result        das Antwortobjekt
-     * @return eingepackte Antwort (z.B. DTO oder MessageEnvelope)
-     */
-    Object wrapResponse(String correlationId, Res result);
-
-    /**
-     * Sendet die verarbeitete Antwort über Hazelcast Reliable Topic.
-     *
-     * @param hazelcastInstance Hazelcast-Instanz
-     * @param topicName         Zieltopic
-     * @param response          die gesendete Antwort
-     */
-    void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Object response);
-
-    /**
-     * Gibt den Namen des Flows zurück (z.B. für Registrierung oder Logging).
-     *
-     * @return Flow-Name
-     */
-    String getFlowName();
-}
-
------
-
-
 package osplus.pkptuna.hazelcast.config;
 
-import osplus.apl.core.api.AplComponent;
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
 import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
 import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
+import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
 
-/**
- * Bootstrap-Klasse zur Initialisierung der Hazelcast-Komponenten beim Start.
- * Ruft nach dem Start {@code initRouters()} und {@code startPolling()} auf.
- */
-@AplComponent
-public class HazelcastFlowBootstrap {
+import java.util.List;
+import java.util.Map;
 
-    private final GenericHazelcastRouter router;
-    private final GenericHazelcastConsumer consumer;
+@Configuration
+public class RealFlowHandlerTestConfiguration {
 
-    public HazelcastFlowBootstrap(GenericHazelcastRouter router,
-                                  GenericHazelcastConsumer consumer) {
-        this.router = router;
-        this.consumer = consumer;
+    @Bean(destroyMethod = "shutdown")
+    public HazelcastInstance hazelcastInstance() {
+        return Hazelcast.newHazelcastInstance(new Config());
     }
 
-    /**
-     * Wird nach Initialisierung automatisch aufgerufen.
-     * Startet das Routing und Polling für alle konfigurierten Flows.
-     */
-    public void startFlowInfra() {
-        router.initRouters();
-        consumer.startPolling();
+    @Bean
+    public ReliableTopicPublisher reliableTopicPublisher(HazelcastInstance hazelcastInstance) {
+        return new ReliableTopicPublisher(hazelcastInstance);
+    }
+
+    @Bean
+    public FlowHandlerRegistry<String, FlowHandler<?, ?>> flowHandlerRegistry() {
+        return new FlowHandlerRegistry<>();
+    }
+
+    @Bean
+    public FlowHandler<String, String> testFlowHandler() {
+        return new FlowHandler<>() {
+            @Override
+            public String deserializeRequest(byte[] data) {
+                return new String(data);
+            }
+
+            @Override
+            public String extractCorrelationId(String request) {
+                return "corr-id-" + request.hashCode();
+            }
+
+            @Override
+            public String handleRequest(String request) {
+                return request.toUpperCase();
+            }
+
+            @Override
+            public Object wrapResponse(String correlationId, String result) {
+                return correlationId + ":" + result;
+            }
+
+            @Override
+            public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Object response) {
+                hazelcastInstance.getReliableTopic(topicName).publish(response);
+            }
+
+            @Override
+            public String getFlowName() {
+                return "myFlow";
+            }
+        };
+    }
+
+    @Bean
+    public GenericHazelcastRouter genericHazelcastRouter(
+            FlowHandlerRegistry<String, FlowHandler<?, ?>> registry,
+            ReliableTopicPublisher publisher
+    ) {
+        return new GenericHazelcastRouter(registry, publisher);
+    }
+
+    @Bean
+    public GenericHazelcastConsumer genericHazelcastConsumer(
+            FlowHandlerRegistry<String, FlowHandler<?, ?>> registry,
+            HazelcastInstance hazelcastInstance
+    ) {
+        return new GenericHazelcastConsumer(registry, hazelcastInstance);
+    }
+
+    @Bean
+    public HazelcastFlowBootstrap hazelcastFlowBootstrap(GenericHazelcastRouter router,
+                                                         GenericHazelcastConsumer consumer) {
+        return new HazelcastFlowBootstrap(router, consumer);
+    }
+
+    @Bean
+    public FlowHandlerInitializer flowHandlerInitializer(
+            FlowHandlerRegistry<String, FlowHandler<?, ?>> registry,
+            HazelcastFlowBootstrap bootstrap,
+            FlowHandler<String, String> testFlowHandler
+    ) {
+        FlowConfig config = new FlowConfig("myFlow", "req", "res", "map-", 1);
+        Map<String, FlowHandler<?, ?>> handlerMap = Map.of("myFlow", testFlowHandler);
+        return new FlowHandlerInitializer(List.of(config), handlerMap, registry, bootstrap);
     }
 }
-
------
-
