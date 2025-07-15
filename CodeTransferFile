@@ -1,14 +1,132 @@
+package osplus.pkptuna.dispute.service.impl;
+
+import com.google.protobuf.util.JsonFormat;
+import okhttp3.mockwebserver.MockResponse;
+import okhttp3.mockwebserver.MockWebServer;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.http.HttpHeaders;
+import org.springframework.web.reactive.function.client.WebClient;
+import osplus.pkptuna.dispute.config.DisputeServiceProperties;
+import osplus.pkptuna.dispute.lookup.model.DisputeFolderDataDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeFolderIdentifierDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
+import osplus.pkptuna.dispute.lookup.model.FullDisputeLookupResponseDto;
+import osplus.pkptuna.dispute.lookup.model.ResponseMetadataDto;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class DisputeServiceImplTest {
+
+    private DisputeServiceImpl disputeService;
+    private MockWebServer mockWebServer;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        mockWebServer = new MockWebServer();
+        mockWebServer.start();
+
+        WebClient webClient = WebClient.builder()
+                .baseUrl(mockWebServer.url("/").toString())
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, "application/json").build();
+
+        DisputeServiceProperties props = Mockito.mock(DisputeServiceProperties.class);
+        DisputeServiceProperties.Auth auth = Mockito.mock(DisputeServiceProperties.Auth.class);
+        DisputeServiceProperties.Paths paths = Mockito.mock(DisputeServiceProperties.Paths.class);
+
+        Mockito.when(props.auth()).thenReturn(auth);
+        Mockito.when(props.paths()).thenReturn(paths);
+        Mockito.when(auth.username()).thenReturn("testuser");
+        Mockito.when(auth.password()).thenReturn("testpass");
+        Mockito.when(paths.lookupDisputes()).thenReturn("/issuers/{issuerId}/cards/{cardReference}/disputes");
+
+        disputeService = new DisputeServiceImpl(webClient, props);
+    }
+
+    @AfterEach
+    void tearDown() throws Exception {
+        mockWebServer.shutdown();
+    }
+
+    @Test
+    void assertThatLookupDisputeFolderReturnsExpectedResult() throws Exception {
+        // Build responseMetadata
+        ResponseMetadataDto metadata = ResponseMetadataDto.newBuilder()
+                .setCorrelationId("test-correlation-id")
+                .setStatusCode(200)
+                .setStatusMessage("Executed successfully")
+                .build();
+
+        // Build disputeFolder entry
+        DisputeFolderDataDto folderData = DisputeFolderDataDto.newBuilder()
+                .setDisputeFolderIdentifier(
+                        DisputeFolderIdentifierDto.newBuilder()
+                                .setDisputeFolderReference("116855")
+                                .build())
+                .setStatusCode("OPEN")
+                .build();
+
+        // Build full top-level response (NOTE: data is repeated directly)
+        FullDisputeLookupResponseDto fullResponse = FullDisputeLookupResponseDto.newBuilder()
+                .setResponseMetadata(metadata)
+                .addData(folderData) // << HERE is the correction
+                .build();
+
+        // Convert proto to JSON using protobuf JsonFormat
+        String jsonResponse = JsonFormat.printer()
+                .includingDefaultValueFields()
+                .print(fullResponse);
+
+        // Mock the HTTP response
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(jsonResponse));
+
+        // Call the service
+        DisputeLookupResponseDto result = disputeService.lookupDisputeFolder("1001", "CARD123");
+
+        // Validate result
+        assertThat(result).isNotNull();
+        assertThat(result.getDisputeFolderExists()).isTrue();
+        assertThat(result.getDisputeFoldersCount()).isEqualTo(1);
+        assertThat(result.getDisputeFolders(0).getDisputeFolderReference()).isEqualTo("116855");
+        assertThat(result.getDisputeFolders(0).getStatusCode()).isEqualTo("OPEN");
+    }
+
+    @Test
+    void assertThatLookupDisputeFolderReturnsEmptyResult() throws Exception {
+        // Build responseMetadata
+        ResponseMetadataDto metadata = ResponseMetadataDto.newBuilder()
+                .setCorrelationId("test-correlation-id")
+                .setStatusCode(200)
+                .setStatusMessage("Executed successfully")
+                .build();
+
+        // Build full top-level response with empty data
+        FullDisputeLookupResponseDto fullResponse = FullDisputeLookupResponseDto.newBuilder()
+                .setResponseMetadata(metadata)
+                // no data entries added
+                .build();
+
+        // Convert proto to JSON using protobuf JsonFormat
+        String jsonResponse = JsonFormat.printer()
+                .includingDefaultValueFields()
+                .print(fullResponse);
+
+        // Mock the HTTP response
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setBody(jsonResponse));
+
+        // Call the service
+        DisputeLookupResponseDto result = disputeService.lookupDisputeFolder("1001", "CARD123");
+
+        // Validate result: disputeFolderExists should be false
+        assertThat(result).isNotNull();
+        assertThat(result.getDisputeFolderExists()).isFalse();
+        assertThat(result.getDisputeFoldersCount()).isEqualTo(0);
+    }
 
 }
-2025-07-14T17:24:54.527+02:00 ERROR 32604 --- [uui] [           main] o.p.d.s.impl.DisputeDetailServiceImpl    : Exception during dispute detail retrieval
-
-java.lang.IllegalArgumentException: URI with undefined scheme
-	at java.net.http/jdk.internal.net.http.common.Utils.newIAE(Utils.java:326) ~[java.net.http:na]
-	Suppressed: reactor.core.publisher.FluxOnAssembly$OnAssemblyException: 
-Error has been observed at the following site(s):
-	*__checkpoint ⇢ Request to GET $external.base-url%7D/issuers/1001/disputes/116855 [DefaultWebClient]
-Original Stack Trace:
-		at java.net.http/jdk.internal.net.http.common.Utils.newIAE(Utils.java:326) ~[java.net.http:na]
-		at java.net.http/jdk.internal.net.http.HttpRequestBuilderImpl.checkURI(HttpRequestBuilderImpl.java:79) ~[java.net.http:na]
-		at java.net.http/jdk.internal.net.http.HttpRequestBuilderImpl.<init>(HttpRequestBuilderImpl.java:55) ~[java.net.http:na]
-		at java.net.http/java.net.http.HttpRequest.newB
