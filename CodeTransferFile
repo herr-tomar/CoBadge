@@ -7,10 +7,9 @@ void assertThatLookupDisputeFolderReturnsExpectedResult() throws Exception {
             .setStatusMessage("Executed successfully")
             .build();
 
-    // Build disputeFolderIdentifier with required fields
+    // Build disputeFolderIdentifier with only existing fields
     DisputeFolderIdentifierDto folderIdentifier = DisputeFolderIdentifierDto.newBuilder()
             .setDisputeFolderReference("116855")
-            .setIssuerDisputeExternalReference("REF123")
             .build();
 
     // Build folder data
@@ -19,7 +18,7 @@ void assertThatLookupDisputeFolderReturnsExpectedResult() throws Exception {
             .setStatusCode("OPEN")
             .build();
 
-    // Build full top-level response
+    // Build full response
     FullDisputeLookupResponseDto fullResponse = FullDisputeLookupResponseDto.newBuilder()
             .setResponseMetadata(metadata)
             .addData(folderData)
@@ -40,23 +39,24 @@ void assertThatLookupDisputeFolderReturnsExpectedResult() throws Exception {
 
     // Assertions
     assertThat(result).isNotNull();
-    assertThat(result.getDisputeFolderExists()).as("Expected data section").isTrue();
+    assertThat(result.getDisputeFolderExists()).as("Expected folder data presence").isTrue();
     assertThat(result.getDisputeFoldersCount()).isEqualTo(1);
     assertThat(result.getDisputeFolders(0).getDisputeFolderReference()).isEqualTo("116855");
     assertThat(result.getDisputeFolders(0).getStatusCode()).isEqualTo("OPEN");
 }
+
 ---
 
 @Test
 void assertThatLookupDisputeFolderReturnsEmptyResult() throws Exception {
-    // Build metadata
+    // Build responseMetadata
     ResponseMetadataDto metadata = ResponseMetadataDto.newBuilder()
             .setCorrelationId("test-correlation-id")
             .setStatusCode(200)
             .setStatusMessage("Executed successfully")
             .build();
 
-    // Build full response with empty data
+    // Build full response with empty data list
     FullDisputeLookupResponseDto fullResponse = FullDisputeLookupResponseDto.newBuilder()
             .setResponseMetadata(metadata)
             .build();
@@ -79,3 +79,4 @@ void assertThatLookupDisputeFolderReturnsEmptyResult() throws Exception {
     assertThat(result.getDisputeFolderExists()).isFalse();
     assertThat(result.getDisputeFoldersCount()).isEqualTo(0);
 }
+
