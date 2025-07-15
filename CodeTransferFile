@@ -1,47 +1,56 @@
-package osplus.pkptuna.protobuf.util;
+package osplus.pkptuna.hazelcast.config;
 
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestDto;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
 
-/**
- * Unit-Tests für die Hilfsklasse {@link ProtobufJsonUtil}.
- */
-class ProtobufJsonUtilTest {
+import java.util.List;
+import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+
+class FlowHandlerInitializerTest {
+
+    /**
+     * Positiver Test: Handler wird korrekt registriert.
+     */
     @Test
-    void shouldConvertProtoToJsonAndBack() {
-        // Protobuf-Objekt erzeugen
-        DisputeLookupRequestDto original = DisputeLookupRequestDto.newBuilder()
-                .setIssuerId("issuer-001")
-                .setCardReference("card-XYZ")
-                .build();
+    void testRegisterHandlers_successfulRegistration() {
+        FlowHandler handler = mock(FlowHandler.class);
+        HazelcastFlowBootstrap hazelcastFlowBootstrap = mock(HazelcastFlowBootstrap.class);
+        FlowHandlerRegistry<String, FlowHandler> registry = spy(new FlowHandlerRegistry<>());
 
-        // In JSON konvertieren
-        String json = ProtobufJsonUtil.printProtoToJson(original);
-        Assertions.assertTrue(json.contains("issuerId"));
-        Assertions.assertTrue(json.contains("cardReference"));
+        FlowConfig config = new FlowConfig("myFlow", "req", "res", "map-", 1);
+        Map<String, FlowHandler> handlerMap = Map.of("myFlow", handler);
 
-        // Zurück in Protobuf parsen
-        DisputeLookupRequestDto.Builder builder = DisputeLookupRequestDto.newBuilder();
-        ProtobufJsonUtil.parseJsonToProto(json, builder);
-        DisputeLookupRequestDto parsed = builder.build();
-
-        Assertions.assertEquals(original, parsed);
-    }
-
-    @Test
-    void shouldFixTimestampsInJson() {
-        String raw = "{\"timestamp\":\"2024-12-10T15:30:00.000+0200\"}";
-        String fixed = ProtobufJsonUtil.fixTimestamps(raw);
-        Assertions.assertTrue(fixed.contains("+02:00"));
-    }
-
-    @Test
-    void shouldThrowExceptionOnInvalidJson() {
-        DisputeLookupRequestDto.Builder builder = DisputeLookupRequestDto.newBuilder();
-        Assertions.assertThrows(IllegalArgumentException.class, () ->
-                ProtobufJsonUtil.parseJsonToProto("{invalid_json}", builder)
+        FlowHandlerInitializer initializer = new FlowHandlerInitializer(
+                List.of(config), handlerMap, registry, hazelcastFlowBootstrap
         );
+
+        assertDoesNotThrow(initializer::registerHandlers);
+        assertTrue(registry.contains("myFlow"));
+    }
+
+    /**
+     * Negativer Test: Kein Handler für Flow vorhanden → Exception.
+     */
+    @Test
+    void testRegisterHandlers_missingHandlerThrowsException() {
+        FlowConfig config = new FlowConfig("missingFlow", "req", "res", "map-", 1);
+        Map<String, FlowHandler> handlerMap = Map.of(); // leer
+
+        HazelcastFlowBootstrap hazelcastFlowBootstrap = mock(HazelcastFlowBootstrap.class);
+
+        FlowHandlerRegistry<String, FlowHandler> registry = new FlowHandlerRegistry<>();
+        FlowHandlerInitializer initializer = new FlowHandlerInitializer(
+                List.of(config), handlerMap, registry, hazelcastFlowBootstrap
+        );
+
+        Exception ex = assertThrows(IllegalArgumentException.class, initializer::registerHandlers);
+        assertTrue(ex.getMessage().contains("No FlowHandler registered for flow: missingFlow"));
     }
 }
