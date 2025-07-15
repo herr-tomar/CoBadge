@@ -100,3 +100,41 @@ public class RealFlowHandlerTestConfiguration {
         return new FlowHandlerInitializer(List.of(config), handlerMap, registry, bootstrap);
     }
 }
+---
+
+package osplus.pkptuna.hazelcast.config;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+@SpringBootTest(classes = { RealFlowHandlerTestConfiguration.class })
+class FlowHandlerInitializerTest {
+
+    @Autowired
+    FlowHandlerInitializer initializer;
+
+    @Autowired
+    FlowHandlerRegistry<String, FlowHandler<?, ?>> registry;
+
+    @Test
+    void testRegisterHandlers_successfulRegistration() {
+        assertDoesNotThrow(initializer::registerHandlers);
+        assertTrue(registry.contains("myFlow"));  // Flow name defined in test config
+    }
+
+    @Test
+    void testRegisterHandlers_missingHandlerThrowsException() {
+        FlowConfig config = new FlowConfig("missingFlow", "req", "res", "map-", 1);
+        FlowHandlerInitializer missingInit = new FlowHandlerInitializer(
+                java.util.List.of(config), java.util.Map.of(), registry, null
+        );
+
+        Exception ex = assertThrows(IllegalArgumentException.class, missingInit::registerHandlers);
+        assertTrue(ex.getMessage().contains("No FlowHandler registered for flow: missingFlow"));
+    }
+}
