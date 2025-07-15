@@ -1,6 +1,7 @@
 package osplus.pkptuna.hazelcast.pubsub;
 
 import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,10 +17,7 @@ import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(classes = {AplTestRunner.class, FlowHandlerTestConfiguration.class},
         webEnvironment = SpringBootTest.WebEnvironment.MOCK,
@@ -59,12 +57,14 @@ public class GenericHazelcastConsumerTest extends BaseAplTest {
         testCollector.clear();
         FlowConfig config = new FlowConfig("myFlow", "req-topic", "res-topic", "map-", 1);
 
+        IMap<Object, Object> testMap = hazelcastInstance.getMap("map-0");
+        testMap.put("corrId1", "request1");
+
         consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
         consumer.pollRequestMaps();
 
         assertTrue(testCollector.wasSent("res-topic"), "Expected response to be sent on topic");
         assertEquals("wrappedResponse", testCollector.getSent("res-topic"));
-
     }
 
     /**
@@ -75,11 +75,13 @@ public class GenericHazelcastConsumerTest extends BaseAplTest {
         testCollector.clear();
         FlowConfig config = new FlowConfig("unknownFlow", "requestTopic", "responseTopic", "map0", 1);
 
+        IMap<Object, Object> testMap = hazelcastInstance.getMap("map00");
+        testMap.put("id1", "request");
+
         consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
         consumer.pollRequestMaps();
 
         assertFalse(testCollector.wasSent("responseTopic"), "No response should be sent for unknown flow");
-
     }
 
     /**
@@ -90,6 +92,9 @@ public class GenericHazelcastConsumerTest extends BaseAplTest {
         testCollector.clear();
         FlowConfig config = new FlowConfig("myFlow", "requestTopic", "responseTopic", "map0", 1);
 
+        IMap<Object, Object> testMap = hazelcastInstance.getMap("map00");
+        testMap.put("id123", "faultyRequest");
+
         FlowHandler originalHandler = handlerRegistry.getHandler("myFlow");
         assertNotNull(originalHandler);
 
@@ -97,6 +102,5 @@ public class GenericHazelcastConsumerTest extends BaseAplTest {
         consumer.pollRequestMaps();
 
         assertFalse(testCollector.wasSent("responseTopic"), "No response should be sent when handler fails");
-
     }
 }
