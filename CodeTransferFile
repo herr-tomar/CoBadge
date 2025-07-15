@@ -1,99 +1,177 @@
-@Bean
-public TestCollector testCollector() {
-    return new TestCollector();
-}
+package osplus.pkptuna.hazelcast.test.config;
 
-@Bean
-public FlowHandler sampleFlowHandler(TestCollector testCollector) {
-    return new FlowHandler() {
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import org.mockito.Mockito;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import osplus.apl.core.api.administration.metrics.MetricsService;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.config.FlowHandlerInitializer;
+import osplus.pkptuna.hazelcast.config.HazelcastConfigProps;
+import osplus.pkptuna.hazelcast.config.HazelcastFlowBootstrap;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
 
-        @Override
-        public Object handleRequest(Object request) {
-            if ("faultyRequest".equals(request)) {
-                throw new RuntimeException("Expected failure");
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.mockito.Mockito.mock;
+
+
+@TestConfiguration
+@EnableConfigurationProperties(HazelcastConfigProps.class)
+public class FlowHandlerTestConfiguration {
+
+    @Bean
+    public HazelcastInstance hazelcastInstance() {
+        Config config = new Config();
+        config.setClusterName("test-cluster");
+        config.getNetworkConfig().setPortAutoIncrement(true);
+        config.setProperty("hazelcast.logging.type", "slf4j");
+        return Hazelcast.newHazelcastInstance(config);
+    }
+
+    @Bean
+    public FlowHandlerRegistry<String, FlowHandler> handlerRegistry() {
+        FlowHandlerRegistry<String, FlowHandler> registry = new FlowHandlerRegistry<>();
+        registry.register("myFlow", sampleFlowHandler());
+        return registry;
+    }
+
+    @Bean
+    public FlowHandlerInitializer flowHandlerInitializer(List<FlowConfig> configs,
+                                                         Map<String, FlowHandler> handlerMap,
+                                                         FlowHandlerRegistry<String, FlowHandler> registry,
+                                                         HazelcastFlowBootstrap bootstrap) {
+        return new FlowHandlerInitializer(configs, handlerMap, registry, bootstrap);
+    }
+
+    @Bean
+    public FlowConfig flowConfig() {
+        return new FlowConfig("myFlow", "req-topic", "res-topic", "map-", 1);
+    }
+
+    @Bean
+    public List<FlowConfig> flowConfigs(FlowConfig flowConfig) {
+        return List.of(flowConfig);
+    }
+
+    @Bean
+    public Map<String, FlowHandler> handlerMap() {
+        return Map.of("myFlow", sampleFlowHandler());
+    }
+
+    @Bean
+    public FlowHandler sampleFlowHandler() {
+        return new FlowHandler<Object, Object>() {
+
+            @Override
+            public Object deserializeRequest(byte[] data) throws InvalidProtocolBufferException {
+                return mock(Message.class);
             }
-            return "response1";
+
+            @Override
+            public String extractCorrelationId(Object request) {
+                return "corr-" + request.hashCode();
+            }
+
+            @Override
+            public Object handleRequest(Object request) {
+                if ("faultyRequest".equals(request)) {
+                    throw new RuntimeException("Expected failure");
+                }
+                return "response1";
+            }
+
+            @Override
+            public Object wrapResponse(String correlationId, Object result) {
+                return "wrappedResponse";
+            }
+
+            @Override
+            public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Object response) {
+                testCollector.recordSent(topic, response);
+            }
+
+            @Override
+            public String getFlowName() {
+                return "myFlow";
+            }
+        };
+    }
+
+    @Bean
+    public HazelcastFlowBootstrap hazelcastFlowBootstrap(GenericHazelcastRouter router,
+                                                         GenericHazelcastConsumer consumer) {
+        return new HazelcastFlowBootstrap(router, consumer);
+    }
+
+    @Bean
+    public GenericHazelcastRouter hazelcastRouter(MetricsService metricsService,
+                                                  HazelcastInstance hazelcastInstance,
+                                                  List<FlowConfig> flowConfigs,
+                                                  FlowHandlerRegistry<String, FlowHandler> registry) {
+        return new GenericHazelcastRouter(metricsService, hazelcastInstance, flowConfigs, registry);
+    }
+
+    @Bean
+    public GenericHazelcastConsumer hazelcastConsumer(MetricsService metricsService,
+                                                      HazelcastInstance hazelcastInstance,
+                                                      ThreadPoolTaskScheduler scheduler,
+                                                      List<FlowConfig> flowConfigs,
+                                                      FlowHandlerRegistry<String, FlowHandler> registry,
+                                                      HazelcastConfigProps hazelcastConfigProps) {
+        return new GenericHazelcastConsumer(metricsService, hazelcastInstance, scheduler,
+                flowConfigs, registry, hazelcastConfigProps);
+    }
+
+    @Bean("flowTaskScheduler")
+    public ThreadPoolTaskScheduler taskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(1);
+        scheduler.setThreadNamePrefix("hazelcast-scheduler-");
+        scheduler.initialize();
+        return scheduler;
+    }
+
+    @Bean
+    public TestCollector testCollector() {
+        return new TestCollector();
+    }
+
+    @Bean
+    @Primary
+    public MetricsService metricsService() {
+        return mock(MetricsService.class);
+    }
+
+    public static class TestCollector {
+        private final Map<String, Object> sentResponses = new HashMap<>();
+
+        public void recordSent(String topic, Object response) {
+            sentResponses.put(topic, response);
         }
 
-        @Override
-        public Object wrapResponse(Object correlationId, Object response) {
-            return "wrappedResponse";
+        public Object getSent(String topic) {
+            return sentResponses.get(topic);
         }
 
-        @Override
-        public void sendResponse(HazelcastInstance instance, String topic, Object response) {
-            testCollector.recordSent(topic, response);
+        public boolean wasSent(String topic) {
+            return sentResponses.containsKey(topic);
         }
-    };
-}
 
-public static class TestCollector {
-    private final Map<String, Object> sentResponses = new HashMap<>();
-
-    public void recordSent(String topic, Object response) {
-        sentResponses.put(topic, response);
+        public void clear() {
+            sentResponses.clear();
+        }
     }
 
-    public Object getSent(String topic) {
-        return sentResponses.get(topic);
-    }
-
-    public boolean wasSent(String topic) {
-        return sentResponses.containsKey(topic);
-    }
-
-    public void clear() {
-        sentResponses.clear();
-    }
-}
-
-
-------
-
-@Autowired
-private FlowHandlerTestConfiguration.TestCollector testCollector;
-
-
-
------
-
-
-@Test
-public void testPollRequestMaps_PositiveFlow() {
-    testCollector.clear();
-    FlowConfig config = new FlowConfig("sampleFlow", "requestTopic", "responseTopic", "map0", 1);
-
-    consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
-    consumer.pollRequestMaps();
-
-    assertTrue(testCollector.wasSent("responseTopic"), "Expected response to be sent on topic");
-    assertEquals("wrappedResponse", testCollector.getSent("responseTopic"));
-}
-
-@Test
-public void testPollRequestMaps_NoHandlerFound() {
-    testCollector.clear();
-    FlowConfig config = new FlowConfig("unknownFlow", "requestTopic", "responseTopic", "map0", 1);
-
-    consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
-    consumer.pollRequestMaps();
-
-    assertFalse(testCollector.wasSent("responseTopic"), "No response should be sent for unknown flow");
-}
-
-@Test
-public void testPollRequestMaps_HandlerThrowsException() {
-    testCollector.clear();
-    FlowConfig config = new FlowConfig("sampleFlow", "requestTopic", "responseTopic", "map0", 1);
-
-    // Add test data for failure scenario
-    // Assuming your HazelcastInstance is preloaded in TestConfig
-    FlowHandler originalHandler = handlerRegistry.getHandler("sampleFlow");
-    assertNotNull(originalHandler);
-
-    // Simulate faulty request via test config bean logic
-    consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
-    consumer.pollRequestMaps();
-
-    assertFalse(testCollector.wasSent("responseTopic"), "No response should be sent when handler fails");
 }
