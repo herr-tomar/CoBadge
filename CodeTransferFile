@@ -1,15 +1,20 @@
+
 package osplus.pkptuna.hazelcast.pubsub;
 
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import osplus.apl.core.test.utils.AplTestRunner;
+import osplus.apl.core.test.utils.BaseAplTest;
 import osplus.pkptuna.hazelcast.config.FlowConfig;
-import osplus.pkptuna.hazelcast.config.FlowHandlerTestConfiguration;
 import osplus.pkptuna.hazelcast.config.HazelcastConfigProps;
 import osplus.pkptuna.hazelcast.flows.FlowHandler;
 import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
 
 import java.util.HashMap;
 import java.util.List;
@@ -17,8 +22,17 @@ import java.util.Map;
 
 import static org.mockito.Mockito.*;
 
-@SpringBootTest(classes = FlowHandlerTestConfiguration.class)
-public class GenericHazelcastConsumerTest {
+@SpringBootTest(classes = {AplTestRunner.class, FlowHandlerTestConfiguration.class},
+        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+        properties = {
+                "spring.main.allow-bean-definition-overriding=true",
+                "generichazelcast.polling-rate=20",
+                "apl.application.name=uui",
+                "apl.application.version=0.0.1-TEST"
+        })
+@AutoConfigureMockMvc
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+public class GenericHazelcastConsumerTest extends BaseAplTest {
 
     @Autowired
     private HazelcastConfigProps hazelcastConfigProps;
@@ -40,7 +54,7 @@ public class GenericHazelcastConsumerTest {
      */
     @Test
     public void testPollRequestMaps_PositiveFlow() {
-        FlowConfig config = new FlowConfig("sampleFlow", "map", 1, "responseTopic");
+        FlowConfig config = new FlowConfig("sampleFlow", "requestTopic", "responseTopic", "map0", 1);
 
         Map<Object, Object> data = new HashMap<>();
         data.put("corrId1", "request1");
@@ -65,7 +79,7 @@ public class GenericHazelcastConsumerTest {
      */
     @Test
     public void testPollRequestMaps_NoHandlerFound() {
-        FlowConfig config = new FlowConfig("unknownFlow", "map", 1, "none");
+        FlowConfig config = new FlowConfig("unknownFlow", "requestTopic", "responseTopic", "map0", 1);
 
         Map<Object, Object> data = new HashMap<>();
         data.put("id1", "request");
@@ -86,7 +100,7 @@ public class GenericHazelcastConsumerTest {
      */
     @Test
     public void testPollRequestMaps_HandlerThrowsException() {
-        FlowConfig config = new FlowConfig("sampleFlow", "map", 1, "responseTopic");
+        FlowConfig config = new FlowConfig("sampleFlow", "requestTopic", "responseTopic", "map0", 1);
 
         Map<Object, Object> data = new HashMap<>();
         data.put("id123", "faultyRequest");
