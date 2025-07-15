@@ -1,82 +1,47 @@
-@Test
-void assertThatLookupDisputeFolderReturnsExpectedResult() throws Exception {
-    // Build responseMetadata
-    ResponseMetadataDto metadata = ResponseMetadataDto.newBuilder()
-            .setCorrelationId("test-correlation-id")
-            .setStatusCode(200)
-            .setStatusMessage("Executed successfully")
-            .build();
+package osplus.pkptuna.protobuf.util;
 
-    // Build disputeFolderIdentifier with only existing fields
-    DisputeFolderIdentifierDto folderIdentifier = DisputeFolderIdentifierDto.newBuilder()
-            .setDisputeFolderReference("116855")
-            .build();
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestDto;
 
-    // Build folder data
-    DisputeFolderDataDto folderData = DisputeFolderDataDto.newBuilder()
-            .setDisputeFolderIdentifier(folderIdentifier)
-            .setStatusCode("OPEN")
-            .build();
+/**
+ * Unit-Tests für die Hilfsklasse {@link ProtobufJsonUtil}.
+ */
+class ProtobufJsonUtilTest {
 
-    // Build full response
-    FullDisputeLookupResponseDto fullResponse = FullDisputeLookupResponseDto.newBuilder()
-            .setResponseMetadata(metadata)
-            .addData(folderData)
-            .build();
+    @Test
+    void shouldConvertProtoToJsonAndBack() {
+        // Protobuf-Objekt erzeugen
+        DisputeLookupRequestDto original = DisputeLookupRequestDto.newBuilder()
+                .setIssuerId("issuer-001")
+                .setCardReference("card-XYZ")
+                .build();
 
-    // Convert proto to JSON
-    String jsonResponse = JsonFormat.printer()
-            .includingDefaultValueFields()
-            .print(fullResponse);
+        // In JSON konvertieren
+        String json = ProtobufJsonUtil.printProtoToJson(original);
+        Assertions.assertTrue(json.contains("issuerId"));
+        Assertions.assertTrue(json.contains("cardReference"));
 
-    // Enqueue mock response
-    mockWebServer.enqueue(new MockResponse()
-            .setResponseCode(200)
-            .setBody(jsonResponse));
+        // Zurück in Protobuf parsen
+        DisputeLookupRequestDto.Builder builder = DisputeLookupRequestDto.newBuilder();
+        ProtobufJsonUtil.parseJsonToProto(json, builder);
+        DisputeLookupRequestDto parsed = builder.build();
 
-    // Call the service
-    DisputeLookupResponseDto result = disputeService.lookupDisputeFolder("1001", "CARD123");
+        Assertions.assertEquals(original, parsed);
+    }
 
-    // Assertions
-    assertThat(result).isNotNull();
-    assertThat(result.getDisputeFolderExists()).as("Expected folder data presence").isTrue();
-    assertThat(result.getDisputeFoldersCount()).isEqualTo(1);
-    assertThat(result.getDisputeFolders(0).getDisputeFolderReference()).isEqualTo("116855");
-    assertThat(result.getDisputeFolders(0).getStatusCode()).isEqualTo("OPEN");
+    @Test
+    void shouldFixTimestampsInJson() {
+        String raw = "{\"timestamp\":\"2024-12-10T15:30:00.000+0200\"}";
+        String fixed = ProtobufJsonUtil.fixTimestamps(raw);
+        Assertions.assertTrue(fixed.contains("+02:00"));
+    }
+
+    @Test
+    void shouldThrowExceptionOnInvalidJson() {
+        DisputeLookupRequestDto.Builder builder = DisputeLookupRequestDto.newBuilder();
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+                ProtobufJsonUtil.parseJsonToProto("{invalid_json}", builder)
+        );
+    }
 }
-
----
-
-@Test
-void assertThatLookupDisputeFolderReturnsEmptyResult() throws Exception {
-    // Build responseMetadata
-    ResponseMetadataDto metadata = ResponseMetadataDto.newBuilder()
-            .setCorrelationId("test-correlation-id")
-            .setStatusCode(200)
-            .setStatusMessage("Executed successfully")
-            .build();
-
-    // Build full response with empty data list
-    FullDisputeLookupResponseDto fullResponse = FullDisputeLookupResponseDto.newBuilder()
-            .setResponseMetadata(metadata)
-            .build();
-
-    // Convert proto to JSON
-    String jsonResponse = JsonFormat.printer()
-            .includingDefaultValueFields()
-            .print(fullResponse);
-
-    // Enqueue mock response
-    mockWebServer.enqueue(new MockResponse()
-            .setResponseCode(200)
-            .setBody(jsonResponse));
-
-    // Call the service
-    DisputeLookupResponseDto result = disputeService.lookupDisputeFolder("1001", "CARD123");
-
-    // Assertions
-    assertThat(result).isNotNull();
-    assertThat(result.getDisputeFolderExists()).isFalse();
-    assertThat(result.getDisputeFoldersCount()).isEqualTo(0);
-}
-
