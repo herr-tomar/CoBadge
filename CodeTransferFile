@@ -1,9 +1,40 @@
-OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
-OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
-[ERROR] Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 0.408 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.config.FlowHandlerInitializerTest
-[ERROR] osplus.pkptuna.hazelcast.config.FlowHandlerInitializerTest -- Time elapsed: 0.408 s <<< ERROR!
-java.lang.IllegalStateException: Unable to find a @SpringBootConfiguration by searching packages upwards from the test. You can use @ContextConfiguration, @SpringBootTest(classes=...) or other Spring Test supported mechanisms to explicitly declare the configuration classes to load. Classes annotated with @TestConfiguration are not considered.
-	at org.springframework.util.Assert.state(Assert.java:79)
-	at org.springframework.boot.test.context.SpringBootTestContextBootstrapper.findConfigurationClass(SpringBootTestContextBootstrapper.java:246)
-	at org.springframework.boot.test.context.SpringBootTestContextBootstrapper.getOrFindConfigurationClasses(SpringBootTestContextBootstrapper.java:233)
-	at org.springframework.boot.test.context.SpringBootTestContextBootstrapper.processMergedContextConfiguration(SpringBootTestContextBootstrapper.java:150)
+package osplus.pkptuna.hazelcast.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+
+import java.util.List;
+import java.util.Map;
+
+@Configuration
+public class TestFlowHandlerConfiguration {
+
+    @Bean
+    public FlowHandler testFlowHandler() {
+        return new TestFlowHandler(); // Your real implementation (not a mock)
+    }
+
+    @Bean
+    public FlowHandlerRegistry<String, FlowHandler> flowHandlerRegistry() {
+        return new FlowHandlerRegistry<>();
+    }
+
+    @Bean
+    public HazelcastFlowBootstrap hazelcastFlowBootstrap() {
+        return new HazelcastFlowBootstrap(); // if required, or mock here
+    }
+
+    @Bean
+    public FlowHandlerInitializer flowHandlerInitializer(
+            FlowHandlerRegistry<String, FlowHandler> registry,
+            HazelcastFlowBootstrap bootstrap,
+            FlowHandler testFlowHandler
+    ) {
+        FlowConfig config = new FlowConfig("myFlow", "req", "res", "map-", 1);
+        Map<String, FlowHandler> handlers = Map.of("myFlow", testFlowHandler);
+
+        return new FlowHandlerInitializer(List.of(config), handlers, registry, bootstrap);
+    }
+}
