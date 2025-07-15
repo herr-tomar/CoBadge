@@ -1,56 +1,45 @@
 package osplus.pkptuna.hazelcast.flows;
 
-import org.junit.jupiter.api.BeforeEach;
+import com.google.protobuf.Message;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import osplus.pkptuna.hazelcast.config.FlowHandlerTestConfiguration;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
 
+@SpringBootTest(classes = FlowHandlerTestConfiguration.class)
 class FlowHandlerRegistryTest {
 
-    private FlowHandlerRegistry<String, String> registry;
-    private FlowHandler<String, String> mockHandler;
+    @Autowired
+    private FlowHandler sampleFlowHandler; // raw type usage
 
-    @BeforeEach
-    void setUp() {
-        registry = new FlowHandlerRegistry<>();
-        mockHandler = mock(FlowHandler.class);
-    }
-
-    /**
-     * Positiver Test: Handler wird registriert und erfolgreich zurückgegeben.
-     */
     @Test
     void testRegisterAndRetrieveHandler() {
-        registry.register("myFlow", mockHandler);
-        FlowHandler<String, String> result = registry.getHandler("myFlow");
+        FlowHandlerRegistry registry = new FlowHandlerRegistry();
+        registry.register("myFlow", sampleFlowHandler);
 
+        FlowHandler result = registry.getHandler("myFlow");
         assertNotNull(result);
-        assertEquals(mockHandler, result);
+        assertEquals(sampleFlowHandler, result);
     }
 
-    /**
-     * Positiver Test: contains() gibt true zurück für registrierten Handler.
-     */
     @Test
     void testContainsReturnsTrue() {
-        registry.register("myFlow", mockHandler);
+        FlowHandlerRegistry registry = new FlowHandlerRegistry();
+        registry.register("myFlow", sampleFlowHandler);
         assertTrue(registry.contains("myFlow"));
     }
 
-    /**
-     * Negativer Test: contains() gibt false zurück für nicht registrierten Flow.
-     */
     @Test
     void testContainsReturnsFalse() {
+        FlowHandlerRegistry registry = new FlowHandlerRegistry();
         assertFalse(registry.contains("unknownFlow"));
     }
 
-    /**
-     * Negativer Test: Zugriff auf nicht registrierten Handler wirft Exception.
-     */
     @Test
     void testGetHandlerThrowsWhenNotFound() {
+        FlowHandlerRegistry registry = new FlowHandlerRegistry();
         Exception exception = assertThrows(IllegalArgumentException.class, () ->
                 registry.getHandler("unregisteredFlow")
         );
