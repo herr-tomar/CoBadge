@@ -1,6 +1,8 @@
 package osplus.pkptuna.hazelcast.config;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.boot.test.context.SpringBootTest;
 import osplus.pkptuna.hazelcast.flows.FlowHandler;
 import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
 
@@ -13,6 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 
+@SpringBootTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class FlowHandlerInitializerTest {
 
     /**
