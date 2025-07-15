@@ -14,15 +14,59 @@ import java.util.function.Supplier;
 import java.util.function.Consumer;
 
 
-
 @Bean
 public MetricsService metricsService() {
-    MetricsService mock = mock(MetricsService.class);
-    doNothing().when(mock).increaseCounter(any(), any());
-    when(mock.timer(any(), any(), any(), any())).thenAnswer(invocation -> {
+    MetricsService mock = Mockito.mock(MetricsService.class);
+
+    // do nothing for counters or gauges
+    Mockito.doNothing().when(mock).increaseCounter(Mockito.anyString(), Mockito.any());
+    Mockito.doNothing().when(mock).writeGaugeValue(Mockito.anyString(), Mockito.any(), Mockito.any());
+
+    // stub for Function<S, T>
+    Mockito.when(mock.timer(
+            Mockito.any(Function.class),
+            Mockito.any(),
+            Mockito.anyString(),
+            Mockito.any(MetricTag[].class))
+    ).thenAnswer(invocation -> {
         Function<Object, Object> fn = invocation.getArgument(0);
         Object param = invocation.getArgument(1);
         return fn.apply(param);
     });
+
+    // stub for Supplier<T>
+    Mockito.when(mock.timer(
+            Mockito.any(Supplier.class),
+            Mockito.anyString(),
+            Mockito.any(MetricTag[].class))
+    ).thenAnswer(invocation -> {
+        Supplier<?> supplier = invocation.getArgument(0);
+        return supplier.get();
+    });
+
+    // stub for Consumer<S>
+    Mockito.doAnswer(invocation -> {
+        Consumer<Object> consumer = invocation.getArgument(0);
+        Object param = invocation.getArgument(1);
+        consumer.accept(param);
+        return null;
+    }).when(mock).timer(
+            Mockito.any(Consumer.class),
+            Mockito.any(),
+            Mockito.anyString(),
+            Mockito.any(MetricTag[].class)
+    );
+
+    // stub for Runnable
+    Mockito.doAnswer(invocation -> {
+        Runnable runnable = invocation.getArgument(0);
+        runnable.run();
+        return null;
+    }).when(mock).timer(
+            Mockito.any(Runnable.class),
+            Mockito.anyString(),
+            Mockito.any(MetricTag[].class)
+    );
+
     return mock;
 }
