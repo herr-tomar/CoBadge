@@ -1,179 +1,128 @@
-package osplus.pkptuna.hazelcast.test.config;
+package osplus.pkptuna.hazelcast.pubsub;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hazelcast.config.Config;
-import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
-import osplus.apl.core.api.administration.metrics.MetricsService;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import osplus.apl.core.test.utils.AplTestRunner;
+import osplus.apl.core.test.utils.BaseAplTest;
 import osplus.pkptuna.hazelcast.config.FlowConfig;
-import osplus.pkptuna.hazelcast.config.FlowHandlerInitializer;
 import osplus.pkptuna.hazelcast.config.HazelcastConfigProps;
-import osplus.pkptuna.hazelcast.config.HazelcastFlowBootstrap;
 import osplus.pkptuna.hazelcast.flows.FlowHandler;
 import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
-import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
-import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
+import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
-import static org.mockito.Mockito.mock;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@TestConfiguration
-@EnableConfigurationProperties(HazelcastConfigProps.class)
-public class FlowHandlerTestConfiguration {
+@SpringBootTest(classes = {AplTestRunner.class, FlowHandlerTestConfiguration.class},
+        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+        properties = {
+                "spring.main.allow-bean-definition-overriding=true",
+                "generichazelcast.polling-rate=20",
+                "apl.application.name=uui",
+                "apl.application.version=0.0.1-TEST"
+        })
+@AutoConfigureMockMvc
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+public class GenericHazelcastConsumerTest extends BaseAplTest {
 
-    @Bean
-    public HazelcastInstance hazelcastInstance() {
-        Config config = new Config();
-        config.setClusterName("test-cluster");
-        config.getNetworkConfig().setPortAutoIncrement(true);
-        config.setProperty("hazelcast.logging.type", "slf4j");
-        return Hazelcast.newHazelcastInstance(config);
+    @Autowired
+    private HazelcastConfigProps hazelcastConfigProps;
+
+    @Autowired
+    private FlowHandlerRegistry handlerRegistry;
+
+    @Autowired
+    private FlowHandler sampleFlowHandler;
+
+    @Autowired
+    private HazelcastInstance hazelcastInstance;
+
+    @Autowired
+    private GenericHazelcastConsumer consumer;
+
+    @Autowired
+    private FlowHandlerTestConfiguration.TestCollector testCollector;
+
+    /**
+     * Positiver Test: Überprüft, ob ein gültiger Flow korrekt verarbeitet wird.
+     */
+    @Test
+    public void testPollRequestMaps_PositiveFlow() {
+        testCollector.clear();
+        FlowConfig config = new FlowConfig("sampleFlow", "requestTopic", "responseTopic", "map0", 1);
+
+        consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
+        consumer.pollRequestMaps();
+
+        assertTrue(testCollector.wasSent("responseTopic"), "Expected response to be sent on topic");
+        assertEquals("wrappedResponse", testCollector.getSent("responseTopic"));
+
     }
 
-    @Bean
-    public FlowHandlerRegistry<String, FlowHandler> handlerRegistry() {
-        FlowHandlerRegistry<String, FlowHandler> registry = new FlowHandlerRegistry<>();
-        registry.register("myFlow", sampleFlowHandler());
-        return registry;
+    /**
+     * Negativer Test: Kein Handler für den Flow vorhanden.
+     */
+    @Test
+    public void testPollRequestMaps_NoHandlerFound() {
+        testCollector.clear();
+        FlowConfig config = new FlowConfig("unknownFlow", "requestTopic", "responseTopic", "map0", 1);
+
+        consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
+        consumer.pollRequestMaps();
+
+        assertFalse(testCollector.wasSent("responseTopic"), "No response should be sent for unknown flow");
+
     }
 
-    @Bean
-    public FlowHandlerInitializer flowHandlerInitializer(List<FlowConfig> configs,
-                                                         Map<String, FlowHandler> handlerMap,
-                                                         FlowHandlerRegistry<String, FlowHandler> registry,
-                                                         HazelcastFlowBootstrap bootstrap) {
-        return new FlowHandlerInitializer(configs, handlerMap, registry, bootstrap);
-    }
+    /**
+     * Negativer Test: Exception beim Verarbeiten der Anfrage.
+     */
+    @Test
+    public void testPollRequestMaps_HandlerThrowsException() {
+        testCollector.clear();
+        FlowConfig config = new FlowConfig("sampleFlow", "requestTopic", "responseTopic", "map0", 1);
 
-    @Bean
-    public FlowConfig flowConfig() {
-        return new FlowConfig("myFlow", "req-topic", "res-topic", "map-", 1);
-    }
+        FlowHandler originalHandler = handlerRegistry.getHandler("sampleFlow");
+        assertNotNull(originalHandler);
 
-    @Bean
-    public List<FlowConfig> flowConfigs(FlowConfig flowConfig) {
-        return List.of(flowConfig);
-    }
+        consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
+        consumer.pollRequestMaps();
 
-    @Bean
-    public Map<String, FlowHandler> handlerMap() {
-        return Map.of("myFlow", sampleFlowHandler());
-    }
+        assertFalse(testCollector.wasSent("responseTopic"), "No response should be sent when handler fails");
 
-    @Bean
-    public FlowHandler sampleFlowHandler() {
-        return new FlowHandler<Object, Object>() {
-            private final ObjectMapper objectMapper = new ObjectMapper();
-
-            @Override
-            public Object deserializeRequest(byte[] data) {
-                try {
-                    return objectMapper.readValue(data, Map.class); // simplistic for test
-                } catch (Exception e) {
-                    throw new RuntimeException("Deserialization failed", e);
-                }
-            }
-
-            @Override
-            public String extractCorrelationId(Object request) {
-                return "corr-" + request.hashCode();
-            }
-
-            @Override
-            public Object handleRequest(Object request) {
-                if ("faultyRequest".equals(request)) {
-                    throw new RuntimeException("Expected failure");
-                }
-                return "response1";
-            }
-
-            @Override
-            public Object wrapResponse(String correlationId, Object result) {
-                return "wrappedResponse";
-            }
-
-            @Override
-            public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Object response) {
-                testCollector().recordSent(topicName, response);
-            }
-
-            @Override
-            public String getFlowName() {
-                return "myFlow";
-            }
-        };
-    }
-
-    @Bean
-    public HazelcastFlowBootstrap hazelcastFlowBootstrap(GenericHazelcastRouter router,
-                                                         GenericHazelcastConsumer consumer) {
-        return new HazelcastFlowBootstrap(router, consumer);
-    }
-
-    @Bean
-    public GenericHazelcastRouter hazelcastRouter(MetricsService metricsService,
-                                                  HazelcastInstance hazelcastInstance,
-                                                  List<FlowConfig> flowConfigs,
-                                                  FlowHandlerRegistry<String, FlowHandler> registry) {
-        return new GenericHazelcastRouter(metricsService, hazelcastInstance, flowConfigs, registry);
-    }
-
-    @Bean
-    public GenericHazelcastConsumer hazelcastConsumer(MetricsService metricsService,
-                                                      HazelcastInstance hazelcastInstance,
-                                                      ThreadPoolTaskScheduler scheduler,
-                                                      List<FlowConfig> flowConfigs,
-                                                      FlowHandlerRegistry<String, FlowHandler> registry,
-                                                      HazelcastConfigProps hazelcastConfigProps) {
-        return new GenericHazelcastConsumer(metricsService, hazelcastInstance, scheduler,
-                flowConfigs, registry, hazelcastConfigProps);
-    }
-
-    @Bean("flowTaskScheduler")
-    public ThreadPoolTaskScheduler taskScheduler() {
-        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
-        scheduler.setPoolSize(1);
-        scheduler.setThreadNamePrefix("hazelcast-scheduler-");
-        scheduler.initialize();
-        return scheduler;
-    }
-
-    @Bean
-    public TestCollector testCollector() {
-        return new TestCollector();
-    }
-
-    @Bean
-    @Primary
-    public MetricsService metricsService() {
-        return mock(MetricsService.class);
-    }
-
-    public static class TestCollector {
-        private final Map<String, Object> sentResponses = new HashMap<>();
-
-        public void recordSent(String topic, Object response) {
-            sentResponses.put(topic, response);
-        }
-
-        public Object getSent(String topic) {
-            return sentResponses.get(topic);
-        }
-
-        public boolean wasSent(String topic) {
-            return sentResponses.containsKey(topic);
-        }
-
-        public void clear() {
-            sentResponses.clear();
-        }
     }
 }
+
+-------------------
+
+enJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 18.00 s -- in osplus.pkptuna.hazelcast.config.FlowHandlerInitializerTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 27.52 s -- in osplus.pkptuna.hazelcast.flows.FlowHandlerRegistryTest
+[ERROR] Tests run: 3, Failures: 1, Errors: 1, Skipped: 0, Time elapsed: 45.25 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest
+[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest.testPollRequestMaps_PositiveFlow -- Time elapsed: 0.053 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: Expected response to be sent on topic ==> expected: <true> but was: <false>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertTrue.failNotTrue(AssertTrue.java:63)
+	at org.junit.jupiter.api.AssertTrue.assertTrue(AssertTrue.java:36)
+	at org.junit.jupiter.api.Assertions.assertTrue(Assertions.java:214)
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest.testPollRequestMaps_PositiveFlow(GenericHazelcastConsumerTest.java:65)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+
+[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest.testPollRequestMaps_HandlerThrowsException -- Time elapsed: 0.006 s <<< ERROR!
+java.lang.IllegalArgumentException: No FlowHandler registered for flow: sampleFlow
+	at osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry.getHandler(FlowHandlerRegistry.java:40)
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest.testPollRequestMaps_HandlerThrowsException(GenericHazelcastConsumerTest.java:93)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
