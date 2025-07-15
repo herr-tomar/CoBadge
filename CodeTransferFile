@@ -1,2 +1,2 @@
-Inkompatible Typen: osplus.pkptuna.hazelcast.flows.FlowHandler<com.google.protobuf.Message,com.google.protobuf.Message> kann nicht in osplus.pkptuna.hazelcast.flows.FlowHandler<java.lang.String,osplus.pkptuna.hazelcast.flows.FlowHandler<?,?>> konvertiert werden
+Inkompatible Typen: osplus.pkptuna.hazelcast.flows.FlowHandler<capture#1 von ?,capture#2 von ?> kann nicht in osplus.pkptuna.hazelcast.flows.FlowHandler<java.lang.String,osplus.pkptuna.hazelcast.flows.FlowHandler<?,?>> konvertiert werden
 Inkompatible Typen: java.util.Map<java.lang.String,osplus.pkptuna.hazelcast.flows.FlowHandler<?,?>> kann nicht in java.util.Map<java.lang.String,osplus.pkptuna.hazelcast.flows.FlowHandler> konvertiert werden
