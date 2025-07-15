@@ -1,11 +1,102 @@
-N 35024 --- [uui] [           main] o.a.core.AplExtendedComponentValidation  : WARNUNG: Singleton Bean osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter enthält folgende Felder, die nicht 'final' deklariert sind: routerInstanceId - bitte abändern.
-2025-07-15T17:29:36.564+02:00  INFO 35024 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastConsumer    : Scheduled Hazelcast consumer polling with fixed rate of 20 ms.
-2025-07-15T17:29:36.577+02:00  INFO 35024 --- [uui] [           main] o.p.h.config.FlowHandlerInitializer      : List of FlowConfigs for registration :[FlowConfig[name=myFlow, requestTopic=req-topic, responseTopic=res-topic, mapBase=map-, partitions=1]]
-2025-07-15T17:29:36.578+02:00  INFO 35024 --- [uui] [           main] o.p.h.config.FlowHandlerInitializer      : Map of Flowhandlers for registration{myFlow=osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration$1@3f2731e5}
-2025-07-15T17:29:36.631+02:00  INFO 35024 --- [uui] [           main] c.h.i.p.impl.PartitionStateManager       : [16.160.188.219]:5701 [test-cluster] [5.3.0] Initializing cluster partition table arrangement...
-2025-07-15T17:29:36.772+02:00  INFO 35024 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : This node is elected as the ACTIVE router (ID=3d15316a-5a93-41a8-8c9a-75e7f7b299bd)
-2025-07-15T17:29:36.774+02:00  INFO 35024 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Heartbeat started for router ID=3d15316a-5a93-41a8-8c9a-75e7f7b299bd
-2025-07-15T17:29:36.792+02:00  INFO 35024 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Listening on topic=req-topic for flow=myFlow
-2025-07-15T17:29:36.792+02:00  INFO 35024 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastConsumer    : Scheduled Hazelcast consumer polling with fixed rate of 20 ms.
-2025-07-15T17:29:37.734+02:00  WARN 35024 --- [uui] [           main] i.m.core.instrument.MeterRegistry        : This Gauge has been already registered (MeterId{name='utc.timediff', tags=[]}), the registration will be ignored. Note that subsequent logs will be logged at debug level.
-2025-07-15T17:29:38.101+02:00  INFO 350
+package osplus.pkptuna.hazelcast.pubsub;
+
+import com.hazelcast.core.HazelcastInstance;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import osplus.apl.core.test.utils.AplTestRunner;
+import osplus.apl.core.test.utils.BaseAplTest;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.config.HazelcastConfigProps;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+@SpringBootTest(classes = {AplTestRunner.class, FlowHandlerTestConfiguration.class},
+        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+        properties = {
+                "spring.main.allow-bean-definition-overriding=true",
+                "generichazelcast.polling-rate=20",
+                "apl.application.name=uui",
+                "apl.application.version=0.0.1-TEST"
+        })
+@AutoConfigureMockMvc
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+public class GenericHazelcastConsumerTest extends BaseAplTest {
+
+    @Autowired
+    private HazelcastConfigProps hazelcastConfigProps;
+
+    @Autowired
+    private FlowHandlerRegistry handlerRegistry;
+
+    @Autowired
+    private FlowHandler sampleFlowHandler;
+
+    @Autowired
+    private HazelcastInstance hazelcastInstance;
+
+    @Autowired
+    private GenericHazelcastConsumer consumer;
+
+    @Autowired
+    private FlowHandlerTestConfiguration.TestCollector testCollector;
+
+    /**
+     * Positiver Test: Überprüft, ob ein gültiger Flow korrekt verarbeitet wird.
+     */
+    @Test
+    public void testPollRequestMaps_PositiveFlow() {
+        testCollector.clear();
+        FlowConfig config = new FlowConfig("myFlow", "req-topic", "res-topic", "map-", 1);
+
+        consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
+        consumer.pollRequestMaps();
+
+        assertTrue(testCollector.wasSent("res-topic"), "Expected response to be sent on topic");
+        assertEquals("wrappedResponse", testCollector.getSent("res-topic"));
+
+    }
+
+    /**
+     * Negativer Test: Kein Handler für den Flow vorhanden.
+     */
+    @Test
+    public void testPollRequestMaps_NoHandlerFound() {
+        testCollector.clear();
+        FlowConfig config = new FlowConfig("unknownFlow", "requestTopic", "responseTopic", "map0", 1);
+
+        consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
+        consumer.pollRequestMaps();
+
+        assertFalse(testCollector.wasSent("responseTopic"), "No response should be sent for unknown flow");
+
+    }
+
+    /**
+     * Negativer Test: Exception beim Verarbeiten der Anfrage.
+     */
+    @Test
+    public void testPollRequestMaps_HandlerThrowsException() {
+        testCollector.clear();
+        FlowConfig config = new FlowConfig("myFlow", "requestTopic", "responseTopic", "map0", 1);
+
+        FlowHandler originalHandler = handlerRegistry.getHandler("myFlow");
+        assertNotNull(originalHandler);
+
+        consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
+        consumer.pollRequestMaps();
+
+        assertFalse(testCollector.wasSent("responseTopic"), "No response should be sent when handler fails");
+
+    }
+}
