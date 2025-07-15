@@ -1,60 +1,9 @@
-package osplus.pkptuna.hazelcast.config;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
-import org.springframework.boot.test.context.SpringBootTest;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
-
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.spy;
-
-@SpringBootTest
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class FlowHandlerInitializerTest {
-
-    /**
-     * Positiver Test: Handler wird korrekt registriert.
-     */
-    @Test
-    void testRegisterHandlers_successfulRegistration() {
-        FlowHandler handler = mock(FlowHandler.class);
-        HazelcastFlowBootstrap hazelcastFlowBootstrap = mock(HazelcastFlowBootstrap.class);
-        FlowHandlerRegistry<String, FlowHandler> registry = spy(new FlowHandlerRegistry<>());
-
-        FlowConfig config = new FlowConfig("myFlow", "req", "res", "map-", 1);
-        Map<String, FlowHandler> handlerMap = Map.of("myFlow", handler);
-
-        FlowHandlerInitializer initializer = new FlowHandlerInitializer(
-                List.of(config), handlerMap, registry, hazelcastFlowBootstrap
-        );
-
-        assertDoesNotThrow(initializer::registerHandlers);
-        assertTrue(registry.contains("myFlow"));
-    }
-
-    /**
-     * Negativer Test: Kein Handler für Flow vorhanden → Exception.
-     */
-    @Test
-    void testRegisterHandlers_missingHandlerThrowsException() {
-        FlowConfig config = new FlowConfig("missingFlow", "req", "res", "map-", 1);
-        Map<String, FlowHandler> handlerMap = Map.of(); // leer
-
-        HazelcastFlowBootstrap hazelcastFlowBootstrap = mock(HazelcastFlowBootstrap.class);
-
-        FlowHandlerRegistry<String, FlowHandler> registry = new FlowHandlerRegistry<>();
-        FlowHandlerInitializer initializer = new FlowHandlerInitializer(
-                List.of(config), handlerMap, registry, hazelcastFlowBootstrap
-        );
-
-        Exception ex = assertThrows(IllegalArgumentException.class, initializer::registerHandlers);
-        assertTrue(ex.getMessage().contains("No FlowHandler registered for flow: missingFlow"));
-    }
-}
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+[ERROR] Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 0.408 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.config.FlowHandlerInitializerTest
+[ERROR] osplus.pkptuna.hazelcast.config.FlowHandlerInitializerTest -- Time elapsed: 0.408 s <<< ERROR!
+java.lang.IllegalStateException: Unable to find a @SpringBootConfiguration by searching packages upwards from the test. You can use @ContextConfiguration, @SpringBootTest(classes=...) or other Spring Test supported mechanisms to explicitly declare the configuration classes to load. Classes annotated with @TestConfiguration are not considered.
+	at org.springframework.util.Assert.state(Assert.java:79)
+	at org.springframework.boot.test.context.SpringBootTestContextBootstrapper.findConfigurationClass(SpringBootTestContextBootstrapper.java:246)
+	at org.springframework.boot.test.context.SpringBootTestContextBootstrapper.getOrFindConfigurationClasses(SpringBootTestContextBootstrapper.java:233)
+	at org.springframework.boot.test.context.SpringBootTestContextBootstrapper.processMergedContextConfiguration(SpringBootTestContextBootstrapper.java:150)
