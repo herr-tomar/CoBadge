@@ -1,82 +1,99 @@
+@Bean
+public TestCollector testCollector() {
+    return new TestCollector();
+}
 
-package osplus.pkptuna.hazelcast.pubsub;
+@Bean
+public FlowHandler sampleFlowHandler(TestCollector testCollector) {
+    return new FlowHandler() {
 
-import com.hazelcast.core.HazelcastInstance;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import osplus.apl.core.test.utils.AplTestRunner;
-import osplus.apl.core.test.utils.BaseAplTest;
-import osplus.pkptuna.hazelcast.config.FlowConfig;
-import osplus.pkptuna.hazelcast.config.HazelcastConfigProps;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
-import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
+        @Override
+        public Object handleRequest(Object request) {
+            if ("faultyRequest".equals(request)) {
+                throw new RuntimeException("Expected failure");
+            }
+            return "response1";
+        }
 
-import java.util.List;
+        @Override
+        public Object wrapResponse(Object correlationId, Object response) {
+            return "wrappedResponse";
+        }
 
-@SpringBootTest(classes = {AplTestRunner.class, FlowHandlerTestConfiguration.class},
-        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
-        properties = {
-                "spring.main.allow-bean-definition-overriding=true",
-                "generichazelcast.polling-rate=20",
-                "apl.application.name=uui",
-                "apl.application.version=0.0.1-TEST"
-        })
-@AutoConfigureMockMvc
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public class GenericHazelcastConsumerTest extends BaseAplTest {
+        @Override
+        public void sendResponse(HazelcastInstance instance, String topic, Object response) {
+            testCollector.recordSent(topic, response);
+        }
+    };
+}
 
-    @Autowired
-    private HazelcastConfigProps hazelcastConfigProps;
+public static class TestCollector {
+    private final Map<String, Object> sentResponses = new HashMap<>();
 
-    @Autowired
-    private FlowHandlerRegistry handlerRegistry;
-
-    @Autowired
-    private FlowHandler sampleFlowHandler;
-
-    @Autowired
-    private HazelcastInstance hazelcastInstance;
-
-    @Autowired
-    private GenericHazelcastConsumer consumer;
-
-    /**
-     * Positiver Test: Überprüft, ob ein gültiger Flow korrekt verarbeitet wird.
-     */
-    @Test
-    public void testPollRequestMaps_PositiveFlow() {
-        FlowConfig config = new FlowConfig("sampleFlow", "requestTopic", "responseTopic", "map0", 1);
-
-        consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
-        consumer.pollRequestMaps();
-
+    public void recordSent(String topic, Object response) {
+        sentResponses.put(topic, response);
     }
 
-    /**
-     * Negativer Test: Kein Handler für den Flow vorhanden.
-     */
-    @Test
-    public void testPollRequestMaps_NoHandlerFound() {
-        FlowConfig config = new FlowConfig("unknownFlow", "requestTopic", "responseTopic", "map0", 1);
-
-        consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
-        consumer.pollRequestMaps();
-
+    public Object getSent(String topic) {
+        return sentResponses.get(topic);
     }
 
-    /**
-     * Negativer Test: Exception beim Verarbeiten der Anfrage.
-     */
-    @Test
-    public void testPollRequestMaps_HandlerThrowsException() {
-        FlowConfig config = new FlowConfig("sampleFlow", "requestTopic", "responseTopic", "map0", 1);
-
-        consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
-        consumer.pollRequestMaps();
-
+    public boolean wasSent(String topic) {
+        return sentResponses.containsKey(topic);
     }
+
+    public void clear() {
+        sentResponses.clear();
+    }
+}
+
+
+------
+
+@Autowired
+private FlowHandlerTestConfiguration.TestCollector testCollector;
+
+
+
+-----
+
+
+@Test
+public void testPollRequestMaps_PositiveFlow() {
+    testCollector.clear();
+    FlowConfig config = new FlowConfig("sampleFlow", "requestTopic", "responseTopic", "map0", 1);
+
+    consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
+    consumer.pollRequestMaps();
+
+    assertTrue(testCollector.wasSent("responseTopic"), "Expected response to be sent on topic");
+    assertEquals("wrappedResponse", testCollector.getSent("responseTopic"));
+}
+
+@Test
+public void testPollRequestMaps_NoHandlerFound() {
+    testCollector.clear();
+    FlowConfig config = new FlowConfig("unknownFlow", "requestTopic", "responseTopic", "map0", 1);
+
+    consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
+    consumer.pollRequestMaps();
+
+    assertFalse(testCollector.wasSent("responseTopic"), "No response should be sent for unknown flow");
+}
+
+@Test
+public void testPollRequestMaps_HandlerThrowsException() {
+    testCollector.clear();
+    FlowConfig config = new FlowConfig("sampleFlow", "requestTopic", "responseTopic", "map0", 1);
+
+    // Add test data for failure scenario
+    // Assuming your HazelcastInstance is preloaded in TestConfig
+    FlowHandler originalHandler = handlerRegistry.getHandler("sampleFlow");
+    assertNotNull(originalHandler);
+
+    // Simulate faulty request via test config bean logic
+    consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
+    consumer.pollRequestMaps();
+
+    assertFalse(testCollector.wasSent("responseTopic"), "No response should be sent when handler fails");
 }
