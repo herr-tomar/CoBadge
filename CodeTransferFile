@@ -1,22 +1,11 @@
-K 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
-OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
-OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
-[ERROR] Tests run: 3, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 17.86 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest
-[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest.testPollRequestMaps_PositiveFlow -- Time elapsed: 0.051 s <<< FAILURE!
-org.opentest4j.AssertionFailedError: Expected response to be sent on topic ==> expected: <true> but was: <false>
-	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
-	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
-	at org.junit.jupiter.api.AssertTrue.failNotTrue(AssertTrue.java:63)
-	at org.junit.jupiter.api.AssertTrue.assertTrue(AssertTrue.java:36)
-	at org.junit.jupiter.api.Assertions.assertTrue(Assertions.java:214)
-	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest.testPollRequestMaps_PositiveFlow(GenericHazelcastConsumerTest.java:65)
-	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-
-[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 28.27 s -- in osplus.pkptuna.hazelcast.flows.FlowHandlerRegistryTest
-[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 46.76 s -- in osplus.pkptuna.hazelcast.config.FlowHandlerInitializerTest
-[INFO] 
-[INFO] Results:
-[INFO] 
-[ERROR] Failures: 
+N 35024 --- [uui] [           main] o.a.core.AplExtendedComponentValidation  : WARNUNG: Singleton Bean osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter enthält folgende Felder, die nicht 'final' deklariert sind: routerInstanceId - bitte abändern.
+2025-07-15T17:29:36.564+02:00  INFO 35024 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastConsumer    : Scheduled Hazelcast consumer polling with fixed rate of 20 ms.
+2025-07-15T17:29:36.577+02:00  INFO 35024 --- [uui] [           main] o.p.h.config.FlowHandlerInitializer      : List of FlowConfigs for registration :[FlowConfig[name=myFlow, requestTopic=req-topic, responseTopic=res-topic, mapBase=map-, partitions=1]]
+2025-07-15T17:29:36.578+02:00  INFO 35024 --- [uui] [           main] o.p.h.config.FlowHandlerInitializer      : Map of Flowhandlers for registration{myFlow=osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration$1@3f2731e5}
+2025-07-15T17:29:36.631+02:00  INFO 35024 --- [uui] [           main] c.h.i.p.impl.PartitionStateManager       : [16.160.188.219]:5701 [test-cluster] [5.3.0] Initializing cluster partition table arrangement...
+2025-07-15T17:29:36.772+02:00  INFO 35024 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : This node is elected as the ACTIVE router (ID=3d15316a-5a93-41a8-8c9a-75e7f7b299bd)
+2025-07-15T17:29:36.774+02:00  INFO 35024 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Heartbeat started for router ID=3d15316a-5a93-41a8-8c9a-75e7f7b299bd
+2025-07-15T17:29:36.792+02:00  INFO 35024 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Listening on topic=req-topic for flow=myFlow
+2025-07-15T17:29:36.792+02:00  INFO 35024 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastConsumer    : Scheduled Hazelcast consumer polling with fixed rate of 20 ms.
+2025-07-15T17:29:37.734+02:00  WARN 35024 --- [uui] [           main] i.m.core.instrument.MeterRegistry        : This Gauge has been already registered (MeterId{name='utc.timediff', tags=[]}), the registration will be ignored. Note that subsequent logs will be logged at debug level.
+2025-07-15T17:29:38.101+02:00  INFO 350
