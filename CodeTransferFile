@@ -1,96 +1,81 @@
-package osplus.pkptuna.dispute.service.impl;
+@Test
+void assertThatLookupDisputeFolderReturnsExpectedResult() throws Exception {
+    // Build responseMetadata
+    ResponseMetadataDto metadata = ResponseMetadataDto.newBuilder()
+            .setCorrelationId("test-correlation-id")
+            .setStatusCode(200)
+            .setStatusMessage("Executed successfully")
+            .build();
 
-import org.springframework.http.HttpHeaders;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkptuna.dispute.config.DisputeServiceProperties;
-import osplus.pkptuna.dispute.lookup.model.DisputeFolderEntryDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
-import osplus.pkptuna.dispute.lookup.model.FullDisputeLookupResponseDto;
-import osplus.pkptuna.dispute.service.DisputeService;
-import osplus.pkptuna.protobuf.util.ProtobufJsonUtil;
+    // Build disputeFolderIdentifier with required fields
+    DisputeFolderIdentifierDto folderIdentifier = DisputeFolderIdentifierDto.newBuilder()
+            .setDisputeFolderReference("116855")
+            .setIssuerDisputeExternalReference("REF123")
+            .build();
 
-import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.List;
-import java.util.stream.Collectors;
+    // Build folder data
+    DisputeFolderDataDto folderData = DisputeFolderDataDto.newBuilder()
+            .setDisputeFolderIdentifier(folderIdentifier)
+            .setStatusCode("OPEN")
+            .build();
 
-/**
- * Implementierung des {@link DisputeService} zur Abfrage von Dispute-Ordnern
- * über eine externe Issuer-API mithilfe von WebClient (Spring WebFlux).
- */
-public class DisputeServiceImpl implements DisputeService {
+    // Build full top-level response
+    FullDisputeLookupResponseDto fullResponse = FullDisputeLookupResponseDto.newBuilder()
+            .setResponseMetadata(metadata)
+            .addData(folderData)
+            .build();
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeServiceImpl.class);
-    private final WebClient webClient;
-    private final String username;
-    private final String password;
-    private final String disputePath;
+    // Convert proto to JSON
+    String jsonResponse = JsonFormat.printer()
+            .includingDefaultValueFields()
+            .print(fullResponse);
 
-    /**
-     * Konstruktor für {@code DisputeServiceImpl}.
-     *
-     * @param webClient WebClient zur Erstellung des REST-Clients
-     * @param props            Konfigurationseigenschaften für Authentifizierung und Endpunkte
-     */
-    public DisputeServiceImpl(final WebClient webClient, final DisputeServiceProperties props) {
-        this.username = props.auth().username();
-        this.password = props.auth().password();
-        this.disputePath = props.paths().lookupDisputes();
-        this.webClient = webClient;
-    }
+    // Enqueue mock response
+    mockWebServer.enqueue(new MockResponse()
+            .setResponseCode(200)
+            .setBody(jsonResponse));
 
-    /**
-     * {@inheritDoc}
-     * Führt eine Abfrage eines Dispute-Ordners anhand der übergebenen Issuer-ID und Kartenreferenz durch.
-     */
-    @Override
-    public DisputeLookupResponseDto lookupDisputeFolder(String issuerId, String cardReference) {
-        try {
-            String basicAuth = Base64.getEncoder().encodeToString(
-                    (username + ":" + password).getBytes(StandardCharsets.UTF_8)
-            );
+    // Call the service
+    DisputeLookupResponseDto result = disputeService.lookupDisputeFolder("1001", "CARD123");
 
-            String json = webClient.get()
-                    .uri(uriBuilder -> {
-                        URI builder = uriBuilder
-                                .path(disputePath)
-                                .build(issuerId, cardReference);
-                        return builder;
-                    })
-                    .header("WL-Correlation-ID", "pkptuna-" + System.currentTimeMillis())
-                    .header("WL-Origin", "pkptuna-service")
-                    .header(HttpHeaders.AUTHORIZATION, "Basic " + basicAuth)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .block();
+    // Assertions
+    assertThat(result).isNotNull();
+    assertThat(result.getDisputeFolderExists()).as("Expected data section").isTrue();
+    assertThat(result.getDisputeFoldersCount()).isEqualTo(1);
+    assertThat(result.getDisputeFolders(0).getDisputeFolderReference()).isEqualTo("116855");
+    assertThat(result.getDisputeFolders(0).getStatusCode()).isEqualTo("OPEN");
+}
+---
 
-            FullDisputeLookupResponseDto.Builder fullBuilder = FullDisputeLookupResponseDto.newBuilder();
-            ProtobufJsonUtil.parseJsonToProto(json, fullBuilder);
+@Test
+void assertThatLookupDisputeFolderReturnsEmptyResult() throws Exception {
+    // Build metadata
+    ResponseMetadataDto metadata = ResponseMetadataDto.newBuilder()
+            .setCorrelationId("test-correlation-id")
+            .setStatusCode(200)
+            .setStatusMessage("Executed successfully")
+            .build();
 
-            List<DisputeFolderEntryDto> folderEntries = fullBuilder.getDataList().stream()
-                    .map(data -> DisputeFolderEntryDto.newBuilder()
-                            .setDisputeFolderReference(data.getDisputeFolderIdentifier().getDisputeFolderReference())
-                            .setStatusCode(data.getStatusCode())
-                            .build())
-                    .collect(Collectors.toList());
+    // Build full response with empty data
+    FullDisputeLookupResponseDto fullResponse = FullDisputeLookupResponseDto.newBuilder()
+            .setResponseMetadata(metadata)
+            .build();
 
-            return DisputeLookupResponseDto.newBuilder()
-                    .setDisputeFolderExists(!folderEntries.isEmpty())
-                    .addAllDisputeFolders(folderEntries)
-                    .build();
+    // Convert proto to JSON
+    String jsonResponse = JsonFormat.printer()
+            .includingDefaultValueFields()
+            .print(fullResponse);
 
-        } catch (WebClientResponseException e) {
-            LOGGER.warn("External API returned error: {}", e.getStatusCode());
-        } catch (Exception e) {
-            LOGGER.error("Exception during dispute lookup", e);
-        }
+    // Enqueue mock response
+    mockWebServer.enqueue(new MockResponse()
+            .setResponseCode(200)
+            .setBody(jsonResponse));
 
-        return DisputeLookupResponseDto.newBuilder()
-                .setDisputeFolderExists(false)
-                .build();
-    }
+    // Call the service
+    DisputeLookupResponseDto result = disputeService.lookupDisputeFolder("1001", "CARD123");
+
+    // Assertions
+    assertThat(result).isNotNull();
+    assertThat(result.getDisputeFolderExists()).isFalse();
+    assertThat(result.getDisputeFoldersCount()).isEqualTo(0);
 }
