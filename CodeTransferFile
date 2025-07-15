@@ -1,3 +1,20 @@
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+
+
+
+import osplus.apl.core.api.administration.metrics.MetricsService;
+import osplus.apl.core.api.administration.metrics.MetricTag;
+
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.function.Consumer;
+
+
+
 @Bean
 public MetricsService metricsService() {
     MetricsService mock = mock(MetricsService.class);
