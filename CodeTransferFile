@@ -1,113 +1,8 @@
-package osplus.pkptuna.hazelcast.pubsub;
-
-import com.hazelcast.core.HazelcastInstance;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import osplus.apl.core.test.utils.AplTestRunner;
-import osplus.apl.core.test.utils.BaseAplTest;
-import osplus.pkptuna.hazelcast.config.FlowConfig;
-import osplus.pkptuna.hazelcast.config.HazelcastConfigProps;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
-import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
-
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
-@SpringBootTest(classes = {AplTestRunner.class, FlowHandlerTestConfiguration.class},
-        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
-        properties = {
-                "spring.main.allow-bean-definition-overriding=true",
-                "generichazelcast.polling-rate=20",
-                "apl.application.name=uui",
-                "apl.application.version=0.0.1-TEST"
-        })
-@AutoConfigureMockMvc
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public class GenericHazelcastConsumerTest extends BaseAplTest {
-
-    @Autowired
-    private HazelcastConfigProps hazelcastConfigProps;
-
-    @Autowired
-    private FlowHandlerRegistry handlerRegistry;
-
-    @Autowired
-    private FlowHandler sampleFlowHandler;
-
-    @Autowired
-    private HazelcastInstance hazelcastInstance;
-
-    @Autowired
-    private GenericHazelcastConsumer consumer;
-
-    @Autowired
-    private FlowHandlerTestConfiguration.TestCollector testCollector;
-
-    /**
-     * Positiver Test: Überprüft, ob ein gültiger Flow korrekt verarbeitet wird.
-     */
-    @Test
-    public void testPollRequestMaps_PositiveFlow() {
-        testCollector.clear();
-        FlowConfig config = new FlowConfig("sampleFlow", "requestTopic", "responseTopic", "map0", 1);
-
-        consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
-        consumer.pollRequestMaps();
-
-        assertTrue(testCollector.wasSent("responseTopic"), "Expected response to be sent on topic");
-        assertEquals("wrappedResponse", testCollector.getSent("responseTopic"));
-
-    }
-
-    /**
-     * Negativer Test: Kein Handler für den Flow vorhanden.
-     */
-    @Test
-    public void testPollRequestMaps_NoHandlerFound() {
-        testCollector.clear();
-        FlowConfig config = new FlowConfig("unknownFlow", "requestTopic", "responseTopic", "map0", 1);
-
-        consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
-        consumer.pollRequestMaps();
-
-        assertFalse(testCollector.wasSent("responseTopic"), "No response should be sent for unknown flow");
-
-    }
-
-    /**
-     * Negativer Test: Exception beim Verarbeiten der Anfrage.
-     */
-    @Test
-    public void testPollRequestMaps_HandlerThrowsException() {
-        testCollector.clear();
-        FlowConfig config = new FlowConfig("sampleFlow", "requestTopic", "responseTopic", "map0", 1);
-
-        FlowHandler originalHandler = handlerRegistry.getHandler("sampleFlow");
-        assertNotNull(originalHandler);
-
-        consumer = new GenericHazelcastConsumer(null, hazelcastInstance, null, List.of(config), handlerRegistry, hazelcastConfigProps);
-        consumer.pollRequestMaps();
-
-        assertFalse(testCollector.wasSent("responseTopic"), "No response should be sent when handler fails");
-
-    }
-}
-
--------------------
-
-enJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
-[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 18.00 s -- in osplus.pkptuna.hazelcast.config.FlowHandlerInitializerTest
-[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 27.52 s -- in osplus.pkptuna.hazelcast.flows.FlowHandlerRegistryTest
-[ERROR] Tests run: 3, Failures: 1, Errors: 1, Skipped: 0, Time elapsed: 45.25 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest
-[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest.testPollRequestMaps_PositiveFlow -- Time elapsed: 0.053 s <<< FAILURE!
+K 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+[ERROR] Tests run: 3, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 17.86 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest
+[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest.testPollRequestMaps_PositiveFlow -- Time elapsed: 0.051 s <<< FAILURE!
 org.opentest4j.AssertionFailedError: Expected response to be sent on topic ==> expected: <true> but was: <false>
 	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
 	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
@@ -119,10 +14,9 @@ org.opentest4j.AssertionFailedError: Expected response to be sent on topic ==> e
 	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
 	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
 
-[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest.testPollRequestMaps_HandlerThrowsException -- Time elapsed: 0.006 s <<< ERROR!
-java.lang.IllegalArgumentException: No FlowHandler registered for flow: sampleFlow
-	at osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry.getHandler(FlowHandlerRegistry.java:40)
-	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest.testPollRequestMaps_HandlerThrowsException(GenericHazelcastConsumerTest.java:93)
-	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 28.27 s -- in osplus.pkptuna.hazelcast.flows.FlowHandlerRegistryTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 46.76 s -- in osplus.pkptuna.hazelcast.config.FlowHandlerInitializerTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[ERROR] Failures: 
