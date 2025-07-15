@@ -1,10 +1,9 @@
 package osplus.pkptuna.hazelcast.test.config;
 
-import com.google.protobuf.InvalidProtocolBufferException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hazelcast.config.Config;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
-import org.mockito.Mockito;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -25,7 +24,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.Mockito.mock;
-
 
 @TestConfiguration
 @EnableConfigurationProperties(HazelcastConfigProps.class)
@@ -73,10 +71,15 @@ public class FlowHandlerTestConfiguration {
     @Bean
     public FlowHandler sampleFlowHandler() {
         return new FlowHandler<Object, Object>() {
+            private final ObjectMapper objectMapper = new ObjectMapper();
 
             @Override
-            public Object deserializeRequest(byte[] data) throws InvalidProtocolBufferException {
-                return mock(Message.class);
+            public Object deserializeRequest(byte[] data) {
+                try {
+                    return objectMapper.readValue(data, Map.class); // simplistic for test
+                } catch (Exception e) {
+                    throw new RuntimeException("Deserialization failed", e);
+                }
             }
 
             @Override
@@ -99,7 +102,7 @@ public class FlowHandlerTestConfiguration {
 
             @Override
             public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Object response) {
-                testCollector.recordSent(topic, response);
+                testCollector().recordSent(topicName, response);
             }
 
             @Override
@@ -173,5 +176,4 @@ public class FlowHandlerTestConfiguration {
             sentResponses.clear();
         }
     }
-
 }
