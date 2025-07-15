@@ -1,27 +1,11 @@
-package osplus.pkptuna.hazelcast.config;
-
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.scheduling.TaskScheduler;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
-
-/**
- * Konfiguriert einen dedizierten TaskScheduler für periodisches Hazelcast-Polling.
- */
-@Configuration
-public class HazelcastSchedulingConfig {
-
-    /**
-     * Erstellt einen ThreadPoolTaskScheduler mit zwei Threads und einem spezifischen Namenspräfix.
-     *
-     * @return konfigurierter {@link TaskScheduler}
-     */
-    @Bean("flowTaskScheduler")
-    public TaskScheduler flowTaskScheduler() {
-        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
-        scheduler.setPoolSize(2);
-        scheduler.setThreadNamePrefix("hazelcast-poll-");
-        scheduler.initialize();
-        return scheduler;
-    }
+@Bean
+public MetricsService metricsService() {
+    MetricsService mock = mock(MetricsService.class);
+    doNothing().when(mock).increaseCounter(any(), any());
+    when(mock.timer(any(), any(), any(), any())).thenAnswer(invocation -> {
+        Function<Object, Object> fn = invocation.getArgument(0);
+        Object param = invocation.getArgument(1);
+        return fn.apply(param);
+    });
+    return mock;
 }
