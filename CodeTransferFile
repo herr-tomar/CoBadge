@@ -1,57 +1,16 @@
-@Test
-public void testDuplicateMessageNotProcessed() throws Exception {
-    testCollector.clear();
-    router.setRouterInstanceId("test-router-instance");
-    router.initRouters();
+[ERROR] Tests run: 4, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 50.01 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest
+[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testNotLeaderDoesNotSubscribeToTopics -- Time elapsed: 0.360 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: Non-leader router should not route or respond ==> expected: <false> but was: <true>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertFalse.failNotFalse(AssertFalse.java:63)
+	at org.junit.jupiter.api.AssertFalse.assertFalse(AssertFalse.java:36)
+	at org.junit.jupiter.api.Assertions.assertFalse(Assertions.java:239)
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testNotLeaderDoesNotSubscribeToTopics(GenericHazelcastRouterTest.java:131)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
 
-    Map<String, Object> requestMap = Map.of("dup", "check");
-    byte[] rawMessage = new ObjectMapper().writeValueAsBytes(requestMap);
-    String corrId = sampleFlowHandler.extractCorrelationId(requestMap);
-
-    // Simulate existing lock
-    hazelcastInstance.getMap("router-claim-map").put("route-lock-" + corrId, "existing");
-
-    topic.publish(rawMessage);
-    Thread.sleep(300); // Wait for async processing
-
-    assertFalse(testCollector.wasSent("res-topic"), "Duplicate message should not be routed or responded to");
-}
-----
-
-@Test
-public void testRoutingHandlerThrowsException() throws Exception {
-    testCollector.clear();
-    router.setRouterInstanceId("test-router-instance");
-    router.initRouters();
-
-    // This triggers a known failure in the test handler
-    byte[] rawMessage = "faultyRequest".getBytes();
-
-    topic.publish(rawMessage);
-    Thread.sleep(300);
-
-    assertFalse(testCollector.wasSent("res-topic"), "No response should be sent for faulty request");
-}
-
-
---------
-
-@Test
-public void testNotLeaderDoesNotSubscribeToTopics() {
-    testCollector.clear();
-
-    // Simulate another router being active
-    heartbeatMap.put("heartbeat", System.currentTimeMillis());
-    leaderMap.put("active-router", "some-other-instance");
-
-    router.setRouterInstanceId("test-router-instance");
-    router.initRouters();
-
-    topic.publish("{\"key\":\"value\"}".getBytes());
-
-    try {
-        Thread.sleep(300);
-    } catch (InterruptedException ignored) {}
-
-    assertFalse(testCollector.wasSent("res-topic"), "Non-leader router should not route or respond");
-}
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 58.72 s -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest
+[INFO] 
+[INFO] Results:
