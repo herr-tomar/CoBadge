@@ -1,116 +1,43 @@
-package osplus.pkptuna.hazelcast.pubsub;
-
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.map.IMap;
-import jakarta.annotation.PostConstruct;
-import osplus.apl.core.api.administration.metrics.MetricTag;
-import osplus.apl.core.api.administration.metrics.MetricsService;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import org.springframework.scheduling.TaskScheduler;
-import osplus.apl.core.api.AplComponent;
-import osplus.pkptuna.hazelcast.config.FlowConfig;
-import osplus.pkptuna.hazelcast.config.HazelcastConfigProps;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
-
-import java.time.Duration;
-import java.util.List;
-import java.util.Map;
-
-@AplComponent
-public class GenericHazelcastConsumer {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastConsumer.class);
-
-    private final MetricsService metricsService;
-
-    private final HazelcastInstance hazelcastInstance;
-    private final TaskScheduler taskScheduler;
-    private final List<FlowConfig> flowConfigs;
-    private final FlowHandlerRegistry handlerRegistry;
-    private final HazelcastConfigProps hazelcastConfigProps;
-
-    public GenericHazelcastConsumer(
-            MetricsService metricsService,
-            HazelcastInstance hazelcastInstance,
-            TaskScheduler taskScheduler,
-            List<FlowConfig> flowConfigs,
-            FlowHandlerRegistry handlerRegistry,
-            HazelcastConfigProps hazelcastConfigProps
-    ) {
-        this.metricsService = metricsService;
-        this.hazelcastInstance = hazelcastInstance;
-        this.taskScheduler = taskScheduler;
-        this.flowConfigs = flowConfigs;
-        this.handlerRegistry = handlerRegistry;
-        this.hazelcastConfigProps = hazelcastConfigProps;
+for (String key : map.keySet()) {
+    Object value = map.remove(key);
+    if (value != null) {
+        processEntry(key, value, flowName, responseTopic, mapName);
     }
+}
 
-    /**
-     * Startet das Polling nach Anfragen aus Hazelcast-Maps im festen Zeitintervall.
-     */
-    @PostConstruct
-    public void startPolling() {
-        taskScheduler.scheduleAtFixedRate(this::pollRequestMaps, Duration.ofMillis(hazelcastConfigProps.pollingRate()));
-        LOGGER.info("Scheduled Hazelcast consumer polling with fixed rate of {} ms.", hazelcastConfigProps.pollingRate());
-    }
 
-    /**
-     * Liest Anfragen aus den konfigurierten Maps, verarbeitet sie mit dem entsprechenden FlowHandler,
-     * sendet Antworten und entfernt die Einträge nach erfolgreicher Verarbeitung.
-     */
-    public void pollRequestMaps() {
-        for (FlowConfig config : flowConfigs) {
-            String flowName = config.name();
-            String baseMap = config.mapBase();
-            int partitions = config.partitions();
-            String responseTopic = config.responseTopic();
+------
 
-            for (int i = 0; i < partitions; i++) {
-                String mapName = baseMap + i;
-                IMap<String, Object> map = hazelcastInstance.getMap(mapName);
+private void processEntry(
+        String correlationId,
+        Object rawRequest,
+        String flowName,
+        String responseTopic,
+        String mapName
+) {
+    try {
+        FlowHandler<Object, Object> handler = handlerRegistry.getHandler(flowName);
+        if (handler == null) {
+            LOGGER.warn("No FlowHandler registered for flow '{}'. Skipping.", flowName);
+            metricsService.increaseCounter("hazelcast.message.consume.missingFlowHandler",
+                    MetricTag.create("flowName", flowName)
+            );
+        } else {
+            Object response = handler.handleRequest(rawRequest);
+            Object wrapped = handler.wrapResponse(correlationId, response);
+            handler.sendResponse(hazelcastInstance, responseTopic, wrapped);
 
-                for (Map.Entry<String, Object> entry : map.entrySet()) {
-                    processEntry(entry, flowName, responseTopic, map, mapName);
-                }
-            }
-        }
-    }
-
-    private void processEntry(
-            Map.Entry<String, Object> entry,
-            String flowName,
-            String responseTopic,
-            IMap<String, Object> map,
-            String mapName
-    ) {
-        String correlationId = entry.getKey();
-        Object rawRequest = entry.getValue();
-        try {
-            FlowHandler<Object, Object> handler = handlerRegistry.getHandler(flowName);
-            if (handler == null) {
-                LOGGER.warn("No FlowHandler registered for flow '{}'. Skipping.", flowName);
-                metricsService.increaseCounter("hazelcast.message.consume.missingFlowHandler",
-                        MetricTag.create("flowName", flowName)
-                );
-            } else {
-                Object response = handler.handleRequest(rawRequest);
-                Object wrapped = handler.wrapResponse(correlationId, response);
-                handler.sendResponse(hazelcastInstance, responseTopic, wrapped);
-                map.remove(correlationId);
-
-                LOGGER.info("Processed and removed entry from {} with correlationId={}", mapName, correlationId);
-                metricsService.increaseCounter("hazelcast.message.consume.success",
-                        MetricTag.create("flowName", flowName)
-                );
-            }
-        } catch (Exception e) {
-            LOGGER.error("Error processing request from {} for flow '{}': {}", mapName, flowName, e.getMessage(), e);
-            metricsService.increaseCounter(
-                    "hazelcast.message.consume.error",
-                    MetricTag.create("flowName", flowName), MetricTag.create("exceptionClass", e.getClass().getCanonicalName())
+            LOGGER.info("Processed and removed entry from {} with correlationId={}", mapName, correlationId);
+            metricsService.increaseCounter("hazelcast.message.consume.success",
+                    MetricTag.create("flowName", flowName)
             );
         }
+    } catch (Exception e) {
+        LOGGER.error("Error processing request from {} for flow '{}': {}", mapName, flowName, e.getMessage(), e);
+        metricsService.increaseCounter(
+                "hazelcast.message.consume.error",
+                MetricTag.create("flowName", flowName),
+                MetricTag.create("exceptionClass", e.getClass().getCanonicalName())
+        );
     }
 }
