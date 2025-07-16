@@ -1,3 +1,17 @@
+2025-07-16 16:11:26.237  INFO 38804 --- [           main] o.p.h.pubsub.GenericHazelcastRouter     : This node is elected as the ACTIVE router (ID=4e17043f-30af-467a-963d-0c231c909967)
+2025-07-16 16:11:26.237  INFO 38804 --- [           main] o.p.h.pubsub.GenericHazelcastRouter     : Heartbeat started for router ID=4e17043f-30af-467a-963d-0c231c909967
+
+2025-07-16 16:14:19.731  INFO 38804 --- [omcat-handler-0] o.a.c.d.session.LocalSessionIdService   : Waiting for session to be available in grid...
+2025-07-16 16:14:20.623  INFO 38804 --- [omcat-handler-0] o.a.c.d.s.OnlineSessionContextProvider  : Login against https://en02-dev.sfg-mkg-etaps.intern/fisession/keepAlive ends with status 200. RequestId: 92a80d58-868a-469c-b3bc-fe77262d20ed
+2025-07-16 16:14:20.919  INFO 38804 --- [omcat-handler-0] o.pkptuna.service.DisputeOrcaService    : Published to topic [DisputeDetailRequestReliableTopic] for trace DISPUTE-DETAIL-LOOKUP
+2025-07-16 16:14:20.956  INFO 38804 --- [onPool-worker-2] o.p.h.pubsub.GenericHazelcastRouter     : Ignoring message as this router is not the current leader (ID=4e17043f-30af-467a-963d-0c231c909967)
+2025-07-16 16:14:21.402  INFO 38804 --- [poolScheduler40] o.p.h.pubsub.ReliableTopicPublisher     : Published to topic [DisputeDetailResponseReliableTopic] for trace DISPUTE_DETAIL_LOOKUP
+2025-07-16 16:14:21.440  INFO 38804 --- [poolScheduler40] o.p.h.pubsub.GenericHazelcastConsumer   : Processed and removed entry from dispute-detail-request-map-2 with correlationId=69891d45-4c6d-46d8-b4ca-1b8440e00783
+2025-07-16 16:14:58.566  INFO 38804 --- [ionShutdownHook] o.s.b.w.e.tomcat.GracefulShutdown       : Commencing graceful shutdown. Waiting for active requests to complete
+2025-07-16 16:14:58.569  INFO 38804 --- [tomcat-shutdown] o.s.b.w.e.tomcat.GracefulShutdown       : Graceful shutdown complete
+
+----
+
 package osplus.pkptuna.hazelcast.pubsub;
 
 import com.hazelcast.core.HazelcastInstance;
