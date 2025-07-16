@@ -2,23 +2,18 @@ package osplus.pkptuna.hazelcast.pubsub;
 
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import osplus.pkptuna.hazelcast.config.HazelcastConfigProps;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
 import osplus.pkptuna.hazelcast.flows.FlowHandler;
 import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
 import osplus.pkptuna.hazelcast.test.config.BaseHazelcastTest;
 import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class GenericHazelcastConsumerTest extends BaseHazelcastTest {
-
-    @Autowired
-    private HazelcastConfigProps hazelcastConfigProps;
 
     @Autowired
     private FlowHandlerRegistry handlerRegistry;
@@ -35,15 +30,20 @@ public class GenericHazelcastConsumerTest extends BaseHazelcastTest {
     @Autowired
     private FlowHandlerTestConfiguration.TestCollector testCollector;
 
-    /**
-     * Positiver Test: Überprüft, ob ein gültiger Flow korrekt verarbeitet wird.
-     */
+    @Autowired
+    private FlowConfig flowConfig;
+
+    @BeforeEach
+    public void setup() {
+        testCollector.clear();
+        hazelcastInstance.getMap("map-0").clear();
+        hazelcastInstance.getMap("map00").clear();
+    }
+
     @Test
     public void testPollRequestMaps_PositiveFlow() {
-        testCollector.clear();
-
         IMap<Object, Object> testMap = hazelcastInstance.getMap("map-0");
-        testMap.put("corrId1", "request1");
+        testMap.put("corrId1", Map.of("key", "value"));
 
         consumer.pollRequestMaps();
 
@@ -51,36 +51,24 @@ public class GenericHazelcastConsumerTest extends BaseHazelcastTest {
         assertEquals("wrappedResponse", testCollector.getSent("res-topic"));
     }
 
-    /**
-     * Negativer Test: Kein Handler für den Flow vorhanden.
-     */
     @Test
     public void testPollRequestMaps_NoHandlerFound() {
-        testCollector.clear();
-
-        IMap<Object, Object> testMap = hazelcastInstance.getMap("map00");
-        testMap.put("id1", "request");
+        // Intentionally use a map with an unknown flow prefix (not registered in flowConfigs)
+        IMap<Object, Object> testMap = hazelcastInstance.getMap("unknown-map-0");
+        testMap.put("id1", Map.of("key", "value"));
 
         consumer.pollRequestMaps();
 
-        assertFalse(testCollector.wasSent("responseTopic"), "No response should be sent for unknown flow");
+        assertFalse(testCollector.wasSent("res-topic"), "No response should be sent for unknown flow");
     }
 
-    /**
-     * Negativer Test: Exception beim Verarbeiten der Anfrage.
-     */
     @Test
     public void testPollRequestMaps_HandlerThrowsException() {
-        testCollector.clear();
-
-        IMap<Object, Object> testMap = hazelcastInstance.getMap("map00");
-        testMap.put("id123", "faultyRequest");
-
-        FlowHandler originalHandler = handlerRegistry.getHandler("myFlow");
-        assertNotNull(originalHandler);
+        IMap<Object, Object> testMap = hazelcastInstance.getMap("map-0");
+        testMap.put("faultyId", "faultyRequest");
 
         consumer.pollRequestMaps();
 
-        assertFalse(testCollector.wasSent("responseTopic"), "No response should be sent when handler fails");
+        assertFalse(testCollector.wasSent("res-topic"), "No response should be sent when handler throws exception");
     }
 }
