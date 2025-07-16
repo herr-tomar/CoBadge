@@ -1,138 +1,21 @@
-package osplus.pkptuna.hazelcast.pubsub;
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 47.25 s -- in osplus.pkptuna.hazelcast.config.FlowHandlerInitializerTest
+[ERROR] Tests run: 4, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 58.40 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest
+[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully -- Time elapsed: 0.541 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: Expected message to be routed to target map ==> expected: <true> but was: <false>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertTrue.failNotTrue(AssertTrue.java:63)
+	at org.junit.jupiter.api.AssertTrue.assertTrue(AssertTrue.java:36)
+	at org.junit.jupiter.api.Assertions.assertTrue(Assertions.java:214)
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully(GenericHazelcastRouterTest.java:88)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
 
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.map.IMap;
-import com.hazelcast.topic.ITopic;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import osplus.apl.core.test.utils.AplTestRunner;
-import osplus.apl.core.test.utils.BaseAplTest;
-import osplus.pkptuna.hazelcast.config.FlowConfig;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
-import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
-
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.jupiter.api.Assertions.*;
-
-@SpringBootTest(
-        classes = {AplTestRunner.class, FlowHandlerTestConfiguration.class},
-        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
-        properties = {
-                "spring.main.allow-bean-definition-overriding=true",
-                "generichazelcast.polling-rate=20",
-                "apl.application.name=uui",
-                "apl.application.version=0.0.1-TEST"
-        }
-)
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public class GenericHazelcastRouterTest extends BaseAplTest {
-
-    @Autowired
-    private HazelcastInstance hazelcastInstance;
-
-    @Autowired
-    private FlowHandlerRegistry<String, FlowHandler> handlerRegistry;
-
-    @Autowired
-    private FlowHandler sampleFlowHandler;
-
-    @Autowired
-    private FlowConfig flowConfig;
-
-    @Autowired
-    private GenericHazelcastRouter router;
-
-    private IMap<String, String> leaderMap;
-    private IMap<String, Long> heartbeatMap;
-    private IMap<String, String> routerMap;
-    private IMap<Object, Object> targetMap;
-    private ITopic<byte[]> topic;
-
-    private final String routerInstanceId = "test-router-instance";
-
-    @BeforeEach
-    public void setup() {
-        leaderMap = hazelcastInstance.getMap("router-leader-map");
-        heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
-        routerMap = hazelcastInstance.getMap("router-claim-map");
-        targetMap = hazelcastInstance.getMap("map-0");
-        topic = hazelcastInstance.getReliableTopic("req-topic");
-
-        leaderMap.clear();
-        heartbeatMap.clear();
-        routerMap.clear();
-        targetMap.clear();
-
-        router.setRouterInstanceId(routerInstanceId);
-    }
-
-    @Test
-    public void testMessageRoutedSuccessfully() throws Exception {
-        router.initRouters();
-
-        Map<String, Object> requestMap = Map.of("foo", "bar");
-        byte[] rawMessage = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(requestMap);
-
-        String expectedCorrelationId = sampleFlowHandler.extractCorrelationId(requestMap);
-
-        topic.publish(rawMessage);
-        Thread.sleep(500); // allow routing to complete
-
-        assertTrue(targetMap.containsKey(expectedCorrelationId), "Expected message to be routed to target map");
-        assertEquals(requestMap, targetMap.get(expectedCorrelationId));
-    }
-
-    @Test
-    public void testDuplicateMessageNotProcessed() throws Exception {
-        router.initRouters();
-
-        Map<String, Object> requestMap = Map.of("dup", "check");
-        byte[] rawMessage = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(requestMap);
-        String corrId = sampleFlowHandler.extractCorrelationId(requestMap);
-
-        routerMap.put("route-lock-" + corrId, "existing"); // simulate lock already taken
-
-        topic.publish(rawMessage);
-        Thread.sleep(500);
-
-        assertFalse(targetMap.containsKey(corrId), "Duplicate message should not be routed");
-    }
-
-    @Test
-    public void testRoutingHandlerThrowsException() throws Exception {
-        router.initRouters();
-
-        String faulty = "faultyRequest";
-        byte[] rawMessage = faulty.getBytes();
-
-        topic.publish(rawMessage);
-        Thread.sleep(500);
-
-        assertTrue(routerMap.isEmpty(), "No lock should be acquired on handler failure");
-        assertTrue(targetMap.isEmpty(), "Faulty request should not be routed");
-    }
-
-    @Test
-    public void testNotLeaderDoesNotSubscribeToTopics() {
-        heartbeatMap.put("heartbeat", System.currentTimeMillis());
-        leaderMap.put("active-router", "some-other-instance");
-
-        router.initRouters();
-
-        // Publish a message, but router should not be listening
-        topic.publish("irrelevant".getBytes());
-
-        // Delay to ensure nothing processed
-        try {
-            Thread.sleep(500);
-        } catch (InterruptedException ignored) {}
-
-        assertTrue(targetMap.isEmpty(), "Non-leader should not route messages");
-    }
-}
+[INFO] 
+[INFO] Results:
+[INFO] 
+[ERROR] Failures: 
+[ERROR]   GenericHazelcastRouterTest.testMessageRoutedSuccessfully:88 Expected message to be routed to target map ==> expected: <true> but was: <false>
+[INFO] 
+[ERROR] Tests run: 16, Failures: 1, Errors: 0, Skipped: 0
