@@ -1,20 +1,26 @@
-    @Test
-    public void testNotLeaderDoesNotSubscribeToTopics() throws Exception {
-        testCollector.clear();
+@Test
+public void testNotLeaderDoesNotSubscribeToTopics() throws Exception {
+    testCollector.clear();
 
-        long now = System.currentTimeMillis();
-        heartbeatMap.put("heartbeat", now);
-        leaderMap.put("active-router", "another-instance"); // simulate another leader
+    // Force heartbeat and another active leader BEFORE initRouters
+    long now = System.currentTimeMillis();
+    IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
+    IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
 
-        router.setRouterInstanceId("test-router-instance");
-        router.initRouters();
+    heartbeatMap.put("heartbeat", now);
+    leaderMap.put("active-router", "another-instance");
 
-        String topicName = flowConfig.requestTopic();
-        topic = hazelcastInstance.getReliableTopic(topicName);
+    // Now initialize the router – it should detect that it is NOT the leader
+    router.setRouterInstanceId("test-router-instance");
+    router.initRouters();
 
-        topic.publish("{\"key\":\"value\"}".getBytes());
-        Thread.sleep(300);
+    // Publish message to topic; router should NOT receive it
+    ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(flowConfig.requestTopic());
+    topic.publish("{\"key\":\"value\"}".getBytes());
 
-        // ❗ assertTrue if collector did NOT record anything
-        assertFalse(testCollector.wasSent("res-topic"), "Non-leader router should not route or respond");
-    }
+    // Give some time for message propagation
+    Thread.sleep(500);
+
+    // ✅ Assert that nothing was sent
+    assertFalse(testCollector.wasSent("res-topic"), "Non-leader router should not route or respond");
+}
