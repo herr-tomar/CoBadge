@@ -1,9 +1,15 @@
-2025-07-16 15:42:25.657  INFO 22008 --- [omcat-handler-0] o.a.c.d.session.LocalSessionIdService   : Waiting for session to be available in grid...
-2025-07-16 15:42:26.205  INFO 22008 --- [omcat-handler-0] o.a.c.d.session.LocalSessionIdService   : Waiting for session to be available in grid...
-2025-07-16 15:42:26.767  INFO 22008 --- [omcat-handler-0] o.a.c.d.session.LocalSessionIdService   : Waiting for session to be available in grid...
-2025-07-16 15:42:27.317  INFO 22008 --- [omcat-handler-0] o.a.c.d.session.LocalSessionIdService   : Waiting for session to be available in grid...
-2025-07-16 15:42:28.231  INFO 22008 --- [omcat-handler-0] o.a.c.d.s.OnlineSessionContextProvider  : Login against https://en02-dev.sfg-mkg-etaps.intern/fisession/keepAlive ends with status 200. RequestId: 2c5b25e0-e277-4c74-b8ef-0be325c15f38
-2025-07-16 15:42:28.545  INFO 22008 --- [omcat-handler-0] o.pkptuna.service.DisputeOrcaService    : Published to topic [DisputeDetailRequestReliableTopic] for trace DISPUTE-DETAIL-LOOKUP
-2025-07-16 15:42:28.591  INFO 22008 --- [onPool-worker-1] o.p.h.pubsub.GenericHazelcastRouter     : Ignoring message as this router is not the current leader (ID=4b7a6a2b-c33f-4365-9577-37a932747860)
-2025-07-16 15:42:29.054  INFO 22008 --- [poolScheduler20] o.p.h.pubsub.ReliableTopicPublisher     : Published to topic [DisputeDetailResponseReliableTopic] for trace DISPUTE_DETAIL_LOOKUP
-2025-07-16 15:42:29.092  INFO 22008 --- [poolScheduler20] o.p.h.pubsub.GenericHazelcastConsumer   : Processed and removed entry from dispute-detail-request-map-1 with correlationId=8f11c85d-8777-4029-a76f-3b39f017511d
+private void unsubscribeFromTopics() {
+    listenerRegistrations.forEach((flowName, registrationId) -> {
+        String topicName = flowConfigs.stream()
+                .filter(cfg -> cfg.name().equals(flowName))
+                .findFirst()
+                .map(FlowConfig::requestTopic)
+                .orElse(null);
+
+        if (topicName != null) {
+            hazelcastInstance.getReliableTopic(topicName).removeMessageListener(registrationId);
+            LOGGER.info("Unsubscribed from topic={} for flow={}", topicName, flowName);
+        }
+    });
+    listenerRegistrations.clear();
+}
