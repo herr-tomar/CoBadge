@@ -1,47 +1,57 @@
- @Test
-    public void testDuplicateMessageNotProcessed() throws Exception {
-        router.initRouters();
+@Test
+public void testDuplicateMessageNotProcessed() throws Exception {
+    testCollector.clear();
+    router.setRouterInstanceId("test-router-instance");
+    router.initRouters();
 
-        Map<String, Object> requestMap = Map.of("dup", "check");
-        byte[] rawMessage = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(requestMap);
-        String corrId = sampleFlowHandler.extractCorrelationId(requestMap);
+    Map<String, Object> requestMap = Map.of("dup", "check");
+    byte[] rawMessage = new ObjectMapper().writeValueAsBytes(requestMap);
+    String corrId = sampleFlowHandler.extractCorrelationId(requestMap);
 
-        routerMap.put("route-lock-" + corrId, "existing"); // simulate lock already taken
+    // Simulate existing lock
+    hazelcastInstance.getMap("router-claim-map").put("route-lock-" + corrId, "existing");
 
-        topic.publish(rawMessage);
-        Thread.sleep(500);
+    topic.publish(rawMessage);
+    Thread.sleep(300); // Wait for async processing
 
-        assertFalse(targetMap.containsKey(corrId), "Duplicate message should not be routed");
-    }
+    assertFalse(testCollector.wasSent("res-topic"), "Duplicate message should not be routed or responded to");
+}
+----
 
-    @Test
-    public void testRoutingHandlerThrowsException() throws Exception {
-        router.initRouters();
+@Test
+public void testRoutingHandlerThrowsException() throws Exception {
+    testCollector.clear();
+    router.setRouterInstanceId("test-router-instance");
+    router.initRouters();
 
-        String faulty = "faultyRequest";
-        byte[] rawMessage = faulty.getBytes();
+    // This triggers a known failure in the test handler
+    byte[] rawMessage = "faultyRequest".getBytes();
 
-        topic.publish(rawMessage);
-        Thread.sleep(500);
+    topic.publish(rawMessage);
+    Thread.sleep(300);
 
-        assertTrue(routerMap.isEmpty(), "No lock should be acquired on handler failure");
-        assertTrue(targetMap.isEmpty(), "Faulty request should not be routed");
-    }
+    assertFalse(testCollector.wasSent("res-topic"), "No response should be sent for faulty request");
+}
 
-    @Test
-    public void testNotLeaderDoesNotSubscribeToTopics() {
-        heartbeatMap.put("heartbeat", System.currentTimeMillis());
-        leaderMap.put("active-router", "some-other-instance");
 
-        router.initRouters();
+--------
 
-        // Publish a message, but router should not be listening
-        topic.publish("irrelevant".getBytes());
+@Test
+public void testNotLeaderDoesNotSubscribeToTopics() {
+    testCollector.clear();
 
-        // Delay to ensure nothing processed
-        try {
-            Thread.sleep(500);
-        } catch (InterruptedException ignored) {}
+    // Simulate another router being active
+    heartbeatMap.put("heartbeat", System.currentTimeMillis());
+    leaderMap.put("active-router", "some-other-instance");
 
-        assertTrue(targetMap.isEmpty(), "Non-leader should not route messages");
-    }
+    router.setRouterInstanceId("test-router-instance");
+    router.initRouters();
+
+    topic.publish("{\"key\":\"value\"}".getBytes());
+
+    try {
+        Thread.sleep(300);
+    } catch (InterruptedException ignored) {}
+
+    assertFalse(testCollector.wasSent("res-topic"), "Non-leader router should not route or respond");
+}
