@@ -1,21 +1,28 @@
-[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 47.25 s -- in osplus.pkptuna.hazelcast.config.FlowHandlerInitializerTest
-[ERROR] Tests run: 4, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 58.40 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest
-[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully -- Time elapsed: 0.541 s <<< FAILURE!
-org.opentest4j.AssertionFailedError: Expected message to be routed to target map ==> expected: <true> but was: <false>
-	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
-	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
-	at org.junit.jupiter.api.AssertTrue.failNotTrue(AssertTrue.java:63)
-	at org.junit.jupiter.api.AssertTrue.assertTrue(AssertTrue.java:36)
-	at org.junit.jupiter.api.Assertions.assertTrue(Assertions.java:214)
-	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully(GenericHazelcastRouterTest.java:88)
-	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
 
-[INFO] 
-[INFO] Results:
-[INFO] 
-[ERROR] Failures: 
-[ERROR]   GenericHazelcastRouterTest.testMessageRoutedSuccessfully:88 Expected message to be routed to target map ==> expected: <true> but was: <false>
-[INFO] 
-[ERROR] Tests run: 16, Failures: 1, Errors: 0, Skipped: 0
+java.lang.RuntimeException: Deserialization failed
+	at osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration$1.deserializeRequest(FlowHandlerTestConfiguration.java:83) ~[test-classes/:na]
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter$RoutingListener.onMessage(GenericHazelcastRouter.java:136) ~[classes/:na]
+	at com.hazelcast.topic.impl.reliable.ReliableMessageListenerAdapter.onMessage(ReliableMessageListenerAdapter.java:49) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.topic.impl.reliable.MessageRunner.accept(MessageRunner.java:113) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.topic.impl.reliable.MessageRunner.accept(MessageRunner.java:44) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.spi.impl.AbstractInvocationFuture$WhenCompleteNode.lambda$execute$0(AbstractInvocationFuture.java:1570) ~[hazelcast-5.3.0.jar:5.3.0]
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642) ~[na:na]
+	at java.base/java.lang.Thread.run(Thread.java:1583) ~[na:na]
+	at com.hazelcast.internal.util.executor.HazelcastManagedThread.executeRun(HazelcastManagedThread.java:76) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.internal.util.executor.HazelcastManagedThread.run(HazelcastManagedThread.java:111) ~[hazelcast-5.3.0.jar:5.3.0]
+Caused by: com.fasterxml.jackson.core.JsonParseException: Unrecognized token 'irrelevant': was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')
+ at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 11]
+	at com.fasterxml.jackson.core.JsonParser._constructError(JsonParser.java:2596) ~[jackson-core-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.core.JsonParser._constructReadException(JsonParser.java:2622) ~[jackson-core-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.core.JsonParser._constructReadException(JsonParser.java:2630) ~[jackson-core-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.core.base.ParserMinimalBase._reportError(ParserMinimalBase.java:830) ~[jackson-core-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.core.json.UTF8StreamJsonParser._reportInvalidToken(UTF8StreamJsonParser.java:3662) ~[jackson-core-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.core.json.UTF8StreamJsonParser._handleUnexpectedValue(UTF8StreamJsonParser.java:2749) ~[jackson-core-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.core.json.UTF8StreamJsonParser._nextTokenNotInObject(UTF8StreamJsonParser.java:867) ~[jackson-core-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.core.json.UTF8StreamJsonParser.nextToken(UTF8StreamJsonParser.java:753) ~[jackson-core-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.databind.ObjectMapper._initForReading(ObjectMapper.java:5058) ~[jackson-databind-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.databind.ObjectMapper._readMapAndClose(ObjectMapper.java:4961) ~[jackson-databind-2.19.1.jar:2.19.1]
+	at com.fasterxml.jackson.databind.ObjectMapper.readValue(ObjectMapper.java:3948) ~[jackson-databind-2.19.1.jar:2.19.1]
+	at osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration$1.deserializeRequest(FlowHandlerTestConfiguration.java:81) ~[test-classes/:na]
+	... 10 common frames omitted
