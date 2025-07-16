@@ -1,10 +1,7 @@
-@BeforeEach
-void setUp() {
-    hazelcastInstance.getMap("map-0").clear();
-    hazelcastInstance.getMap("router-leader-map").clear();
-    hazelcastInstance.getMap("router-heartbeat-map").clear();
-    hazelcastInstance.getMap("router-claim-map").clear();
-    hazelcastInstance.getReliableTopic("req-topic").destroy();
-    hazelcastInstance.getReliableTopic("res-topic").destroy();
-    testCollector.clear();
-}
+await()
+        .atMost(2, TimeUnit.SECONDS)
+        .pollInterval(100, TimeUnit.MILLISECONDS)
+        .untilAsserted(() -> {
+            assertTrue(testCollector.wasSent("res-topic"), "Expected message to be routed and response sent");
+            assertEquals("wrappedResponse", testCollector.getSent("res-topic"));
+        });
