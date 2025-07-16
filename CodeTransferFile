@@ -1,6 +1,29 @@
-2025-07-16 14:55:32.576  INFO 31816 --- [omcat-handler-3] o.pkptuna.service.DisputeOrcaService    : Published to topic [DisputeDetailRequestReliableTopic] for trace DISPUTE-DETAIL-LOOKUP
-2025-07-16 14:55:32.613  INFO 31816 --- [onPool-worker-5] o.p.h.pubsub.GenericHazelcastRouter     : Ignoring message as this router is not the current leader (ID=5fb71fb6-b789-460b-b209-4f59deebe3f7)
-2025-07-16 14:56:03.095  INFO 31816 --- [omcat-handler-5] o.pkptuna.service.DisputeOrcaService    : Published to topic [DisputeDetailRequestReliableTopic] for trace DISPUTE-DETAIL-LOOKUP
-2025-07-16 14:56:03.129  INFO 31816 --- [onPool-worker-5] o.p.h.pubsub.GenericHazelcastRouter     : Ignoring message as this router is not the current leader (ID=5fb71fb6-b789-460b-b209-4f59deebe3f7)
-2025-07-16 14:56:03.369  INFO 31816 --- [ poolScheduler3] o.p.h.pubsub.ReliableTopicPublisher     : Published to topic [DisputeDetailResponseReliableTopic] for trace DISPUTE_DETAIL_LOOKUP
-2025-07-16 14:56:03.405  INFO 31816 --- [ poolScheduler3] o.p.h.pubsub.GenericHazelcastConsumer   : Processed and removed entry from dispute-detail-request-map-0 with correlationId=308ae62d-f20c-4518-8dd3-ecf6a0dad2bb
+public void initRouters() {
+    try {
+        IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
+        IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
+
+        String currentLeader = leaderMap.get("active-router");
+        Long lastHeartbeat = heartbeatMap.get("heartbeat");
+
+        boolean heartbeatStale = (lastHeartbeat == null || System.currentTimeMillis() - lastHeartbeat > 5000);
+
+        if (heartbeatStale) {
+            // Either no leader or leader is stale; attempt to become the new leader
+            String previous = leaderMap.put("active-router", routerInstanceId);
+
+            if (previous == null || previous.equals(currentLeader)) {
+                LOGGER.info("This node is elected as the ACTIVE router (ID={})", routerInstanceId);
+                startHeartbeat();
+                subscribeToTopics();
+            } else {
+                LOGGER.info("Another node claimed leadership before us (ID={})", previous);
+            }
+        } else {
+            LOGGER.info("Leadership already exists and heartbeat is alive (Leader={}, LastBeat={})",
+                    currentLeader, lastHeartbeat);
+        }
+    } catch (Exception e) {
+        LOGGER.error("Failed to initialize router", e);
+    }
+}
