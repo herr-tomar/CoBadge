@@ -1,122 +1,27 @@
-package osplus.pkptuna.hazelcast.pubsub;
+INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 49.84 s -- in osplus.pkptuna.hazelcast.config.FlowHandlerInitializerTest
+[ERROR] Tests run: 4, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 61.59 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest
+[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully -- Time elapsed: 1.129 s <<< ERROR!
+org.awaitility.core.ConditionTimeoutException: Condition with Lambda expression in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest was not fulfilled within 1 seconds.
+	at org.awaitility.core.ConditionAwaiter.await(ConditionAwaiter.java:167)
+	at org.awaitility.core.CallableCondition.await(CallableCondition.java:78)
+	at org.awaitility.core.CallableCondition.await(CallableCondition.java:26)
+	at org.awaitility.core.ConditionFactory.until(ConditionFactory.java:1006)
+	at org.awaitility.core.ConditionFactory.until(ConditionFactory.java:975)
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully(GenericHazelcastRouterTest.java:69)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.map.IMap;
-import com.hazelcast.topic.ITopic;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import osplus.pkptuna.hazelcast.config.FlowConfig;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
-import osplus.pkptuna.hazelcast.test.config.BaseHazelcastTest;
-import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
 
-import java.util.Map;
 
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+--------------------
 
-public class GenericHazelcastRouterTest extends BaseHazelcastTest {
 
-    @Autowired private HazelcastInstance hazelcastInstance;
-    @Autowired private FlowHandlerRegistry<String, FlowHandler> handlerRegistry;
-    @Autowired private FlowHandler sampleFlowHandler;
-    @Autowired private FlowConfig flowConfig;
-    @Autowired private GenericHazelcastRouter router;
-    @Autowired private FlowHandlerTestConfiguration.TestCollector testCollector;
-
-    private IMap<String, String> leaderMap;
-    private IMap<String, Long> heartbeatMap;
-    private IMap<String, String> routerMap;
-    private IMap<Object, Object> targetMap;
-    private ITopic<byte[]> topic;
-
-    private final String routerInstanceId = "test-router-instance";
-
-    @BeforeEach
-    public void setup() {
-        leaderMap = hazelcastInstance.getMap("router-leader-map");
-        heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
-        routerMap = hazelcastInstance.getMap("router-claim-map");
-        targetMap = hazelcastInstance.getMap("map-0");
-
-        leaderMap.clear();
-        heartbeatMap.clear();
-        routerMap.clear();
-        targetMap.clear();
-        testCollector.clear();
-
-        router.setRouterInstanceId(routerInstanceId);
-        topic = hazelcastInstance.getReliableTopic(flowConfig.requestTopic());
-    }
-
-    @Test
-    public void testMessageRoutedSuccessfully() {
-        // Make this router the leader
-        leaderMap.put("active-router", routerInstanceId);
-        heartbeatMap.put("heartbeat", System.currentTimeMillis());
-
-        router.initRouters();
-        topic.publish("{\"key\":\"value\"}".getBytes());
-
-        await().atMost(1, SECONDS)
-                .until(() -> testCollector.wasSent("res-topic"));
-
-        assertEquals("wrappedResponse", testCollector.getSent("res-topic"));
-    }
-
-    @Test
-    public void testDuplicateMessageNotProcessed() throws Exception {
-        leaderMap.put("active-router", routerInstanceId);
-        heartbeatMap.put("heartbeat", System.currentTimeMillis());
-
-        router.initRouters();
-
-        Map<String, Object> requestMap = Map.of("dup", "check");
-        byte[] rawMessage = new ObjectMapper().writeValueAsBytes(requestMap);
-        String corrId = sampleFlowHandler.extractCorrelationId(requestMap);
-
-        routerMap.put("route-lock-" + corrId, "existing"); // Simulate existing lock
-        topic.publish(rawMessage);
-
-        await().during(300, MILLISECONDS)
-              .atMost(1, SECONDS)
-              .untilAsserted(() -> assertFalse(testCollector.wasSent("res-topic")));
-    }
-
-    @Test
-    public void testRoutingHandlerThrowsException() {
-        leaderMap.put("active-router", routerInstanceId);
-        heartbeatMap.put("heartbeat", System.currentTimeMillis());
-
-        router.initRouters();
-
-        byte[] rawMessage = "faultyRequest".getBytes();
-        topic.publish(rawMessage);
-
-        await().during(300, MILLISECONDS)
-              .atMost(1, SECONDS)
-              .untilAsserted(() -> assertFalse(testCollector.wasSent("res-topic")));
-    }
-
-    @Test
-    public void testNotLeaderDoesNotSubscribeToTopics() {
-        // Simulate different leader
-        leaderMap.put("active-router", "another-instance");
-        heartbeatMap.put("heartbeat", System.currentTimeMillis());
-
-        router.setRouterInstanceId("test-router-instance");
-        router.initRouters();
-
-        topic.publish("{\"key\":\"value\"}".getBytes());
-
-        await().during(300, MILLISECONDS)
-              .atMost(1, SECONDS)
-              .untilAsserted(() -> assertFalse(testCollector.wasSent("res-topic")));
-    }
-}
+2025-07-16T17:34:09.184+02:00  INFO 24400 --- [uui] [arson.migration] c.h.i.partition.impl.MigrationManager    : [16.160.188.219]:5703 [test-cluster] [5.3.0] Partition balance is ok, no need to repartition.
+2025-07-16T17:34:09.297+02:00  INFO 24400 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : [initRouters] Using routerInstanceId=test-router-instance
+2025-07-16T17:34:09.297+02:00  INFO 24400 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Leadership already exists and heartbeat is alive (Leader=test-router-instance, LastBeat=1752680049297)
+2025-07-16T17:34:09.764+02:00  INFO 24400 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : [initRouters] Using routerInstanceId=test-router-instance
+2025-07-16T17:34:09.764+02:00  INFO 24400 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Leadership already exists and heartbeat is alive (Leader=test-router-instance, LastBeat=1752680049764)
+2025-07-16T17:34:10.897+02:00  INFO 24400 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : [initRouters] Using routerInstanceId=test-router-instance
+2025-07-16T17:34:10.898+02:00  INFO 24400 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Leadership already exists and heartbeat is alive (Leader=another-instance, LastBeat=1752680050897)
+2025-07-16T17:34:11.400+02:00  INFO 24400 --- [uui] [.ShutdownThread] com.hazelcast.instance.impl.Node         : [16.160.188.219]:5703 [test-cluster] [5.3.0] Running shutdown hook... Current node state: ACTIVE
