@@ -1,15 +1,205 @@
-private void unsubscribeFromTopics() {
-    listenerRegistrations.forEach((flowName, registrationId) -> {
-        String topicName = flowConfigs.stream()
-                .filter(cfg -> cfg.name().equals(flowName))
-                .findFirst()
-                .map(FlowConfig::requestTopic)
-                .orElse(null);
+package osplus.pkptuna.hazelcast.pubsub;
 
-        if (topicName != null) {
-            hazelcastInstance.getReliableTopic(topicName).removeMessageListener(registrationId);
-            LOGGER.info("Unsubscribed from topic={} for flow={}", topicName, flowName);
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.topic.ITopic;
+import com.hazelcast.topic.Message;
+import com.hazelcast.topic.MessageListener;
+import jakarta.annotation.PreDestroy;
+import osplus.apl.core.api.AplComponent;
+import osplus.apl.core.api.administration.metrics.MetricTag;
+import osplus.apl.core.api.administration.metrics.MetricsService;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * Der {@code GenericHazelcastRouter} ist verantwortlich für das zentrale Routing eingehender Nachrichten
+ * aus ReliableTopics in partitionierte IMaps. Der Router verwendet eine zentrale Leader Election mit Heartbeat,
+ * um sicherzustellen, dass nur eine Instanz im Cluster aktiv routet.
+ */
+@AplComponent
+public class GenericHazelcastRouter {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastRouter.class);
+    private final MetricsService metricsService;
+
+    private final HazelcastInstance hazelcastInstance;
+    private final List<FlowConfig> flowConfigs;
+    private final FlowHandlerRegistry handlerRegistry;
+    private String routerInstanceId;
+    private final Map<String, AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
+    private final Map<String, UUID> listenerRegistrations = new ConcurrentHashMap<>();
+
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+
+    public GenericHazelcastRouter(MetricsService metricsService,
+                                  HazelcastInstance hazelcastInstance,
+                                  List<FlowConfig> flowConfigs,
+                                  FlowHandlerRegistry handlerRegistry) {
+        this.metricsService = metricsService;
+        this.hazelcastInstance = hazelcastInstance;
+        this.flowConfigs = flowConfigs;
+        this.handlerRegistry = handlerRegistry;
+        this.routerInstanceId = UUID.randomUUID().toString();
+    }
+
+    public void initRouters() {
+        try {
+            IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
+            IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
+
+            String currentLeader = leaderMap.get("active-router");
+            Long lastHeartbeat = heartbeatMap.get("heartbeat");
+
+            boolean heartbeatStale = (lastHeartbeat == null || System.currentTimeMillis() - lastHeartbeat > 5000);
+
+            if (heartbeatStale) {
+                // Either no leader or leader is stale; attempt to become the new leader
+                String previous = leaderMap.put("active-router", routerInstanceId);
+
+                if (previous == null || previous.equals(currentLeader)) {
+                    LOGGER.info("This node is elected as the ACTIVE router (ID={})", routerInstanceId);
+                    startHeartbeat();
+                    subscribeToTopics();
+                } else {
+                    LOGGER.info("Another node claimed leadership before us (ID={})", previous);
+                    unsubscribeFromTopics();
+                }
+            } else {
+                LOGGER.info("Leadership already exists and heartbeat is alive (Leader={}, LastBeat={})",
+                        currentLeader, lastHeartbeat);
+                unsubscribeFromTopics();
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to initialize router", e);
         }
-    });
-    listenerRegistrations.clear();
+    }
+
+    @PreDestroy
+    public void shutdown(){
+        unsubscribeFromTopics();
+        scheduler.shutdownNow();
+    }
+
+    public void setRouterInstanceId(String routerInstanceId) {
+        this.routerInstanceId = routerInstanceId;
+    }
+
+    private void startHeartbeat() {
+        IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
+        scheduler.scheduleAtFixedRate(() -> {
+            heartbeatMap.put("heartbeat", System.currentTimeMillis());
+        }, 0, 3, TimeUnit.SECONDS);
+        LOGGER.info("Heartbeat started for router ID={}", routerInstanceId);
+    }
+
+    private void subscribeToTopics() {
+        if (flowConfigs == null || flowConfigs.isEmpty()) {
+            LOGGER.warn("No Hazelcast flow configurations found.");
+            return;
+        }
+
+        flowConfigs.forEach(flowConfig -> {
+            String flowName = flowConfig.name();
+            roundRobinCounters.putIfAbsent(flowName, new AtomicInteger(0));
+
+            @SuppressWarnings("unchecked")
+            Optional<FlowHandler<Object, Object>> handler = Optional.of(
+                    (FlowHandler<Object, Object>) handlerRegistry.getHandler(flowName)
+            );
+
+            handler.ifPresentOrElse(value -> {
+                ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(flowConfig.requestTopic());
+                UUID registrationId = topic.addMessageListener(new RoutingListener(flowName, flowConfig, value));
+                listenerRegistrations.put(flowName, registrationId);
+                LOGGER.info("Listening on topic={} for flow={}", flowConfig.requestTopic(), flowName);
+            }, () -> LOGGER.warn("No FlowHandler registered for flow: {}", flowName));
+        });
+    }
+
+    private void unsubscribeFromTopics() {
+        listenerRegistrations.forEach((flowName, registrationId) -> {
+            String topicName = flowConfigs.stream()
+                    .filter(cfg -> cfg.name().equals(flowName))
+                    .findFirst()
+                    .map(FlowConfig::requestTopic)
+                    .orElse(null);
+
+            if (topicName != null) {
+                hazelcastInstance.getReliableTopic(topicName).removeMessageListener(registrationId);
+                LOGGER.info("Unsubscribed from topic={} for flow={}", topicName, flowName);
+            }
+        });
+        listenerRegistrations.clear();
+    }
+
+    private class RoutingListener<T> implements MessageListener<byte[]> {
+
+        private final String flowName;
+        private final FlowConfig config;
+        private final FlowHandler<T, ?> handler;
+
+        RoutingListener(String flowName, FlowConfig config, FlowHandler<T, ?> handler) {
+            this.flowName = flowName;
+            this.config = config;
+            this.handler = handler;
+        }
+
+        @Override
+        public void onMessage(Message<byte[]> message) {
+            try {
+                // Leadership validation
+                IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
+
+                String currentLeader = leaderMap.get("active-router");
+
+                if (!routerInstanceId.equals(currentLeader)) {
+                    LOGGER.info("Ignoring message as this router is not the current leader (ID={})", routerInstanceId);
+                    return;
+                }
+
+                T request = handler.deserializeRequest(message.getMessageObject());
+                String correlationId = handler.extractCorrelationId(request);
+                String lockKey = "route-lock-" + correlationId;
+
+                IMap<String, String> routerMap = hazelcastInstance.getMap("router-claim-map");
+                String uniqueId = UUID.randomUUID().toString();
+
+                String existing = routerMap.putIfAbsent(lockKey, uniqueId);
+                if (existing != null) {
+                    LOGGER.info("Skipped duplicate routing for correlationId={}", correlationId);
+                    metricsService.increaseCounter("hazelcast.message.received.duplicate", MetricTag.create("flowName", flowName));
+                    return;
+                }
+
+                int index = roundRobinCounters.get(flowName).getAndIncrement() % config.partitions();
+                String mapKey = config.mapBase() + index;
+
+                hazelcastInstance.getMap(mapKey).put(correlationId, request);
+                LOGGER.info("Routed correlationId='{}' to map '{}'", correlationId, mapKey);
+
+                metricsService.increaseCounter("hazelcast.message.received.valid", MetricTag.create("flowName", flowName));
+            } catch (Exception e) {
+                metricsService.increaseCounter(
+                        "hazelcast.message.received.error",
+                        MetricTag.create("flowName", flowName),
+                        MetricTag.create("exceptionClass", e.getClass().getCanonicalName())
+                );
+                LOGGER.error("Routing failure for flow '{}': {}", flowName, e.getMessage(), e);
+            }
+        }
+    }
 }
