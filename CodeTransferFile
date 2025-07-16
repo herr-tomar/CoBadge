@@ -1,12 +1,10 @@
-<build>
-  <plugins>
-    <plugin>
-      <artifactId>maven-surefire-plugin</artifactId>
-      <version>3.1.2</version>
-      <configuration>
-        <parallel>none</parallel>
-        <reuseForks>false</reuseForks>
-      </configuration>
-    </plugin>
-  </plugins>
-</build>
+@BeforeEach
+void setUp() {
+    hazelcastInstance.getMap("map-0").clear();
+    hazelcastInstance.getMap("router-leader-map").clear();
+    hazelcastInstance.getMap("router-heartbeat-map").clear();
+    hazelcastInstance.getMap("router-claim-map").clear();
+    hazelcastInstance.getReliableTopic("req-topic").destroy();
+    hazelcastInstance.getReliableTopic("res-topic").destroy();
+    testCollector.clear();
+}
