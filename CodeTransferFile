@@ -1,17 +1,100 @@
-@Test
-public void testNotLeaderDoesNotSubscribeToTopics() throws Exception {
-    testCollector.clear();
+package osplus.pkptuna.hazelcast.pubsub;
 
-    long now = System.currentTimeMillis();
-    heartbeatMap.put("heartbeat", now);
-    leaderMap.put("active-router", "another-instance"); // simulate another leader
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.topic.ITopic;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import osplus.apl.core.api.administration.metrics.MetricsService;
+import osplus.pkptuna.hazelcast.protobuf.SimpleSerializer;
 
-    router.setRouterInstanceId("test-router-instance");
-    router.initRouters();
+import java.io.Serializable;
+import java.util.List;
 
-    topic.publish("{\"key\":\"value\"}".getBytes());
-    Thread.sleep(300);
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-    // ❗ assertTrue if collector did NOT record anything
-    assertFalse(testCollector.wasSent("res-topic"), "Non-leader router should not route or respond");
+class ReliableTopicPublisherTest {
+
+    private HazelcastInstance hazelcastInstance;
+    private SimpleSerializer<Serializable> serializer;
+    @SuppressWarnings("rawtypes")
+    private ITopic topic;
+    private MetricsService metricsService;
+    private ReliableTopicPublisher<Serializable> publisher;
+
+    @BeforeEach
+    void setUp() {
+        hazelcastInstance = mock(HazelcastInstance.class);
+        serializer = mock(SimpleSerializer.class);
+        topic = mock(ITopic.class);
+        metricsService = mock(MetricsService.class);
+        publisher = new ReliableTopicPublisher<>(metricsService, hazelcastInstance, serializer);
+    }
+
+    /**
+     * Positiver Test: Sicherstellen, dass die Nachricht serialisiert und veröffentlicht wird.
+     */
+    @Test
+    void testSendMessageSuccessfully() throws Exception {
+        String topicName = "my-topic";
+        String traceCode = "trace123";
+        Serializable payload = "Hello World";
+        byte[] serialized = new byte[]{1, 2, 3};
+
+        when(serializer.serialize(payload)).thenReturn(serialized);
+        when(hazelcastInstance.getReliableTopic(topicName)).thenReturn(topic);
+
+        publisher.sendMessage(topicName, traceCode, payload);
+
+        verify(serializer).serialize(payload);
+        verify(topic).publish(serialized);
+    }
+
+    /**
+     * Negativer Test: Serialisierung schlägt fehl.
+     */
+    @Test
+    void testSendMessageThrowsExceptionWhenSerializationFails() throws Exception {
+        String topicName = "my-topic";
+        String traceCode = "trace123";
+        Serializable payload = "Broken";
+
+        when(serializer.serialize(payload)).thenThrow(new RuntimeException("Serialization failed"));
+
+        RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                publisher.sendMessage(topicName, traceCode, payload)
+        );
+
+        assertTrue(exception.getMessage().contains("Failed to publish to topic"));
+        verify(serializer).serialize(payload);
+        verify(topic, never()).publish(any());
+    }
+
+    /**
+     * Positiver Test: Mehrere Nachrichten werden korrekt gesendet.
+     */
+    @Test
+    void testSendMessagesSuccessfully() throws Exception {
+        String topicName = "batch-topic";
+        String traceCode = "batch-trace";
+        List<Serializable> payloads = List.of("msg1", "msg2");
+        byte[] bytes1 = new byte[]{11};
+        byte[] bytes2 = new byte[]{22};
+
+        when(serializer.serialize("msg1")).thenReturn(bytes1);
+        when(serializer.serialize("msg2")).thenReturn(bytes2);
+        when(hazelcastInstance.getReliableTopic(topicName)).thenReturn(topic);
+
+        publisher.sendMessages(topicName, traceCode, payloads);
+
+        verify(serializer).serialize("msg1");
+        verify(serializer).serialize("msg2");
+        verify(topic, times(2)).publish(any());
+    }
 }
