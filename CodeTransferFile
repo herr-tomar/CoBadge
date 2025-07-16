@@ -1,56 +1,166 @@
-nJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
-OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
-[ERROR] Tests run: 4, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 23.97 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest
-[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testNotLeaderDoesNotSubscribeToTopics -- Time elapsed: 1.147 s <<< ERROR!
-org.awaitility.core.ConditionTimeoutException: Assertion condition defined as a Lambda expression in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest Non-leader router should not route or respond ==> expected: <false> but was: <true> within 1 seconds.
-	at org.awaitility.core.ConditionAwaiter.await(ConditionAwaiter.java:167)
-	at org.awaitility.core.AssertionCondition.await(AssertionCondition.java:119)
-	at org.awaitility.core.AssertionCondition.await(AssertionCondition.java:31)
-	at org.awaitility.core.ConditionFactory.until(ConditionFactory.java:1006)
-	at org.awaitility.core.ConditionFactory.untilAsserted(ConditionFactory.java:790)
-	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testNotLeaderDoesNotSubscribeToTopics(GenericHazelcastRouterTest.java:129)
-	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-Caused by: org.opentest4j.AssertionFailedError: Non-leader router should not route or respond ==> expected: <false> but was: <true>
-	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
-	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
-	at org.junit.jupiter.api.AssertFalse.failNotFalse(AssertFalse.java:63)
-	at org.junit.jupiter.api.AssertFalse.assertFalse(AssertFalse.java:36)
-	at org.junit.jupiter.api.Assertions.assertFalse(Assertions.java:239)
-	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.lambda$testNotLeaderDoesNotSubscribeToTopics$3(GenericHazelcastRouterTest.java:130)
-	at org.awaitility.core.AssertionCondition.lambda$new$0(AssertionCondition.java:53)
-	at org.awaitility.core.ConditionAwaiter$ConditionPoller.call(ConditionAwaiter.java:248)
-	at org.awaitility.core.ConditionAwaiter$ConditionPoller.call(ConditionAwaiter.java:235)
-	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
-	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
-	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
-	at java.base/java.lang.Thread.run(Thread.java:1583)
+package osplus.pkptuna.hazelcast.pubsub;
 
-[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 30.62 s -- in osplus.pkptuna.hazelcast.flows.FlowHandlerRegistryTest
-[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 43.10 s -- in osplus.pkptuna.hazelcast.config.FlowHandlerInitializerTest
-[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 43.12 s -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest
-[INFO] 
-[INFO] Results:
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.topic.ITopic;
+import com.hazelcast.topic.Message;
+import com.hazelcast.topic.MessageListener;
+import osplus.apl.core.api.AplComponent;
+import osplus.apl.core.api.administration.metrics.MetricTag;
+import osplus.apl.core.api.administration.metrics.MetricsService;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * Der {@code GenericHazelcastRouter} ist verantwortlich für das zentrale Routing eingehender Nachrichten
+ * aus ReliableTopics in partitionierte IMaps. Der Router verwendet eine zentrale Leader Election mit Heartbeat,
+ * um sicherzustellen, dass nur eine Instanz im Cluster aktiv routet.
+ */
+@AplComponent
+public class GenericHazelcastRouter {
 
-----------------------------
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastRouter.class);
+    private final MetricsService metricsService;
 
+    private final HazelcastInstance hazelcastInstance;
+    private final List<FlowConfig> flowConfigs;
+    private final FlowHandlerRegistry handlerRegistry;
+    private String routerInstanceId;
+    private final Map<String, AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
 
-2025-07-16T14:04:47.439+02:00  INFO 32032 --- [uui] [nberg.migration] c.h.i.partition.impl.MigrationManager    : [16.160.188.219]:5701 [test-cluster] [5.3.0] Repartitioning cluster data. Migration tasks count: 813
-2025-07-16T14:04:48.462+02:00  INFO 32032 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : This node is elected as the ACTIVE router (ID=test-router-instance)
-2025-07-16T14:04:48.462+02:00  INFO 32032 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Heartbeat started for router ID=test-router-instance
-2025-07-16T14:04:48.463+02:00  INFO 32032 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Listening on topic=req-topic8d1bbbff-b283-49af-8420-a9bfb74e38c9 for flow=myFlow
-2025-07-16T14:04:48.465+02:00  INFO 32032 --- [uui] [async.thread-20] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-112004910
-2025-07-16T14:04:48.465+02:00  INFO 32032 --- [uui] [.async.thread-2] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-112004910
-2025-07-16T14:04:48.471+02:00  INFO 32032 --- [uui] [async.thread-14] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-112004910
-2025-07-16T14:04:48.484+02:00  INFO 32032 --- [uui] [.async.thread-1] o.p.h.pubsub.GenericHazelcastRouter      : Routed correlationId='corr-112004910' to map 'map-0'
-2025-07-16T14:04:48.594+02:00  INFO 32032 --- [uui] [ast-scheduler-1] o.p.h.pubsub.GenericHazelcastConsumer    : Processed and removed entry from map-0 with correlationId=corr-112004910
-2025-07-16T14:04:48.672+02:00  INFO 32032 --- [uui] [nberg.migration] c.h.i.partition.impl.MigrationManager    : [16.160.188.219]:5701 [test-cluster] [5.3.0] All migration tasks have been completed. (repartitionTime=Wed Jul 16 14:04:47 CEST 2025, plannedMigrations=813, completedMigrations=813, remainingMigrations=0, totalCompletedMigrations=813)
-2025-07-16T14:04:48.758+02:00  INFO 32032 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Leadership already exists or heartbeat is alive (Leader=another-instance, LastBeat=1752667488726)
-2025-07-16T14:04:48.761+02:00  INFO 32032 --- [uui] [.async.thread-3] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-112004910
-2025-07-16T14:04:48.762+02:00  INFO 32032 --- [uui] [async.thread-12] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-112004910
-2025-07-16T14:04:48.762+02:00  INFO 32032 --- [uui] [async.thread-11] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-112004910
-2025-07-16T14:04:48.767+02:00  INFO 32032 --- [uui] [.async.thread-8] o.p.h.pubsub.GenericHazelcastRouter      : Routed correlationId='corr-112004910' to map 'map-0'
-2025-07-16T14:04:48.770+02:00  INFO 32032 --- [uui] [ast-scheduler-1] o.p.h.pubsub.GenericHazelcastConsumer    : Processed and removed entry from map-0 with correlationId=corr-112004910
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+
+    public GenericHazelcastRouter(MetricsService metricsService,
+                                  HazelcastInstance hazelcastInstance,
+                                  List<FlowConfig> flowConfigs,
+                                  FlowHandlerRegistry handlerRegistry) {
+        this.metricsService = metricsService;
+        this.hazelcastInstance = hazelcastInstance;
+        this.flowConfigs = flowConfigs;
+        this.handlerRegistry = handlerRegistry;
+        this.routerInstanceId = UUID.randomUUID().toString();
+    }
+
+    public void initRouters() {
+        try {
+            IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
+            IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
+
+            Long lastHeartbeat = heartbeatMap.get("heartbeat");
+            boolean heartbeatStale = lastHeartbeat == null || System.currentTimeMillis() - lastHeartbeat > 5000;
+
+            String currentLeader = leaderMap.get("active-router");
+
+            if (heartbeatStale && (currentLeader == null || currentLeader.isBlank())) {
+                String claimed = leaderMap.putIfAbsent("active-router", routerInstanceId);
+                if (claimed == null || claimed.equals(routerInstanceId)) {
+                    LOGGER.info("This node is elected as the ACTIVE router (ID={})", routerInstanceId);
+                    startHeartbeat();
+                    subscribeToTopics();
+                } else {
+                    LOGGER.info("Another node won the leadership (ID={})", claimed);
+                }
+            } else {
+                LOGGER.info("Leadership already exists or heartbeat is alive (Leader={}, LastBeat={})",
+                        currentLeader, lastHeartbeat);
+            }
+
+        } catch (Exception e) {
+            LOGGER.error("Failed to initialize router", e);
+        }
+    }
+
+    public void setRouterInstanceId(String routerInstanceId) {
+        this.routerInstanceId = routerInstanceId;
+    }
+
+    private void startHeartbeat() {
+        IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
+        scheduler.scheduleAtFixedRate(() -> {
+            heartbeatMap.put("heartbeat", System.currentTimeMillis());
+        }, 0, 3, TimeUnit.SECONDS);
+        LOGGER.info("Heartbeat started for router ID={}", routerInstanceId);
+    }
+
+    private void subscribeToTopics() {
+        if (flowConfigs == null || flowConfigs.isEmpty()) {
+            LOGGER.warn("No Hazelcast flow configurations found.");
+            return;
+        }
+
+        flowConfigs.forEach(flowConfig -> {
+            String flowName = flowConfig.name();
+            roundRobinCounters.putIfAbsent(flowName, new AtomicInteger(0));
+
+            @SuppressWarnings("unchecked")
+            Optional<FlowHandler<Object, Object>> handler = Optional.of(
+                    (FlowHandler<Object, Object>) handlerRegistry.getHandler(flowName)
+            );
+
+            handler.ifPresentOrElse(value -> {
+                ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(flowConfig.requestTopic());
+                topic.addMessageListener(new RoutingListener(flowName, flowConfig, value));
+                LOGGER.info("Listening on topic={} for flow={}", flowConfig.requestTopic(), flowName);
+            }, () -> LOGGER.warn("No FlowHandler registered for flow: {}", flowName));
+        });
+    }
+
+    private class RoutingListener<T> implements MessageListener<byte[]> {
+
+        private final String flowName;
+        private final FlowConfig config;
+        private final FlowHandler<T, ?> handler;
+
+        RoutingListener(String flowName, FlowConfig config, FlowHandler<T, ?> handler) {
+            this.flowName = flowName;
+            this.config = config;
+            this.handler = handler;
+        }
+
+        @Override
+        public void onMessage(Message<byte[]> message) {
+            try {
+                T request = handler.deserializeRequest(message.getMessageObject());
+                String correlationId = handler.extractCorrelationId(request);
+                String lockKey = "route-lock-" + correlationId;
+
+                IMap<String, String> routerMap = hazelcastInstance.getMap("router-claim-map");
+                String uniqueId = UUID.randomUUID().toString();
+
+                String existing = routerMap.putIfAbsent(lockKey, uniqueId);
+                if (existing != null) {
+                    LOGGER.info("Skipped duplicate routing for correlationId={}", correlationId);
+                    metricsService.increaseCounter("hazelcast.message.received.duplicate", MetricTag.create("flowName", flowName));
+                    return;
+                }
+
+                int index = roundRobinCounters.get(flowName).getAndIncrement() % config.partitions();
+                String mapKey = config.mapBase() + index;
+
+                hazelcastInstance.getMap(mapKey).put(correlationId, request);
+                LOGGER.info("Routed correlationId='{}' to map '{}'", correlationId, mapKey);
+
+                metricsService.increaseCounter("hazelcast.message.received.valid", MetricTag.create("flowName", flowName));
+            } catch (Exception e) {
+                metricsService.increaseCounter(
+                        "hazelcast.message.received.error",
+                        MetricTag.create("flowName", flowName), MetricTag.create("exceptionClass", e.getClass().getCanonicalName())
+                );
+                LOGGER.error("Routing failure for flow '{}': {}", flowName, e.getMessage(), e);
+            }
+        }
+    }
+}
