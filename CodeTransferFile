@@ -1,89 +1,20 @@
-package osplus.pkptuna.hazelcast.pubsub;
-
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.topic.ITopic;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import osplus.apl.core.api.administration.metrics.MetricsService;
-import osplus.pkptuna.hazelcast.protobuf.SimpleSerializer;
-import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
-
-import java.io.Serializable;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
-
-@SpringBootTest(classes = {FlowHandlerTestConfiguration.class})
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class ReliableTopicPublisherTest {
-
-    @Autowired
-    private HazelcastInstance hazelcastInstance;
-
-    @Autowired
-    private MetricsService metricsService;
-
-    private SimpleSerializer<Serializable> serializer;
-    private ReliableTopicPublisher<Serializable> publisher;
-
-    @BeforeEach
-    void setUp() {
-        serializer = new SimpleSerializer<>() {
-            @Override
-            public byte[] serialize(Serializable object) {
-                if ("Broken".equals(object)) {
-                    throw new RuntimeException("Serialization failed");
-                }
-                return object.toString().getBytes();
-            }
-        };
-        publisher = new ReliableTopicPublisher<>(metricsService, hazelcastInstance, serializer);
-    }
-
-    /**
-     * Positiver Test: Sicherstellen, dass die Nachricht serialisiert und veröffentlicht wird.
-     */
     @Test
-    void testSendMessageSuccessfully() {
-        String topicName = "my-topic";
-        String traceCode = "trace123";
-        Serializable payload = "Hello World";
+    public void testNotLeaderDoesNotSubscribeToTopics() throws Exception {
+        testCollector.clear();
 
-        ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
-        assertDoesNotThrow(() -> publisher.sendMessage(topicName, traceCode, payload));
+        long now = System.currentTimeMillis();
+        heartbeatMap.put("heartbeat", now);
+        leaderMap.put("active-router", "another-instance"); // simulate another leader
 
-        // No assertions for actual Hazelcast internals unless consumed manually or verified via mock/spy
+        router.setRouterInstanceId("test-router-instance");
+        router.initRouters();
+
+        String topicName = flowConfig.requestTopic();
+        topic = hazelcastInstance.getReliableTopic(topicName);
+
+        topic.publish("{\"key\":\"value\"}".getBytes());
+        Thread.sleep(300);
+
+        // ❗ assertTrue if collector did NOT record anything
+        assertFalse(testCollector.wasSent("res-topic"), "Non-leader router should not route or respond");
     }
-
-    /**
-     * Negativer Test: Serialisierung schlägt fehl.
-     */
-    @Test
-    void testSendMessageThrowsExceptionWhenSerializationFails() {
-        String topicName = "my-topic";
-        String traceCode = "trace123";
-        Serializable payload = "Broken";
-
-        RuntimeException exception = assertThrows(RuntimeException.class, () ->
-                publisher.sendMessage(topicName, traceCode, payload)
-        );
-
-        assertTrue(exception.getMessage().contains("Failed to publish to topic"));
-    }
-
-    /**
-     * Positiver Test: Mehrere Nachrichten werden korrekt gesendet.
-     */
-    @Test
-    void testSendMessagesSuccessfully() {
-        String topicName = "batch-topic";
-        String traceCode = "batch-trace";
-        List<Serializable> payloads = List.of("msg1", "msg2");
-
-        ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
-        assertDoesNotThrow(() -> publisher.sendMessages(topicName, traceCode, payloads));
-    }
-}
