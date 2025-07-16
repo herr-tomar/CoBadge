@@ -1,6 +1,12 @@
-2025-07-16 16:43:05.170  INFO 31240 --- [omcat-handler-0] o.a.c.d.s.OnlineSessionContextProvider  : Login against https://en02-dev.sfg-mkg-etaps.intern/fisession/keepAlive ends with status 200. RequestId: ec3dd27e-069c-4dee-a889-f45b45345600
-2025-07-16 16:43:05.494  INFO 31240 --- [omcat-handler-0] o.pkptuna.service.DisputeOrcaService    : Published to topic [DisputeDetailRequestReliableTopic] for trace DISPUTE-DETAIL-LOOKUP
-2025-07-16 16:43:05.534  INFO 31240 --- [onPool-worker-1] o.p.h.pubsub.GenericHazelcastRouter     : [onMessage] Debug instance id=891e0046-e57d-4b9a-a005-3a57242dbb66, Router instance ID=1fd56f73-6b4a-4e2c-8d10-62d445dcec6a, Current Leader Id =null, Message Source=null
-2025-07-16 16:43:05.534  INFO 31240 --- [onPool-worker-1] o.p.h.pubsub.GenericHazelcastRouter     : Ignoring message as this router is not the current leader (ID=1fd56f73-6b4a-4e2c-8d10-62d445dcec6a)
-2025-07-16 16:43:06.139  INFO 31240 --- [poolScheduler34] o.p.h.pubsub.ReliableTopicPublisher     : Published to topic [DisputeDetailResponseReliableTopic] for trace DISPUTE_DETAIL_LOOKUP
-2025-07-16 16:43:06.177  INFO 31240 --- [poolScheduler34] o.p.h.pubsub.GenericHazelcastConsumer   : Processed and removed entry from dispute-detail-request-map-2 with correlationId=82a6e8c2-ce27-4415-bb71-0ba1f5ac2906
+2025-07-16 17:22:34.668  INFO 21064 --- [omcat-handler-0] o.a.c.c.C.[.[localhost].[/pkptuna]      : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2025-07-16 17:22:34.668  INFO 21064 --- [omcat-handler-0] o.s.web.servlet.DispatcherServlet       : Initializing Servlet 'dispatcherServlet'
+2025-07-16 17:22:34.671  INFO 21064 --- [omcat-handler-0] o.s.web.servlet.DispatcherServlet       : Completed initialization in 3 ms
+2025-07-16 17:22:34.751  WARN 21064 --- [omcat-handler-0] o.f.c.f.grid.HazelcastGridCaller        : Create anonymous user session, because no fi-Session ID found.
+2025-07-16 17:22:34.874  INFO 21064 --- [omcat-handler-0] o.pkptuna.service.DisputeOrcaService    : Published to topic [DisputeDetailRequestReliableTopic] for trace DISPUTE-DETAIL-LOOKUP
+2025-07-16 17:22:34.876  INFO 21064 --- [onPool-worker-2] o.p.h.pubsub.GenericHazelcastRouter     : [onMessage] Debug instance id=d1f7040d-8f38-42b8-8d0e-a3bdf926a0c9, Router instance ID=2db452f2-c21c-425d-a608-2184368954a8, Current Leader Id =2db452f2-c21c-425d-a608-2184368954a8, Message Source=null
+2025-07-16 17:22:34.876  INFO 21064 --- [onPool-worker-2] o.p.h.pubsub.GenericHazelcastRouter     : Proceeded with onMessage
+2025-07-16 17:22:34.887  INFO 21064 --- [onPool-worker-2] o.p.h.pubsub.GenericHazelcastRouter     : Routed correlationId='cfbba27b-992d-4e33-abcd-0f8c8e3082dd' to map 'dispute-detail-request-map-0'
+2025-07-16 17:22:35.376  INFO 21064 --- [poolScheduler37] o.p.h.pubsub.ReliableTopicPublisher     : Published to topic [DisputeDetailResponseReliableTopic] for trace DISPUTE_DETAIL_LOOKUP
+2025-07-16 17:22:35.376  INFO 21064 --- [poolScheduler12] o.p.h.pubsub.ReliableTopicPublisher     : Published to topic [DisputeDetailResponseReliableTopic] for trace DISPUTE_DETAIL_LOOKUP
+2025-07-16 17:22:35.380  INFO 21064 --- [poolScheduler12] o.p.h.pubsub.GenericHazelcastConsumer   : Processed and removed entry from dispute-detail-request-map-0 with correlationId=cfbba27b-992d-4e33-abcd-0f8c8e3082dd
+2025-07-16 17:22:35.381  INFO 21064 --- [poolScheduler37] o.p.h.pubsub.GenericHazelcastConsumer   : Processed and removed entry from dispute-detail-request-map-0 with correlationId=cfbba27b-992d-4e33-abcd-0f8c8e3082dd
