@@ -1,14 +1,30 @@
-2025-07-16T13:27:22.014+02:00  INFO 23476 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : This node is elected as the ACTIVE router (ID=test-router-instance)
-2025-07-16T13:27:22.015+02:00  INFO 23476 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Heartbeat started for router ID=test-router-instance
-2025-07-16T13:27:22.016+02:00  INFO 23476 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Listening on topic=req-topicc3e09999-dc3f-4220-8d53-3939110f8d4a for flow=myFlow
-2025-07-16T13:27:22.020+02:00  INFO 23476 --- [uui] [async.thread-12] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-112004910
-2025-07-16T13:27:22.020+02:00  INFO 23476 --- [uui] [async.thread-11] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-112004910
-2025-07-16T13:27:22.021+02:00  INFO 23476 --- [uui] [.async.thread-6] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-112004910
-2025-07-16T13:27:22.033+02:00  INFO 23476 --- [uui] [async.thread-15] o.p.h.pubsub.GenericHazelcastRouter      : Routed correlationId='corr-112004910' to map 'map-0'
-2025-07-16T13:27:22.058+02:00  INFO 23476 --- [uui] [ast-scheduler-1] o.p.h.pubsub.GenericHazelcastConsumer    : Processed and removed entry from map-0 with correlationId=corr-112004910
-2025-07-16T13:27:22.906+02:00  INFO 23476 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Leadership already exists or heartbeat is alive (Leader=another-instance, LastBeat=1752665242386)
-2025-07-16T13:27:22.911+02:00  INFO 23476 --- [uui] [.async.thread-1] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-112004910
-2025-07-16T13:27:22.911+02:00  INFO 23476 --- [uui] [async.thread-20] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-112004910
-2025-07-16T13:27:22.912+02:00  INFO 23476 --- [uui] [async.thread-15] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-112004910
-2025-07-16T13:27:22.914+02:00  INFO 23476 --- [uui] [async.thread-10] o.p.h.pubsub.GenericHazelcastRouter      : Routed correlationId='corr-112004910' to map 'map-0'
-2025-07-16T13:27:22.918+02:00  INFO 23476 --- [uui] [ast-scheduler-1] o.p.h.pubsub.GenericHazelcastConsumer    : Processed and removed entry from map-0 with correlationId=corr-112004910
+import static org.awaitility.Awaitility.await;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+
+@Test
+public void testNotLeaderDoesNotSubscribeToTopics() throws Exception {
+    testCollector.clear();
+
+    long now = System.currentTimeMillis();
+    heartbeatMap.put("heartbeat", now);
+    leaderMap.put("active-router", "another-instance"); // simulate another leader
+
+    // 🕒 Wait until the router sees the simulated state
+    await().atMost(500, MILLISECONDS).until(() ->
+        heartbeatMap.get("heartbeat") != null &&
+        "another-instance".equals(leaderMap.get("active-router"))
+    );
+
+    router.setRouterInstanceId("test-router-instance");
+    router.initRouters();
+
+    String topicName = flowConfig.requestTopic();
+    topic = hazelcastInstance.getReliableTopic(topicName);
+    topic.publish("{\"key\":\"value\"}".getBytes());
+
+    // 🕒 Wait briefly to ensure no listener was attached
+    Thread.sleep(300);
+
+    // ✅ Validate that message was NOT routed
+    assertFalse(testCollector.wasSent("res-topic"), "Non-leader router should not route or respond");
+}
