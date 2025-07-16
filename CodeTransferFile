@@ -1,7 +1,45 @@
-await()
-        .atMost(2, TimeUnit.SECONDS)
-        .pollInterval(100, TimeUnit.MILLISECONDS)
-        .untilAsserted(() -> {
-            assertTrue(testCollector.wasSent("res-topic"), "Expected message to be routed and response sent");
-            assertEquals("wrappedResponse", testCollector.getSent("res-topic"));
-        });
+@Test
+    public void testMessageRoutedSuccessfully() {
+        // Clear maps to simulate a clean state
+        leaderMap.clear();
+        heartbeatMap.clear();
+
+        // Allow this test router to claim leadership
+        router.setRouterInstanceId(routerInstanceId);
+        router.initRouters();
+
+        topic.publish("{\"key\":\"value\"}".getBytes());
+
+        await()
+                .atMost(2, TimeUnit.SECONDS)
+                .pollInterval(20, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    assertTrue(testCollector.wasSent(flowConfig.responseTopic()), "Expected message to be routed and response sent");
+                    assertEquals("wrappedResponse", testCollector.getSent(flowConfig.responseTopic()));
+                });
+    }
+
+---
+
+2025-07-17T01:48:21.447+02:00  INFO 36212 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : [initRouters] Using routerInstanceId=test-router-instance
+2025-07-17T01:48:21.447+02:00  INFO 36212 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : This node is elected as the ACTIVE router (ID=test-router-instance)
+2025-07-17T01:48:21.447+02:00  INFO 36212 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Heartbeat started for router ID=test-router-instance
+2025-07-17T01:48:21.447+02:00  INFO 36212 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Listening on topic=req-topic1451976f-10df-4051-90f4-5ea93a0d7a56 for flow=myFlow
+2025-07-17T01:48:21.448+02:00  INFO 36212 --- [uui] [async.thread-16] o.p.h.pubsub.GenericHazelcastRouter      : [onMessage] Debug instance id=91c55671-ae95-4c0d-bfe7-0042188727de, Router instance ID=test-router-instance, Current Leader Id =test-router-instance, Message Source=Member [16.160.188.219]:5701 - 6d5071ab-8961-49e9-8d4d-569cf19534d1 this
+
+org.opentest4j.AssertionFailedError: 
+Expected :wrappedResponse
+Actual   :null
+<Click to see difference>
+
+
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
+	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:182)
+	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:177)
+	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:1145)
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully(GenericHazelcastRouterTest.java:91)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
