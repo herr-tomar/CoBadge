@@ -1,3 +1,23 @@
+package osplus.pkptuna.hazelcast.pubsub;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.topic.ITopic;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
+
+import java.util.Map;
+
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.*;
+
 public class GenericHazelcastRouterTest extends BaseHazelcastTest {
 
     @Autowired
@@ -28,98 +48,79 @@ public class GenericHazelcastRouterTest extends BaseHazelcastTest {
 
     @BeforeEach
     public void setup() {
-
-        testCollector.clear();
-        leaderMap.clear();
-        heartbeatMap.clear();
-        routerMap.clear();
-        targetMap.clear();
-
         leaderMap = hazelcastInstance.getMap("router-leader-map");
         heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
         routerMap = hazelcastInstance.getMap("router-claim-map");
         targetMap = hazelcastInstance.getMap("map-0");
 
-        long now = System.currentTimeMillis();
-        heartbeatMap.put("heartbeat", now);
-        leaderMap.put("active-router", "another-instance"); // simulate another leader
+        leaderMap.clear();
+        heartbeatMap.clear();
+        routerMap.clear();
+        targetMap.clear();
+        testCollector.clear();
 
         router.setRouterInstanceId(routerInstanceId);
-
-        router.initRouters();
-
+        topic = hazelcastInstance.getReliableTopic(flowConfig.requestTopic());
     }
 
     @Test
-    public void testMessageRoutedSuccessfully() throws Exception {
-
-        String topicName = flowConfig.requestTopic();
-        topic = hazelcastInstance.getReliableTopic(topicName);
+    public void testMessageRoutedSuccessfully() {
+        router.initRouters();
 
         topic.publish("{\"key\":\"value\"}".getBytes());
 
-        Thread.sleep(300); // allow routing to complete
+        await().atMost(500, MILLISECONDS)
+                .until(() -> testCollector.wasSent("res-topic"));
 
-        assertTrue(testCollector.wasSent("res-topic"), "Expected message to be routed to target map");
         assertEquals("wrappedResponse", testCollector.getSent("res-topic"));
     }
 
     @Test
     public void testDuplicateMessageNotProcessed() throws Exception {
+        router.initRouters();
 
         Map<String, Object> requestMap = Map.of("dup", "check");
         byte[] rawMessage = new ObjectMapper().writeValueAsBytes(requestMap);
         String corrId = sampleFlowHandler.extractCorrelationId(requestMap);
 
-        // Simulate existing lock
-        hazelcastInstance.getMap("router-claim-map").put("route-lock-" + corrId, "existing");
-
-        String topicName = flowConfig.requestTopic();
-        topic = hazelcastInstance.getReliableTopic(topicName);
-
+        routerMap.put("route-lock-" + corrId, "existing"); // Simulate existing lock
         topic.publish(rawMessage);
-        Thread.sleep(300); // Wait for async processing
+
+        await().during(300, MILLISECONDS)
+                .atMost(500, MILLISECONDS)
+                .until(() -> !testCollector.wasSent("res-topic"));
 
         assertFalse(testCollector.wasSent("res-topic"), "Duplicate message should not be routed or responded to");
     }
 
     @Test
-    public void testRoutingHandlerThrowsException() throws Exception {
+    public void testRoutingHandlerThrowsException() {
+        router.initRouters();
 
-        // This triggers a known failure in the test handler
         byte[] rawMessage = "faultyRequest".getBytes();
-
-        String topicName = flowConfig.requestTopic();
-        topic = hazelcastInstance.getReliableTopic(topicName);
-
         topic.publish(rawMessage);
-        Thread.sleep(300);
+
+        await().during(300, MILLISECONDS)
+                .atMost(500, MILLISECONDS)
+                .until(() -> !testCollector.wasSent("res-topic"));
 
         assertFalse(testCollector.wasSent("res-topic"), "No response should be sent for faulty request");
     }
 
     @Test
-    public void testNotLeaderDoesNotSubscribeToTopics() throws Exception {
+    public void testNotLeaderDoesNotSubscribeToTopics() {
+        long now = System.currentTimeMillis();
+        heartbeatMap.put("heartbeat", now);
+        leaderMap.put("active-router", "another-instance"); // simulate another leader
 
-
-        // Wait until the router sees the simulated state
-        await().atMost(500, MILLISECONDS).until(() ->
-                heartbeatMap.get("heartbeat") != null &&
-                        "another-instance".equals(leaderMap.get("active-router"))
-        );
-
-        router.setRouterInstanceId("test-router-instance");
         router.initRouters();
 
-        String topicName = flowConfig.requestTopic();
-        topic = hazelcastInstance.getReliableTopic(topicName);
         topic.publish("{\"key\":\"value\"}".getBytes());
 
-        // Wait briefly to ensure no listener was attached
-        Thread.sleep(300);
+        await().during(300, MILLISECONDS)
+                .atMost(500, MILLISECONDS)
+                .until(() -> !testCollector.wasSent("res-topic"));
 
-        // Validate that message was NOT routed
         assertFalse(testCollector.wasSent("res-topic"), "Non-leader router should not route or respond");
     }
-
 }
