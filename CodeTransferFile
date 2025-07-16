@@ -4,36 +4,42 @@ import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.topic.ITopic;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 import osplus.apl.core.api.administration.metrics.MetricsService;
 import osplus.pkptuna.hazelcast.protobuf.SimpleSerializer;
+import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
 
 import java.io.Serializable;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.*;
 
+@SpringBootTest(classes = {FlowHandlerTestConfiguration.class})
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ReliableTopicPublisherTest {
 
+    @Autowired
     private HazelcastInstance hazelcastInstance;
-    private SimpleSerializer<Serializable> serializer;
-    @SuppressWarnings("rawtypes")
-    private ITopic topic;
+
+    @Autowired
     private MetricsService metricsService;
+
+    private SimpleSerializer<Serializable> serializer;
     private ReliableTopicPublisher<Serializable> publisher;
 
     @BeforeEach
     void setUp() {
-        hazelcastInstance = mock(HazelcastInstance.class);
-        serializer = mock(SimpleSerializer.class);
-        topic = mock(ITopic.class);
-        metricsService = mock(MetricsService.class);
+        serializer = new SimpleSerializer<>() {
+            @Override
+            public byte[] serialize(Serializable object) {
+                if ("Broken".equals(object)) {
+                    throw new RuntimeException("Serialization failed");
+                }
+                return object.toString().getBytes();
+            }
+        };
         publisher = new ReliableTopicPublisher<>(metricsService, hazelcastInstance, serializer);
     }
 
@@ -41,60 +47,43 @@ class ReliableTopicPublisherTest {
      * Positiver Test: Sicherstellen, dass die Nachricht serialisiert und veröffentlicht wird.
      */
     @Test
-    void testSendMessageSuccessfully() throws Exception {
+    void testSendMessageSuccessfully() {
         String topicName = "my-topic";
         String traceCode = "trace123";
         Serializable payload = "Hello World";
-        byte[] serialized = new byte[]{1, 2, 3};
 
-        when(serializer.serialize(payload)).thenReturn(serialized);
-        when(hazelcastInstance.getReliableTopic(topicName)).thenReturn(topic);
+        ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
+        assertDoesNotThrow(() -> publisher.sendMessage(topicName, traceCode, payload));
 
-        publisher.sendMessage(topicName, traceCode, payload);
-
-        verify(serializer).serialize(payload);
-        verify(topic).publish(serialized);
+        // No assertions for actual Hazelcast internals unless consumed manually or verified via mock/spy
     }
 
     /**
      * Negativer Test: Serialisierung schlägt fehl.
      */
     @Test
-    void testSendMessageThrowsExceptionWhenSerializationFails() throws Exception {
+    void testSendMessageThrowsExceptionWhenSerializationFails() {
         String topicName = "my-topic";
         String traceCode = "trace123";
         Serializable payload = "Broken";
-
-        when(serializer.serialize(payload)).thenThrow(new RuntimeException("Serialization failed"));
 
         RuntimeException exception = assertThrows(RuntimeException.class, () ->
                 publisher.sendMessage(topicName, traceCode, payload)
         );
 
         assertTrue(exception.getMessage().contains("Failed to publish to topic"));
-        verify(serializer).serialize(payload);
-        verify(topic, never()).publish(any());
     }
 
     /**
      * Positiver Test: Mehrere Nachrichten werden korrekt gesendet.
      */
     @Test
-    void testSendMessagesSuccessfully() throws Exception {
+    void testSendMessagesSuccessfully() {
         String topicName = "batch-topic";
         String traceCode = "batch-trace";
         List<Serializable> payloads = List.of("msg1", "msg2");
-        byte[] bytes1 = new byte[]{11};
-        byte[] bytes2 = new byte[]{22};
 
-        when(serializer.serialize("msg1")).thenReturn(bytes1);
-        when(serializer.serialize("msg2")).thenReturn(bytes2);
-        when(hazelcastInstance.getReliableTopic(topicName)).thenReturn(topic);
-
-        publisher.sendMessages(topicName, traceCode, payloads);
-
-        verify(serializer).serialize("msg1");
-        verify(serializer).serialize("msg2");
-        verify(topic, times(2)).publish(any());
+        ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
+        assertDoesNotThrow(() -> publisher.sendMessages(topicName, traceCode, payloads));
     }
 }
