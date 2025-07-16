@@ -1,46 +1,6 @@
-@Override
-public void onMessage(Message<byte[]> message) {
-    try {
-        // Leadership validation
-        IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
-        IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
-
-        String currentLeader = leaderMap.get("active-router");
-        Long lastHeartbeat = heartbeatMap.get("heartbeat");
-        boolean heartbeatAlive = lastHeartbeat != null && (System.currentTimeMillis() - lastHeartbeat <= 5000);
-
-        if (!routerInstanceId.equals(currentLeader) || heartbeatAlive) {
-            LOGGER.info("Ignoring message as this router is not the current leader (ID={})", routerInstanceId);
-            return;
-        }
-
-        T request = handler.deserializeRequest(message.getMessageObject());
-        String correlationId = handler.extractCorrelationId(request);
-        String lockKey = "route-lock-" + correlationId;
-
-        IMap<String, String> routerMap = hazelcastInstance.getMap("router-claim-map");
-        String uniqueId = UUID.randomUUID().toString();
-
-        String existing = routerMap.putIfAbsent(lockKey, uniqueId);
-        if (existing != null) {
-            LOGGER.info("Skipped duplicate routing for correlationId={}", correlationId);
-            metricsService.increaseCounter("hazelcast.message.received.duplicate", MetricTag.create("flowName", flowName));
-            return;
-        }
-
-        int index = roundRobinCounters.get(flowName).getAndIncrement() % config.partitions();
-        String mapKey = config.mapBase() + index;
-
-        hazelcastInstance.getMap(mapKey).put(correlationId, request);
-        LOGGER.info("Routed correlationId='{}' to map '{}'", correlationId, mapKey);
-
-        metricsService.increaseCounter("hazelcast.message.received.valid", MetricTag.create("flowName", flowName));
-    } catch (Exception e) {
-        metricsService.increaseCounter(
-                "hazelcast.message.received.error",
-                MetricTag.create("flowName", flowName),
-                MetricTag.create("exceptionClass", e.getClass().getCanonicalName())
-        );
-        LOGGER.error("Routing failure for flow '{}': {}", flowName, e.getMessage(), e);
-    }
-}
+2025-07-16 14:55:32.576  INFO 31816 --- [omcat-handler-3] o.pkptuna.service.DisputeOrcaService    : Published to topic [DisputeDetailRequestReliableTopic] for trace DISPUTE-DETAIL-LOOKUP
+2025-07-16 14:55:32.613  INFO 31816 --- [onPool-worker-5] o.p.h.pubsub.GenericHazelcastRouter     : Ignoring message as this router is not the current leader (ID=5fb71fb6-b789-460b-b209-4f59deebe3f7)
+2025-07-16 14:56:03.095  INFO 31816 --- [omcat-handler-5] o.pkptuna.service.DisputeOrcaService    : Published to topic [DisputeDetailRequestReliableTopic] for trace DISPUTE-DETAIL-LOOKUP
+2025-07-16 14:56:03.129  INFO 31816 --- [onPool-worker-5] o.p.h.pubsub.GenericHazelcastRouter     : Ignoring message as this router is not the current leader (ID=5fb71fb6-b789-460b-b209-4f59deebe3f7)
+2025-07-16 14:56:03.369  INFO 31816 --- [ poolScheduler3] o.p.h.pubsub.ReliableTopicPublisher     : Published to topic [DisputeDetailResponseReliableTopic] for trace DISPUTE_DETAIL_LOOKUP
+2025-07-16 14:56:03.405  INFO 31816 --- [ poolScheduler3] o.p.h.pubsub.GenericHazelcastConsumer   : Processed and removed entry from dispute-detail-request-map-0 with correlationId=308ae62d-f20c-4518-8dd3-ecf6a0dad2bb
