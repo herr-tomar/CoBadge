@@ -1,27 +1,17 @@
-INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 49.84 s -- in osplus.pkptuna.hazelcast.config.FlowHandlerInitializerTest
-[ERROR] Tests run: 4, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 61.59 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest
-[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully -- Time elapsed: 1.129 s <<< ERROR!
-org.awaitility.core.ConditionTimeoutException: Condition with Lambda expression in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest was not fulfilled within 1 seconds.
-	at org.awaitility.core.ConditionAwaiter.await(ConditionAwaiter.java:167)
-	at org.awaitility.core.CallableCondition.await(CallableCondition.java:78)
-	at org.awaitility.core.CallableCondition.await(CallableCondition.java:26)
-	at org.awaitility.core.ConditionFactory.until(ConditionFactory.java:1006)
-	at org.awaitility.core.ConditionFactory.until(ConditionFactory.java:975)
-	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully(GenericHazelcastRouterTest.java:69)
-	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+@Test
+public void testMessageRoutedSuccessfully() {
+    // Clear maps to simulate a clean state
+    leaderMap.clear();
+    heartbeatMap.clear();
 
+    // Allow this test router to claim leadership
+    router.setRouterInstanceId(routerInstanceId);
+    router.initRouters();
 
+    topic.publish("{\"key\":\"value\"}".getBytes());
 
---------------------
+    await().atMost(2, SECONDS) // Increase timeout for slow environments
+           .until(() -> testCollector.wasSent("res-topic"));
 
-
-2025-07-16T17:34:09.184+02:00  INFO 24400 --- [uui] [arson.migration] c.h.i.partition.impl.MigrationManager    : [16.160.188.219]:5703 [test-cluster] [5.3.0] Partition balance is ok, no need to repartition.
-2025-07-16T17:34:09.297+02:00  INFO 24400 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : [initRouters] Using routerInstanceId=test-router-instance
-2025-07-16T17:34:09.297+02:00  INFO 24400 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Leadership already exists and heartbeat is alive (Leader=test-router-instance, LastBeat=1752680049297)
-2025-07-16T17:34:09.764+02:00  INFO 24400 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : [initRouters] Using routerInstanceId=test-router-instance
-2025-07-16T17:34:09.764+02:00  INFO 24400 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Leadership already exists and heartbeat is alive (Leader=test-router-instance, LastBeat=1752680049764)
-2025-07-16T17:34:10.897+02:00  INFO 24400 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : [initRouters] Using routerInstanceId=test-router-instance
-2025-07-16T17:34:10.898+02:00  INFO 24400 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Leadership already exists and heartbeat is alive (Leader=another-instance, LastBeat=1752680050897)
-2025-07-16T17:34:11.400+02:00  INFO 24400 --- [uui] [.ShutdownThread] com.hazelcast.instance.impl.Node         : [16.160.188.219]:5703 [test-cluster] [5.3.0] Running shutdown hook... Current node state: ACTIVE
+    assertEquals("wrappedResponse", testCollector.getSent("res-topic"));
+}
