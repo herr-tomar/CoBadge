@@ -1,12 +1,47 @@
-x-anzahl-bfdp-ws-instanzen: 50
+ @Test
+    public void testDuplicateMessageNotProcessed() throws Exception {
+        router.initRouters();
 
-2025-07-16T12:07:30.485+02:00  INFO 37780 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouterTest  : Started GenericHazelcastRouterTest in 34.781 seconds (process running for 36.272)
-2025-07-16T12:07:30.659+02:00  INFO 37780 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : This node is elected as the ACTIVE router (ID=test-router-instance)
-2025-07-16T12:07:30.659+02:00  INFO 37780 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Heartbeat started for router ID=test-router-instance
-2025-07-16T12:07:30.659+02:00  INFO 37780 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Listening on topic=req-topic for flow=myFlow
-2025-07-16T12:07:31.034+02:00  INFO 37780 --- [uui] [ast-scheduler-1] o.p.h.pubsub.GenericHazelcastConsumer    : Processed and removed entry from map-0 with correlationId=corrId1
-2025-07-16T12:07:31.054+02:00  INFO 37780 --- [uui] [async.thread-14] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-61653
-2025-07-16T12:07:31.055+02:00  INFO 37780 --- [uui] [async.thread-12] o.p.h.pubsub.GenericHazelcastRouter      : Routed correlationId='corr-61653' to map 'map-0'
-2025-07-16T12:07:31.064+02:00  INFO 37780 --- [uui] [ast-scheduler-1] o.p.h.pubsub.GenericHazelcastConsumer    : Processed and removed entry from map-0 with correlationId=corr-61653
-2025-07-16T12:07:31.150+02:00  INFO 37780 --- [uui] [.IO.thread-in-3] c.h.i.server.tcp.TcpServerConnection     : [16.160.188.219]:5704 [test-cluster] [5.3.0] Connection[id=4, /16.160.188.219:5704->/16.160.188.219:58178, qualifier=null, endpoint=[16.160.188.219]:5703, remoteUuid=5fca6a6a-6f5b-4479-9c33-10817d51a7c6, alive=false, connectionType=MEMBER, planeIndex=0] closed. Reason: Connection closed by the other side
-2025-07-16T12:
+        Map<String, Object> requestMap = Map.of("dup", "check");
+        byte[] rawMessage = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(requestMap);
+        String corrId = sampleFlowHandler.extractCorrelationId(requestMap);
+
+        routerMap.put("route-lock-" + corrId, "existing"); // simulate lock already taken
+
+        topic.publish(rawMessage);
+        Thread.sleep(500);
+
+        assertFalse(targetMap.containsKey(corrId), "Duplicate message should not be routed");
+    }
+
+    @Test
+    public void testRoutingHandlerThrowsException() throws Exception {
+        router.initRouters();
+
+        String faulty = "faultyRequest";
+        byte[] rawMessage = faulty.getBytes();
+
+        topic.publish(rawMessage);
+        Thread.sleep(500);
+
+        assertTrue(routerMap.isEmpty(), "No lock should be acquired on handler failure");
+        assertTrue(targetMap.isEmpty(), "Faulty request should not be routed");
+    }
+
+    @Test
+    public void testNotLeaderDoesNotSubscribeToTopics() {
+        heartbeatMap.put("heartbeat", System.currentTimeMillis());
+        leaderMap.put("active-router", "some-other-instance");
+
+        router.initRouters();
+
+        // Publish a message, but router should not be listening
+        topic.publish("irrelevant".getBytes());
+
+        // Delay to ensure nothing processed
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException ignored) {}
+
+        assertTrue(targetMap.isEmpty(), "Non-leader should not route messages");
+    }
