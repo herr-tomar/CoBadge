@@ -5,15 +5,22 @@ import com.hazelcast.map.IMap;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.config.HazelcastConfigProps;
 import osplus.pkptuna.hazelcast.flows.FlowHandler;
 import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
 import osplus.pkptuna.hazelcast.test.config.BaseHazelcastTest;
 import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
 
+import java.util.UUID;
+
+import static org.awaitility.Awaitility.await;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class GenericHazelcastConsumerTest extends BaseHazelcastTest {
+
+    @Autowired
+    private HazelcastConfigProps hazelcastConfigProps;
 
     @Autowired
     private FlowHandlerRegistry handlerRegistry;
@@ -30,32 +37,34 @@ public class GenericHazelcastConsumerTest extends BaseHazelcastTest {
     @Autowired
     private FlowHandlerTestConfiguration.TestCollector testCollector;
 
-    @Autowired
-    private FlowConfig flowConfig;
+    private IMap<Object, Object> requestMap;
 
     @BeforeEach
-    public void setup() {
+    public void setUp() {
         testCollector.clear();
-        hazelcastInstance.getMap("map-0").clear();
-        hazelcastInstance.getMap("map00").clear();
+        requestMap = hazelcastInstance.getMap("map-0");
+        requestMap.clear();
+
+        // Ensure map is cleared before starting
+        await().atMost(1, SECONDS).until(requestMap::isEmpty);
     }
 
     @Test
     public void testPollRequestMaps_PositiveFlow() {
-        IMap<Object, Object> testMap = hazelcastInstance.getMap("map-0");
-        testMap.put("corrId1", Map.of("key", "value"));
+        requestMap.put("corrId1", "request1");
 
         consumer.pollRequestMaps();
 
-        assertTrue(testCollector.wasSent("res-topic"), "Expected response to be sent on topic");
+        await().atMost(2, SECONDS).until(() -> testCollector.wasSent("res-topic"));
+
         assertEquals("wrappedResponse", testCollector.getSent("res-topic"));
     }
 
     @Test
     public void testPollRequestMaps_NoHandlerFound() {
-        // Intentionally use a map with an unknown flow prefix (not registered in flowConfigs)
-        IMap<Object, Object> testMap = hazelcastInstance.getMap("unknown-map-0");
-        testMap.put("id1", Map.of("key", "value"));
+        // Use a map that has no registered handler (invalid flow)
+        IMap<Object, Object> invalidMap = hazelcastInstance.getMap("invalid-map-" + UUID.randomUUID());
+        invalidMap.put("id1", "request");
 
         consumer.pollRequestMaps();
 
@@ -64,11 +73,10 @@ public class GenericHazelcastConsumerTest extends BaseHazelcastTest {
 
     @Test
     public void testPollRequestMaps_HandlerThrowsException() {
-        IMap<Object, Object> testMap = hazelcastInstance.getMap("map-0");
-        testMap.put("faultyId", "faultyRequest");
+        requestMap.put("id-faulty", "faultyRequest");
 
         consumer.pollRequestMaps();
 
-        assertFalse(testCollector.wasSent("res-topic"), "No response should be sent when handler throws exception");
+        assertFalse(testCollector.wasSent("res-topic"), "No response should be sent when handler fails");
     }
 }
