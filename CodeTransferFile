@@ -1,80 +1,50 @@
-package osplus.pkptuna.hazelcast.pubsub;
+[ERROR] Tests run: 4, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 38.19 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest
+[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully -- Time elapsed: 2.267 s <<< ERROR!
+org.awaitility.core.ConditionTimeoutException: Condition with Lambda expression in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest was not fulfilled within 2 seconds.
+	at org.awaitility.core.ConditionAwaiter.await(ConditionAwaiter.java:167)
+	at org.awaitility.core.CallableCondition.await(CallableCondition.java:78)
+	at org.awaitility.core.CallableCondition.await(CallableCondition.java:26)
+	at org.awaitility.core.ConditionFactory.until(ConditionFactory.java:1006)
+	at org.awaitility.core.ConditionFactory.until(ConditionFactory.java:975)
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully(GenericHazelcastRouterTest.java:72)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 39.78 s -- in osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisherTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 39.87 s -- in osplus.pkptuna.hazelcast.flows.FlowHandlerRegistryTest
+[ERROR] Tests run: 3, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 48.73 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest
+[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest.testPollRequestMaps_PositiveFlow -- Time elapsed: 8.872 s <<< FAILURE!
+org.opentest4j.AssertionFailedError: Expected response to be sent on topic ==> expected: <true> but was: <false>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertTrue.failNotTrue(AssertTrue.java:63)
+	at org.junit.jupiter.api.AssertTrue.assertTrue(AssertTrue.java:36)
+	at org.junit.jupiter.api.Assertions.assertTrue(Assertions.java:214)
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest.testPollRequestMaps_PositiveFlow(GenericHazelcastConsumerTest.java:58)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 48.78 s -- in osplus.pkptuna.hazelcast.config.FlowHandlerInitializerTest
+[INFO] 
+[INFO] Results:
 
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.map.IMap;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import osplus.pkptuna.hazelcast.config.HazelcastConfigProps;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
-import osplus.pkptuna.hazelcast.test.config.BaseHazelcastTest;
-import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+------
 
-import static org.junit.jupiter.api.Assertions.*;
 
-public class GenericHazelcastConsumerTest extends BaseHazelcastTest {
-
-    @Autowired
-    private HazelcastConfigProps hazelcastConfigProps;
-
-    @Autowired
-    private FlowHandlerRegistry handlerRegistry;
-
-    @Autowired
-    private FlowHandler sampleFlowHandler;
-
-    @Autowired
-    private HazelcastInstance hazelcastInstance;
-
-    @Autowired
-    private GenericHazelcastConsumer consumer;
-
-    @Autowired
-    private FlowHandlerTestConfiguration.TestCollector testCollector;
-
-    private IMap<Object, Object> requestMap;
-
-    @BeforeEach
-    public void setUp() {
-        testCollector.clear();
-        requestMap = hazelcastInstance.getMap("map-0");
-        requestMap.clear();
-    }
-
-    @Test
-    public void testPollRequestMaps_PositiveFlow() {
-        Map<String, Object> request = new HashMap<>();
-        request.put("key", "value");
-
-        requestMap.put("corr-" + request.hashCode(), request);
-
-        consumer.pollRequestMaps();
-
-        assertTrue(testCollector.wasSent("res-topic"), "Expected response to be sent on topic");
-        assertEquals("wrappedResponse", testCollector.getSent("res-topic"));
-    }
-
-    @Test
-    public void testPollRequestMaps_NoHandlerFound() {
-        IMap<Object, Object> unknownMap = hazelcastInstance.getMap("mapX-" + UUID.randomUUID());
-        unknownMap.put("id1", "request");
-
-        consumer.pollRequestMaps();
-
-        assertFalse(testCollector.wasSent("res-topic"), "No response should be sent for unknown flow");
-    }
-
-    @Test
-    public void testPollRequestMaps_HandlerThrowsException() {
-        requestMap.put("id123", "faultyRequest");
-
-        consumer.pollRequestMaps();
-
-        assertFalse(testCollector.wasSent("res-topic"), "No response should be sent when handler fails");
-    }
 }
+2025-07-16T18:38:43.803+02:00  INFO 33884 --- [uui] [ast-scheduler-1] o.p.h.pubsub.GenericHazelcastConsumer    : Processed and removed entry from map-0 with correlationId=corr-112004910
+2025-07-16T18:38:43.994+02:00 ERROR 33884 --- [uui] [ast-scheduler-1] o.p.h.pubsub.GenericHazelcastConsumer    : Error processing request from map-0 for flow 'myFlow': Expected failure
+
+java.lang.RuntimeException: Expected failure
+	at osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration$1.handleRequest(FlowHandlerTestConfiguration.java:96) ~[test-classes/:na]
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer.processEntry(GenericHazelcastConsumer.java:98) ~[classes/:na]
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer.pollRequestMaps(GenericHazelcastConsumer.java:76) ~[classes/:na]
+	at org.springframework.scheduling.support.DelegatingErrorHandlingRunnable.run(DelegatingErrorHandlingRunnable.java:54) ~[spring-context-6.2.8.jar:6.2.8]
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572) ~[na:na]
+	at java.base/java.util.concurrent.FutureTask.runAndReset(FutureTask.java:358) ~[na:na]
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:305) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144) ~[na:na]
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642) ~[na:na]
+	at java.base/java.lang.Thread.run(Thread.java:1583) ~[na:na]
+
