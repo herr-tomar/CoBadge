@@ -1,126 +1,34 @@
-package osplus.pkptuna.hazelcast.pubsub;
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+[ERROR] Tests run: 4, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 21.24 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest
+[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testNotLeaderDoesNotSubscribeToTopics -- Time elapsed: 0.606 s <<< ERROR!
+org.awaitility.core.ConditionTimeoutException: Condition with Lambda expression in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest was not fulfilled within 500 milliseconds.
+	at org.awaitility.core.ConditionAwaiter.await(ConditionAwaiter.java:167)
+	at org.awaitility.core.CallableCondition.await(CallableCondition.java:78)
+	at org.awaitility.core.CallableCondition.await(CallableCondition.java:26)
+	at org.awaitility.core.ConditionFactory.until(ConditionFactory.java:1006)
+	at org.awaitility.core.ConditionFactory.until(ConditionFactory.java:975)
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testNotLeaderDoesNotSubscribeToTopics(GenericHazelcastRouterTest.java:124)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.map.IMap;
-import com.hazelcast.topic.ITopic;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import osplus.pkptuna.hazelcast.config.FlowConfig;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
-import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
 
-import java.util.Map;
+-----
 
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.*;
-
-public class GenericHazelcastRouterTest extends BaseHazelcastTest {
-
-    @Autowired
-    private HazelcastInstance hazelcastInstance;
-
-    @Autowired
-    private FlowHandlerRegistry<String, FlowHandler> handlerRegistry;
-
-    @Autowired
-    private FlowHandler sampleFlowHandler;
-
-    @Autowired
-    private FlowConfig flowConfig;
-
-    @Autowired
-    private GenericHazelcastRouter router;
-
-    @Autowired
-    private FlowHandlerTestConfiguration.TestCollector testCollector;
-
-    private IMap<String, String> leaderMap;
-    private IMap<String, Long> heartbeatMap;
-    private IMap<String, String> routerMap;
-    private IMap<Object, Object> targetMap;
-    private ITopic<byte[]> topic;
-
-    private final String routerInstanceId = "test-router-instance";
-
-    @BeforeEach
-    public void setup() {
-        leaderMap = hazelcastInstance.getMap("router-leader-map");
-        heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
-        routerMap = hazelcastInstance.getMap("router-claim-map");
-        targetMap = hazelcastInstance.getMap("map-0");
-
-        leaderMap.clear();
-        heartbeatMap.clear();
-        routerMap.clear();
-        targetMap.clear();
-        testCollector.clear();
-
-        router.setRouterInstanceId(routerInstanceId);
-        topic = hazelcastInstance.getReliableTopic(flowConfig.requestTopic());
-    }
-
-    @Test
-    public void testMessageRoutedSuccessfully() {
-        router.initRouters();
-
-        topic.publish("{\"key\":\"value\"}".getBytes());
-
-        await().atMost(500, MILLISECONDS)
-                .until(() -> testCollector.wasSent("res-topic"));
-
-        assertEquals("wrappedResponse", testCollector.getSent("res-topic"));
-    }
-
-    @Test
-    public void testDuplicateMessageNotProcessed() throws Exception {
-        router.initRouters();
-
-        Map<String, Object> requestMap = Map.of("dup", "check");
-        byte[] rawMessage = new ObjectMapper().writeValueAsBytes(requestMap);
-        String corrId = sampleFlowHandler.extractCorrelationId(requestMap);
-
-        routerMap.put("route-lock-" + corrId, "existing"); // Simulate existing lock
-        topic.publish(rawMessage);
-
-        await().during(300, MILLISECONDS)
-                .atMost(500, MILLISECONDS)
-                .until(() -> !testCollector.wasSent("res-topic"));
-
-        assertFalse(testCollector.wasSent("res-topic"), "Duplicate message should not be routed or responded to");
-    }
-
-    @Test
-    public void testRoutingHandlerThrowsException() {
-        router.initRouters();
-
-        byte[] rawMessage = "faultyRequest".getBytes();
-        topic.publish(rawMessage);
-
-        await().during(300, MILLISECONDS)
-                .atMost(500, MILLISECONDS)
-                .until(() -> !testCollector.wasSent("res-topic"));
-
-        assertFalse(testCollector.wasSent("res-topic"), "No response should be sent for faulty request");
-    }
-
-    @Test
-    public void testNotLeaderDoesNotSubscribeToTopics() {
-        long now = System.currentTimeMillis();
-        heartbeatMap.put("heartbeat", now);
-        leaderMap.put("active-router", "another-instance"); // simulate another leader
-
-        router.initRouters();
-
-        topic.publish("{\"key\":\"value\"}".getBytes());
-
-        await().during(300, MILLISECONDS)
-                .atMost(500, MILLISECONDS)
-                .until(() -> !testCollector.wasSent("res-topic"));
-
-        assertFalse(testCollector.wasSent("res-topic"), "Non-leader router should not route or respond");
-    }
-}
+2025-07-16T13:57:46.162+02:00  INFO 35784 --- [uui] [_wing.migration] c.h.i.partition.impl.MigrationManager    : [16.160.188.219]:5702 [test-cluster] [5.3.0] Repartitioning cluster data. Migration tasks count: 813
+2025-07-16T13:57:46.709+02:00  INFO 35784 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : This node is elected as the ACTIVE router (ID=test-router-instance)
+2025-07-16T13:57:46.710+02:00  INFO 35784 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Heartbeat started for router ID=test-router-instance
+2025-07-16T13:57:46.710+02:00  INFO 35784 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Listening on topic=req-topicda644ce6-e068-4e3a-827f-2c989ade00a0 for flow=myFlow
+2025-07-16T13:57:46.714+02:00  INFO 35784 --- [uui] [.async.thread-3] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-112004910
+2025-07-16T13:57:46.715+02:00  INFO 35784 --- [uui] [async.thread-10] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-112004910
+2025-07-16T13:57:46.715+02:00  INFO 35784 --- [uui] [.async.thread-7] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-112004910
+2025-07-16T13:57:46.732+02:00  INFO 35784 --- [uui] [.async.thread-1] o.p.h.pubsub.GenericHazelcastRouter      : Routed correlationId='corr-112004910' to map 'map-0'
+2025-07-16T13:57:46.760+02:00  INFO 35784 --- [uui] [ast-scheduler-1] o.p.h.pubsub.GenericHazelcastConsumer    : Processed and removed entry from map-0 with correlationId=corr-112004910
+2025-07-16T13:57:46.802+02:00  INFO 35784 --- [uui] [_wing.migration] c.h.i.partition.impl.MigrationManager    : [16.160.188.219]:5702 [test-cluster] [5.3.0] All migration tasks have been completed. (repartitionTime=Wed Jul 16 13:57:46 CEST 2025, plannedMigrations=813, completedMigrations=813, remainingMigrations=0, totalCompletedMigrations=813)
+2025-07-16T13:57:46.846+02:00  INFO 35784 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Leadership already exists or heartbeat is alive (Leader=another-instance, LastBeat=1752667066844)
+2025-07-16T13:57:46.847+02:00  INFO 35784 --- [uui] [async.thread-12] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-112004910
+2025-07-16T13:57:46.847+02:00  INFO 35784 --- [uui] [.async.thread-3] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-112004910
+2025-07-16T13:57:46.847+02:00  INFO 35784 --- [uui] [async.thread-15] o.p.h.pubsub.GenericHazelcastRouter      : Skipped duplicate routing for correlationId=corr-112004910
+2025-07-16T13:57:46.849+02:00  INFO 35784 --- [uui] [.async.thread-9] o.p.h.pubsub.GenericHazelcastRouter      : Routed correlationId='corr-112004910' to map 'map-0'
+2025-07-16T13:57:46.877+02:00  INFO 35784 --- [uui] [ast-scheduler-1] o.p.h.pubsub.GenericHazelcastConsumer    : Processed and removed entry from map-0 with correlationId=corr-112004910
+2025-07-16T13:57:47.514+02:00  INFO 35784 --- [uui] [.ShutdownThread] com.hazelcast.instance.impl.Node         : [16.160.188.219]:5702 [test-cluster] [5.3.0] Running shutdown hook... Current node state: ACTIVE
