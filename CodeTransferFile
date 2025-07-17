@@ -1,158 +1,59 @@
+@Test
+public void testMessageRoutedSuccessfully() {
+    leaderMap.clear();
+    heartbeatMap.clear();
 
-package osplus.pkptuna.hazelcast.pubsub;
+    router.setRouterInstanceId(routerInstanceId);
+    router.initRouters();
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hazelcast.config.Config;
-import com.hazelcast.core.Hazelcast;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.map.IMap;
-import com.hazelcast.topic.ITopic;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import osplus.apl.core.test.utils.AplTestRunner;
-import osplus.apl.core.test.utils.BaseAplTest;
-import osplus.pkptuna.hazelcast.config.FlowConfig;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
+    Map<String, Object> request = Map.of("key", "value");
+    String corrId = sampleFlowHandler.extractCorrelationId(request);
+    topic.publish(new ObjectMapper().writeValueAsBytes(request));
 
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
+    await()
+            .atMost(2, TimeUnit.SECONDS)
+            .pollInterval(50, TimeUnit.MILLISECONDS)
+            .untilAsserted(() -> {
+                assertTrue(testCollector.wasSent(flowConfig.responseTopic()), "Expected message to be routed and response sent");
+                assertEquals("wrappedResponse", testCollector.getSent(flowConfig.responseTopic()));
+                assertEquals(routerInstanceId, routerMap.get("route-lock-" + corrId), "Claim should be recorded by router");
+            });
+}
 
-import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+@Test
+public void testDuplicateMessageNotProcessed() throws Exception {
+    router.setRouterInstanceId(routerInstanceId);
+    leaderMap.put("active-router", routerInstanceId);
+    heartbeatMap.put("heartbeat", System.currentTimeMillis());
 
-@SpringBootTest(classes = {
-        AplTestRunner.class,
-        GenericHazelcastRouterTest.LocalTestConfig.class,
-        FlowHandlerTestConfiguration.class
-},
-        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
-        properties = {
-                "spring.main.allow-bean-definition-overriding=true",
-                "generichazelcast.polling-rate=20",
-                "apl.application.name=uui",
-                "apl.application.version=0.0.1-TEST"
-        })
-@AutoConfigureMockMvc
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public class GenericHazelcastRouterTest extends BaseAplTest {
+    router.initRouters();
 
-    @Autowired private HazelcastInstance hazelcastInstance;
-    @Autowired private FlowHandler sampleFlowHandler;
-    @Autowired private FlowConfig flowConfig;
-    @Autowired private GenericHazelcastRouter router;
-    @Autowired private FlowHandlerTestConfiguration.TestCollector testCollector;
+    Map<String, Object> requestMap = Map.of("dup", "check");
+    String corrId = sampleFlowHandler.extractCorrelationId(requestMap);
+    routerMap.put("route-lock-" + corrId, "existing"); // simulate claim already held
 
-    private IMap<String, String> leaderMap;
-    private IMap<String, Long> heartbeatMap;
-    private IMap<String, String> routerMap;
-    private IMap<Object, Object> targetMap;
-    private ITopic<byte[]> topic;
+    topic.publish(new ObjectMapper().writeValueAsBytes(requestMap));
 
-    private final String routerInstanceId = "test-router-instance";
+    await()
+            .during(1, TimeUnit.SECONDS)
+            .atMost(2, TimeUnit.SECONDS)
+            .untilAsserted(() -> assertFalse(testCollector.wasSent(flowConfig.responseTopic())));
+}
 
-    @BeforeEach
-    public void setup() {
-        leaderMap = hazelcastInstance.getMap("router-leader-map");
-        heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
-        routerMap = hazelcastInstance.getMap("router-claim-map");
-        targetMap = hazelcastInstance.getMap("map-0");
+@Test
+public void testRoutingHandlerThrowsException() throws Exception {
+    router.setRouterInstanceId(routerInstanceId);
+    leaderMap.put("active-router", routerInstanceId);
+    heartbeatMap.put("heartbeat", System.currentTimeMillis());
 
-        leaderMap.clear();
-        heartbeatMap.clear();
-        routerMap.clear();
-        targetMap.clear();
-        testCollector.clear();
+    router.initRouters();
 
-        router.setRouterInstanceId(routerInstanceId);
-        leaderMap.put("active-router",routerInstanceId);
-        heartbeatMap.put("heartbeat", System.currentTimeMillis() -10_000);
-        topic = hazelcastInstance.getReliableTopic(flowConfig.requestTopic());
-    }
+    // simulate a request that triggers handler to throw
+    Map<String, Object> faulty = Map.of("key", "faultyRequest");
+    topic.publish(new ObjectMapper().writeValueAsBytes(faulty));
 
-    @Test
-    public void testMessageRoutedSuccessfully() {
-        // Clear maps to simulate a clean state
-        leaderMap.clear();
-        heartbeatMap.clear();
-
-        // Allow this test router to claim leadership
-        router.setRouterInstanceId(routerInstanceId);
-        router.initRouters();
-
-        topic.publish("{\"key\":\"value\"}".getBytes());
-
-        await()
-                .atMost(2, TimeUnit.SECONDS)
-                .pollInterval(20, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> {
-                    assertTrue(testCollector.wasSent(flowConfig.responseTopic()), "Expected message to be routed and response sent");
-                    assertEquals("wrappedResponse", testCollector.getSent(flowConfig.responseTopic()));
-                });
-    }
-
-    @Test
-    public void testDuplicateMessageNotProcessed() throws Exception {
-        leaderMap.put("active-router", routerInstanceId);
-        heartbeatMap.put("heartbeat", System.currentTimeMillis());
-
-        router.initRouters();
-
-        Map<String, Object> requestMap = Map.of("dup", "check");
-        byte[] rawMessage = new ObjectMapper().writeValueAsBytes(requestMap);
-        String corrId = sampleFlowHandler.extractCorrelationId(requestMap);
-
-        routerMap.put("route-lock-" + corrId, "existing"); // Simulate existing lock
-        topic.publish(rawMessage);
-
-        assertFalse(testCollector.wasSent(flowConfig.responseTopic()));
-    }
-
-    @Test
-    public void testRoutingHandlerThrowsException() {
-        leaderMap.put("active-router", routerInstanceId);
-        heartbeatMap.put("heartbeat", System.currentTimeMillis());
-
-        router.initRouters();
-
-        byte[] rawMessage = "faultyRequest".getBytes();
-        topic.publish(rawMessage);
-
-        assertFalse(testCollector.wasSent(flowConfig.responseTopic()));
-    }
-
-    @Test
-    public void testNotLeaderDoesNotSubscribeToTopics() {
-        // Simulate different leader
-        leaderMap.put("active-router", "another-instance");
-        heartbeatMap.put("heartbeat", System.currentTimeMillis());
-
-        router.setRouterInstanceId("test-router-instance");
-        router.initRouters();
-
-        topic.publish("{\"key\":\"value\"}".getBytes());
-
-        assertFalse(testCollector.wasSent(flowConfig.responseTopic()));
-    }
-
-    @TestConfiguration
-    static class LocalTestConfig {
-        @Bean(destroyMethod = "shutdown")
-        public HazelcastInstance hazelcastInstance() {
-            Config config = new Config();
-            config.setClusterName("test-cluster" + UUID.randomUUID());
-            config.getNetworkConfig().setPortAutoIncrement(true);
-            config.setProperty("hazelcast.logging.type", "slf4j");
-            return Hazelcast.newHazelcastInstance(config);
-        }
-    }
+    await()
+            .during(1, TimeUnit.SECONDS)
+            .atMost(2, TimeUnit.SECONDS)
+            .untilAsserted(() -> assertFalse(testCollector.wasSent(flowConfig.responseTopic())));
 }
