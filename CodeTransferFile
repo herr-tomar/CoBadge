@@ -1,113 +1,142 @@
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@SpringBootTest(
-        classes = {
-                AplTestRunner.class,
-                GenericHazelcastConsumerTest.LocalTestConfig.class,
-                FlowHandlerTestConfiguration.class
-        },
-        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
-        properties = {
-                "spring.main.allow-bean-definition-overriding=true",
-                "generichazelcast.polling-rate=20",
-                "apl.application.name=uui",
-                "apl.application.version=0.0.1-TEST"
+package osplus.pkptuna.hazelcast.pubsub;
+
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import jakarta.annotation.PostConstruct;
+import org.springframework.scheduling.TaskScheduler;
+import osplus.apl.core.api.AplComponent;
+import osplus.apl.core.api.administration.metrics.MetricTag;
+import osplus.apl.core.api.administration.metrics.MetricsService;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.config.HazelcastConfigProps;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+
+import java.time.Duration;
+import java.util.List;
+
+@AplComponent
+public class GenericHazelcastConsumer {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastConsumer.class);
+
+    private final MetricsService metricsService;
+    private final HazelcastInstance hazelcastInstance;
+    private final TaskScheduler taskScheduler;
+    private final List<FlowConfig> flowConfigs;
+    private final FlowHandlerRegistry handlerRegistry;
+    private final HazelcastConfigProps hazelcastConfigProps;
+    private final String consumerInstanceId = java.util.UUID.randomUUID().toString();
+
+    public GenericHazelcastConsumer(
+            MetricsService metricsService,
+            HazelcastInstance hazelcastInstance,
+            TaskScheduler taskScheduler,
+            List<FlowConfig> flowConfigs,
+            FlowHandlerRegistry handlerRegistry,
+            HazelcastConfigProps hazelcastConfigProps
+    ) {
+        this.metricsService = metricsService;
+        this.hazelcastInstance = hazelcastInstance;
+        this.taskScheduler = taskScheduler;
+        this.flowConfigs = flowConfigs;
+        this.handlerRegistry = handlerRegistry;
+        this.hazelcastConfigProps = hazelcastConfigProps;
+    }
+
+    @PostConstruct
+    public void startPolling() {
+        taskScheduler.scheduleAtFixedRate(this::pollRequestMaps, Duration.ofMillis(hazelcastConfigProps.pollingRate()));
+        LOGGER.info("Scheduled Hazelcast consumer polling with fixed rate of {} ms.", hazelcastConfigProps.pollingRate());
+    }
+
+    public void pollRequestMaps() {
+        for (var config : flowConfigs) {
+            processFlowPartitions(config);
         }
-)
-@AutoConfigureMockMvc
-public class GenericHazelcastConsumerTest extends BaseAplTest {
-
-    @Autowired
-    private FlowHandler sampleFlowHandler;
-
-    @Autowired
-    private FlowConfig flowConfig;
-
-    @Autowired
-    private HazelcastInstance hazelcastInstance;
-
-    @Autowired
-    private GenericHazelcastConsumer consumer;
-
-    @Autowired
-    private FlowHandlerTestConfiguration.TestCollector testCollector;
-
-    private IMap<Object, Object> requestMap;
-    private IMap<String, String> routerMap;
-
-    @BeforeEach
-    public void setUp() {
-        requestMap = hazelcastInstance.getMap("map-0");
-        routerMap = hazelcastInstance.getMap("router-claim-map");
-
-        hazelcastInstance.getMap("router-leader-map").clear();
-        hazelcastInstance.getMap("router-heartbeat-map").clear();
-        routerMap.clear();
-        requestMap.clear();
-        testCollector.clear();
     }
 
-    @Test
-    public void testPollRequestMaps_PositiveFlow() {
-        Map<String, Object> request = Map.of("key", "value");
-        String correlationId = sampleFlowHandler.extractCorrelationId(request);
+    private void processFlowPartitions(FlowConfig config) {
+        var flowName = config.name();
+        var baseMap = config.mapBase();
+        var responseTopic = config.responseTopic();
 
-        requestMap.put(correlationId, request);
-        routerMap.put("route-lock-" + correlationId, "router-uuid");  // Simulate router claiming the request
+        for (int i = 0; i < config.partitions(); i++) {
+            var mapName = baseMap + i;
+            var messageMap = hazelcastInstance.<String, Object>getMap(mapName);
+            var claimMap = hazelcastInstance.<String, String>getMap("router-claim-map");
 
-        consumer.pollRequestMaps();
-
-        await()
-                .atMost(2, TimeUnit.SECONDS)
-                .pollInterval(50, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> {
-                    assertTrue(testCollector.wasSent(flowConfig.responseTopic()), "Expected response to be sent on topic");
-                    assertEquals("wrappedResponse", testCollector.getSent(flowConfig.responseTopic()));
-                    assertFalse(requestMap.containsKey(correlationId), "Message should be removed on success");
-                    assertFalse(routerMap.containsKey("route-lock-" + correlationId), "Claim should be removed on success");
-                });
-    }
-
-    @Test
-    public void testPollRequestMaps_NoHandlerFound() {
-        IMap<Object, Object> unknownMap = hazelcastInstance.getMap("mapX-0");
-        String corrId = "id1";
-
-        unknownMap.put(corrId, "request");
-        hazelcastInstance.getMap("router-claim-map").put("route-lock-" + corrId, "router-uuid");
-
-        consumer.pollRequestMaps();
-
-        assertFalse(testCollector.wasSent(flowConfig.responseTopic()), "No response should be sent for unknown flow");
-    }
-
-    @Test
-    public void testPollRequestMaps_HandlerThrowsException() {
-        String corrId = "id123";
-
-        requestMap.put(corrId, "faultyRequest");
-        routerMap.put("route-lock-" + corrId, "router-uuid");
-
-        consumer.pollRequestMaps();
-
-        await()
-                .atMost(2, TimeUnit.SECONDS)
-                .pollInterval(50, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> {
-                    assertFalse(testCollector.wasSent(flowConfig.responseTopic()), "No response should be sent on handler error");
-                    assertTrue(requestMap.containsKey(corrId), "Request should remain for retry");
-                    assertEquals("router-uuid", routerMap.get("route-lock-" + corrId), "Claim should be reverted to original");
-                });
-    }
-
-    @TestConfiguration
-    static class LocalTestConfig {
-        @Bean(destroyMethod = "shutdown")
-        public HazelcastInstance hazelcastInstance() {
-            Config config = new Config();
-            config.setClusterName("test-cluster-" + UUID.randomUUID());
-            config.getNetworkConfig().setPortAutoIncrement(true);
-            config.setProperty("hazelcast.logging.type", "slf4j");
-            return Hazelcast.newHazelcastInstance(config);
+            processMapEntries(flowName, responseTopic, mapName, messageMap, claimMap);
         }
+    }
+
+    private void processMapEntries(
+            String flowName,
+            String responseTopic,
+            String mapName,
+            IMap<String, Object> messageMap,
+            IMap<String, String> claimMap
+    ) {
+        for (var entry : messageMap.entrySet()) {
+            var correlationId = entry.getKey();
+            var message = entry.getValue();
+            var claimKey = "route-lock-" + correlationId;
+            var currentClaimer = claimMap.get(claimKey);
+
+            if (currentClaimer == null || currentClaimer.isBlank()) continue;
+            if (!claimMap.replace(claimKey, currentClaimer, consumerInstanceId)) continue;
+
+            handleMessage(flowName, responseTopic, mapName, messageMap, claimMap, correlationId, message, claimKey, currentClaimer);
+        }
+    }
+
+    private void handleMessage(
+            String flowName,
+            String responseTopic,
+            String mapName,
+            IMap<String, Object> messageMap,
+            IMap<String, String> claimMap,
+            String correlationId,
+            Object message,
+            String claimKey,
+            String originalClaimer
+    ) {
+        try {
+            var handler = handlerRegistry.getHandler(flowName);
+            if (handler == null) {
+                LOGGER.warn("No FlowHandler registered for flow '{}'. Skipping.", flowName);
+                metricsService.increaseCounter("hazelcast.message.consume.missingFlowHandler",
+                        MetricTag.create("flowName", flowName));
+                revertClaim(claimMap, claimKey, originalClaimer);
+                return;
+            }
+
+            var response = handler.handleRequest(message);
+            var wrapped = handler.wrapResponse(correlationId, response);
+            handler.sendResponse(hazelcastInstance, responseTopic, wrapped);
+
+            var removed = messageMap.remove(correlationId) != null;
+            if (removed) {
+                claimMap.remove(claimKey);
+                LOGGER.info("Processed and removed entry from {} with correlationId={}", mapName, correlationId);
+                metricsService.increaseCounter("hazelcast.message.consume.success",
+                        MetricTag.create("flowName", flowName));
+            } else {
+                LOGGER.warn("Message already removed from {} for correlationId={}", mapName, correlationId);
+            }
+
+        } catch (Exception e) {
+            LOGGER.error("Error processing request from {} for flow '{}': {}", mapName, flowName, e.getMessage(), e);
+            metricsService.increaseCounter("hazelcast.message.consume.error",
+                    MetricTag.create("flowName", flowName),
+                    MetricTag.create("exceptionClass", e.getClass().getCanonicalName()));
+            revertClaim(claimMap, claimKey, originalClaimer);
+        }
+    }
+
+    private void revertClaim(IMap<String, String> claimMap, String claimKey, String originalOwner) {
+        claimMap.put(claimKey, originalOwner);
+        LOGGER.debug("Reverted claim for key '{}' back to '{}'", claimKey, originalOwner);
     }
 }
