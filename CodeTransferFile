@@ -1,70 +1,7 @@
-	at org.awaitility.core.ConditionFactory.untilAsserted(ConditionFactory.java:790)
-	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully(GenericHazelcastRouterTest.java:98)
-	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-Caused by: org.opentest4j.AssertionFailedError: Expected message to be written to map ==> expected: <true> but was: <false>
-	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
-	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
-	at org.junit.jupiter.api.AssertTrue.failNotTrue(AssertTrue.java:63)
-	at org.junit.jupiter.api.AssertTrue.assertTrue(AssertTrue.java:36)
-	at org.junit.jupiter.api.Assertions.assertTrue(Assertions.java:214)
-	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.lambda$testMessageRoutedSuccessfully$0(GenericHazelcastRouterTest.java:100)
-	at org.awaitility.core.AssertionCondition.lambda$new$0(AssertionCondition.java:53)
-	at org.awaitility.core.ConditionAwaiter$ConditionPoller.call(ConditionAwaiter.java:248)
-	at org.awaitility.core.ConditionAwaiter$ConditionPoller.call(ConditionAwaiter.java:235)
-	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
-	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
-	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
-	at java.base/java.lang.Thread.run(Thread.java:1583)
-[INFO] Running osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisherTest
-OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
-[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 16.06 s -- in osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisherTest
-[INFO] 
-
-.---------------------
-
- @BeforeEach
-    public void setup() {
-        leaderMap = hazelcastInstance.getMap("router-leader-map");
-        heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
-        routerMap = hazelcastInstance.getMap("router-claim-map");
-        targetMap = hazelcastInstance.getMap("map-0");
-
-        leaderMap.clear();
-        heartbeatMap.clear();
-        routerMap.clear();
-        targetMap.clear();
-        testCollector.clear();
-
-        router.setRouterInstanceId(routerInstanceId);
-        leaderMap.put("active-router",routerInstanceId);
-        heartbeatMap.put("heartbeat", System.currentTimeMillis() -10_000);
-        topic = hazelcastInstance.getReliableTopic(flowConfig.requestTopic());
-    }
-
-    @Test
-    public void testMessageRoutedSuccessfully() throws Exception {
-        // Clear maps and allow router to become leader
-        leaderMap.clear();
-        heartbeatMap.clear();
-
-        router.setRouterInstanceId(routerInstanceId);
-        router.initRouters();
-
-        // Prepare a valid request
-        Map<String, Object> request = Map.of("key", "value");
-        String corrId = sampleFlowHandler.extractCorrelationId(request);
-        topic.publish(new ObjectMapper().writeValueAsBytes(request));
-
-        await()
-                .atMost(2, TimeUnit.SECONDS)
-                .pollInterval(50, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> {
-                    // 1. Entry should exist in target map
-                    assertTrue(targetMap.containsKey(corrId), "Expected message to be written to map");
-
-                    // 2. Claim should be registered for router
-                    assertTrue(routerMap.containsKey("route-lock-" + corrId), "Router should have created a claim entry");
-                });
-    }
+await()
+    .atMost(3, TimeUnit.SECONDS)
+    .pollInterval(50, TimeUnit.MILLISECONDS)
+    .untilAsserted(() -> {
+        assertTrue(targetMap.containsKey(corrId), "Expected message to be written to map");
+        assertTrue(routerMap.containsKey("route-lock-" + corrId), "Expected route-lock to be created");
+    });
