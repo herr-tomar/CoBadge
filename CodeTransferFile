@@ -17,6 +17,8 @@ import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.stream.IntStream;
 
 /**
  * Verarbeitet Nachrichten aus Hazelcast-Maps periodisch.
@@ -26,6 +28,8 @@ import java.util.Map;
 public class GenericHazelcastConsumer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastConsumer.class);
+
+    private final String instanceId = UUID.randomUUID().toString();
 
     private final MetricsService metricsService;
     private final HazelcastInstance hazelcastInstance;
@@ -83,35 +87,35 @@ public class GenericHazelcastConsumer {
         IMap<String, String> claimMap = hazelcastInstance.getMap("router-claim-map");
 
         IntStream.range(0, partitions).forEach(partitionIndex -> {
-    String mapName = baseMap + partitionIndex;
-    IMap<String, Object> messageMap = hazelcastInstance.getMap(mapName);
+            String mapName = baseMap + partitionIndex;
+            IMap<String, Object> messageMap = hazelcastInstance.getMap(mapName);
 
-    for (Map.Entry<String, Object> entry : messageMap.entrySet()) {
-        String correlationId = entry.getKey();
-        Object request = entry.getValue();
-        String claimKey = "route-lock-" + correlationId;
+            for (Map.Entry<String, Object> entry : messageMap.entrySet()) {
+                String correlationId = entry.getKey();
+                Object request = entry.getValue();
+                String claimKey = "route-lock-" + correlationId;
 
-        boolean claimed = claimMap.replace(claimKey, "", hazelcastConfigProps.instanceId());
-        if (claimed) {
-            try {
-                boolean success = processEntry(flowName, correlationId, request, responseTopic);
-                if (success) {
-                    messageMap.remove(correlationId);
-                    claimMap.remove(claimKey);
-                    LOGGER.info("Processed and removed entry from {} with correlationId={}", mapName, correlationId);
-                } else {
-                    claimMap.replace(claimKey, hazelcastConfigProps.instanceId(), "");
+                boolean claimed = claimMap.replace(claimKey, "", instanceId);
+                if (claimed) {
+                    try {
+                        boolean success = processEntry(flowName, correlationId, request, responseTopic);
+                        if (success) {
+                            messageMap.remove(correlationId);
+                            claimMap.remove(claimKey);
+                            LOGGER.info("Processed and removed entry from {} with correlationId={}", mapName, correlationId);
+                        } else {
+                            claimMap.replace(claimKey, instanceId, "");
+                        }
+                    } catch (Exception ex) {
+                        LOGGER.error("Fehler bei der Verarbeitung von {}: {}", correlationId, ex.getMessage(), ex);
+                        claimMap.replace(claimKey, instanceId, "");
+                        metricsService.increaseCounter("hazelcast.message.consume.error",
+                                MetricTag.create("flowName", flowName),
+                                MetricTag.create("exceptionClass", ex.getClass().getSimpleName()));
+                    }
                 }
-            } catch (Exception ex) {
-                LOGGER.error("Fehler bei der Verarbeitung von {}: {}", correlationId, ex.getMessage(), ex);
-                claimMap.replace(claimKey, hazelcastConfigProps.instanceId(), "");
-                metricsService.increaseCounter("hazelcast.message.consume.error",
-                        MetricTag.create("flowName", flowName),
-                        MetricTag.create("exceptionClass", ex.getClass().getSimpleName()));
             }
-        }
-    }
-});
+        });
     }
 
     /**
