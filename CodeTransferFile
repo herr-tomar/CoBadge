@@ -1,69 +1,36 @@
-@Test
-public void testMessageRoutedSuccessfully() throws Exception {
-    // Clear maps and allow router to become leader
-    leaderMap.clear();
-    heartbeatMap.clear();
+2025-07-17T14:14:18.550+02:00  INFO 25872 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : [initRouters] Using routerInstanceId=test-router-instance
+2025-07-17T14:14:18.551+02:00  INFO 25872 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : This node is elected as the ACTIVE router (ID=test-router-instance)
+2025-07-17T14:14:18.551+02:00  INFO 25872 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Heartbeat started for router ID=test-router-instance
+2025-07-17T14:14:18.551+02:00  INFO 25872 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Listening on topic=req-topic1b60ebb5-4a50-4451-943b-e7edb0aeaa2b for flow=myFlow
+2025-07-17T14:14:18.553+02:00  INFO 25872 --- [uui] [async.thread-16] o.p.h.pubsub.GenericHazelcastRouter      : [onMessage] Debug instance id=671bf602-ad80-419c-aafe-f9f81a1468cb, Router instance ID=test-router-instance, Current Leader Id =test-router-instance, Message Source=Member [16.160.188.219]:5701 - 31786165-9ce6-4f0b-a60e-4cb53fdf8313 this
+2025-07-17T14:14:18.573+02:00  INFO 25872 --- [uui] [async.thread-16] o.p.h.pubsub.GenericHazelcastRouter      : Routed correlationId='corr-112004910' to map 'map-0'
 
-    router.setRouterInstanceId(routerInstanceId);
-    router.initRouters();
-
-    // Prepare a valid request
-    Map<String, Object> request = Map.of("key", "value");
-    String corrId = sampleFlowHandler.extractCorrelationId(request);
-    topic.publish(new ObjectMapper().writeValueAsBytes(request));
-
-    await()
-        .atMost(2, TimeUnit.SECONDS)
-        .pollInterval(50, TimeUnit.MILLISECONDS)
-        .untilAsserted(() -> {
-            // 1. Entry should exist in target map
-            assertTrue(targetMap.containsKey(corrId), "Expected message to be written to map");
-
-            // 2. Claim should be registered for router
-            assertEquals(routerInstanceId, routerMap.get("route-lock-" + corrId), "Claim should be recorded by router");
-        });
-}
-
-@Test
-public void testDuplicateMessageNotProcessed() throws Exception {
-    router.setRouterInstanceId(routerInstanceId);
-    leaderMap.put("active-router", routerInstanceId);
-    heartbeatMap.put("heartbeat", System.currentTimeMillis());
-
-    router.initRouters();
-
-    Map<String, Object> requestMap = Map.of("dup", "check");
-    String corrId = sampleFlowHandler.extractCorrelationId(requestMap);
-    routerMap.put("route-lock-" + corrId, "existing"); // Simulate pre-existing claim
-
-    topic.publish(new ObjectMapper().writeValueAsBytes(requestMap));
-
-    await()
-        .during(1, TimeUnit.SECONDS)
-        .atMost(2, TimeUnit.SECONDS)
-        .untilAsserted(() -> {
-            assertFalse(targetMap.containsKey(corrId), "Duplicate message should not be processed");
-        });
-}
+org.awaitility.core.ConditionTimeoutException: Assertion condition defined as a Lambda expression in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest Claim should be recorded by router ==> 
+Expected :test-router-instance
+Actual   :a0b75c9a-0fcb-49e5-bc56-59b4586eedca
+<Click to see difference>
 
 
-@Test
-public void testRoutingHandlerThrowsException() throws Exception {
-    router.setRouterInstanceId(routerInstanceId);
-    leaderMap.put("active-router", routerInstanceId);
-    heartbeatMap.put("heartbeat", System.currentTimeMillis());
-
-    router.initRouters();
-
-    Map<String, Object> faulty = Map.of("key", "faultyRequest"); // triggers handler failure
-    String corrId = sampleFlowHandler.extractCorrelationId(faulty);
-    topic.publish(new ObjectMapper().writeValueAsBytes(faulty));
-
-    await()
-        .during(1, TimeUnit.SECONDS)
-        .atMost(2, TimeUnit.SECONDS)
-        .untilAsserted(() -> {
-            assertFalse(targetMap.containsKey(corrId), "Faulty message should not be routed");
-        });
-}
-
+	at org.awaitility.core.ConditionAwaiter.await(ConditionAwaiter.java:167)
+	at org.awaitility.core.AssertionCondition.await(AssertionCondition.java:119)
+	at org.awaitility.core.AssertionCondition.await(AssertionCondition.java:31)
+	at org.awaitility.core.ConditionFactory.until(ConditionFactory.java:1006)
+	at org.awaitility.core.ConditionFactory.untilAsserted(ConditionFactory.java:790)
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully(GenericHazelcastRouterTest.java:99)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+Caused by: org.opentest4j.AssertionFailedError: Claim should be recorded by router ==> expected: <test-router-instance> but was: <a0b75c9a-0fcb-49e5-bc56-59b4586eedca>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertEquals.failNotEqual(AssertEquals.java:197)
+	at org.junit.jupiter.api.AssertEquals.assertEquals(AssertEquals.java:182)
+	at org.junit.jupiter.api.Assertions.assertEquals(Assertions.java:1156)
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.lambda$testMessageRoutedSuccessfully$0(GenericHazelcastRouterTest.java:104)
+	at org.awaitility.core.AssertionCondition.lambda$new$0(AssertionCondition.java:53)
+	at org.awaitility.core.ConditionAwaiter$ConditionPoller.call(ConditionAwaiter.java:248)
+	at org.awaitility.core.ConditionAwaiter$ConditionPoller.call(ConditionAwaiter.java:235)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
