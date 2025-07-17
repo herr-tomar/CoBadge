@@ -21,14 +21,13 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 
 /**
- * Verarbeitet Nachrichten aus Hazelcast-Maps periodisch.
- * Beansprucht (claimt) Nachrichten, verarbeitet sie und entfernt sie bei Erfolg.
+ * Verarbeitet Nachrichten aus Hazelcast-Maps regelmäßig.
+ * Übernimmt (claimt) Nachrichten zur Verarbeitung und entfernt sie bei Erfolg.
  */
 @AplComponent
 public class GenericHazelcastConsumer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastConsumer.class);
-
     private final String instanceId = UUID.randomUUID().toString();
 
     private final MetricsService metricsService;
@@ -55,7 +54,7 @@ public class GenericHazelcastConsumer {
     }
 
     /**
-     * Initialisiert die periodische Abfrage nach neuen Nachrichten.
+     * Initialisiert die periodische Abfrage von neuen Nachrichten.
      */
     @PostConstruct
     public void startPolling() {
@@ -76,7 +75,7 @@ public class GenericHazelcastConsumer {
     }
 
     /**
-     * Verarbeitet Nachrichten für einen Flow (alle Partitionen).
+     * Verarbeitet Nachrichten für einen bestimmten Flow (alle Partitionen).
      */
     private void handleFlow(FlowConfig config) {
         String flowName = config.name();
@@ -90,10 +89,15 @@ public class GenericHazelcastConsumer {
             String mapName = baseMap + partitionIndex;
             IMap<String, Object> messageMap = hazelcastInstance.getMap(mapName);
 
-            for (Map.Entry<String, Object> entry : messageMap.entrySet()) {
+            for (var entry : messageMap.entrySet().stream().toList()) {
                 String correlationId = entry.getKey();
                 Object request = entry.getValue();
                 String claimKey = "route-lock-" + correlationId;
+
+                if (!claimMap.containsKey(claimKey)) {
+                    LOGGER.warn("Kein Claim-Schlüssel '{}' vorhanden. Überspringe Nachricht.", claimKey);
+                    continue;
+                }
 
                 boolean claimed = claimMap.replace(claimKey, "", instanceId);
                 if (claimed) {
