@@ -1,13 +1,20 @@
- @Test
-    public void testPollRequestMaps_PositiveFlow() {
+import static org.awaitility.Awaitility.await;
+import java.util.concurrent.TimeUnit;
 
-        Map<String, Object> request = Map.of("key", "value");
-        String correlationId = sampleFlowHandler.extractCorrelationId(request);
+@Test
+public void testPollRequestMaps_PositiveFlow() {
+    Map<String, Object> request = Map.of("key", "value");
+    String correlationId = sampleFlowHandler.extractCorrelationId(request);
 
-        requestMap.put(correlationId, request);
+    requestMap.put(correlationId, request);
 
-        consumer.pollRequestMaps();
+    consumer.pollRequestMaps();
 
-        assertTrue(testCollector.wasSent(flowConfig.responseTopic()), "Expected response to be sent on topic");
-        assertEquals("wrappedResponse", testCollector.getSent(flowConfig.responseTopic()));
-    }
+    await()
+        .atMost(2, TimeUnit.SECONDS)
+        .pollInterval(50, TimeUnit.MILLISECONDS)
+        .untilAsserted(() -> {
+            assertTrue(testCollector.wasSent(flowConfig.responseTopic()), "Expected response to be sent on topic");
+            assertEquals("wrappedResponse", testCollector.getSent(flowConfig.responseTopic()));
+        });
+}
