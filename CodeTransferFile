@@ -1,111 +1,113 @@
-package osplus.pkptuna.flows.handlers;
+
+package osplus.pkptuna.service;
 
 import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.topic.ITopic;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Bean;
-import osplus.pkptuna.dispute.lookup.model.*;
-import osplus.pkptuna.dispute.service.DisputeService;
-import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
-import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
+import org.springframework.http.ResponseEntity;
+import osplus.pkptuna.api.ApiResponse;
+import osplus.pkptuna.configprops.HazelRelTopicConfigProps;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
+import osplus.pkptuna.dispute.model.DisputeResponseDto;
+import osplus.pkptuna.rest.dispute.lookup.model.mapper.DisputeLookupResponseDtoMapper;
+import osplus.pkptuna.rest.dispute.model.mapper.DisputeResponseDtoMapper;
+import osplus.pkptuna.util.GenericResponseTracker;
+
+import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-@SpringBootTest(classes = {
-        DisputeLookupFlowHandlerTest.TestConfig.class
-})
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class DisputeLookupFlowHandlerTest {
+class DisputeOrcaServiceTest {
 
-    @Autowired
-    private DisputeLookupFlowHandler handler;
+    private HazelcastInstance hazelcastInstance;
+    private DisputeOrcaService disputeOrcaService;
 
-    @Autowired
-    private DisputeService disputeService;
+    private GenericResponseTracker<DisputeLookupResponseDto> disputeLookupResponseTracker;
+    private GenericResponseTracker<DisputeResponseDto> disputeDetailResponseTracker;
 
-    /**
-     * Testet die Extraktion der Korrelation-ID aus dem Wrapper.
-     */
-    @Test
-    void shouldExtractCorrelationId() {
-        DisputeLookupRequestWrapperDto request = DisputeLookupRequestWrapperDto.newBuilder()
-                .setCorrelationId("lookup-001")
-                .build();
+    private DisputeLookupResponseDtoMapper disputeLookupResponseDtoMapper;
+    private DisputeResponseDtoMapper disputeResponseDtoMapper;
 
-        String result = handler.extractCorrelationId(request);
+    private HazelRelTopicConfigProps hazelRelTopicConfigProps;
 
-        assertEquals("lookup-001", result);
+    private ITopic mockTopic;
+
+    @BeforeEach
+    void setUp() {
+        hazelcastInstance = mock(HazelcastInstance.class);
+
+        disputeLookupResponseTracker = mock(GenericResponseTracker.class);
+        disputeDetailResponseTracker = mock(GenericResponseTracker.class);
+
+        disputeLookupResponseDtoMapper = mock(DisputeLookupResponseDtoMapper.class);
+        disputeResponseDtoMapper = mock(DisputeResponseDtoMapper.class);
+
+        hazelRelTopicConfigProps = mock(HazelRelTopicConfigProps.class);
+
+        mockTopic = mock(ITopic.class);
+        when(hazelcastInstance.getReliableTopic(anyString())).thenReturn(mockTopic);
+
+        disputeOrcaService = new DisputeOrcaService(
+                hazelcastInstance,
+                disputeLookupResponseDtoMapper,
+                disputeResponseDtoMapper,
+                disputeDetailResponseTracker,
+                disputeLookupResponseTracker,
+                hazelRelTopicConfigProps
+        );
     }
 
-    /**
-     * Testet, ob der Lookup-Service korrekt aufgerufen wird.
-     */
     @Test
-    void shouldCallLookupService() {
-        DisputeLookupRequestDto dto = DisputeLookupRequestDto.newBuilder()
-                .setIssuerId("issuer")
-                .setCardReference("cardRef")
-                .build();
+    void lookupDisputeFolder_shouldReturnSuccessResponse() {
+        DisputeLookupResponseDto protoResponse = mock(DisputeLookupResponseDto.class);
+        osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto restResponse =
+                mock(osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto.class);
 
-        DisputeLookupRequestWrapperDto request = DisputeLookupRequestWrapperDto.newBuilder()
-                .setPayload(dto)
-                .build();
+        // Mock topic config
+        when(hazelRelTopicConfigProps.disputesLookupReq()).thenReturn("topic-lookup-req");
 
-        DisputeLookupResponseDto expected = DisputeLookupResponseDto.newBuilder().build();
-        when(disputeService.lookupDisputeFolder("issuer", "cardRef")).thenReturn(expected);
+        // Future response
+        CompletableFuture future = CompletableFuture.completedFuture(protoResponse);
+        when(disputeLookupResponseTracker.await(anyString())).thenReturn(future);
+        when(disputeLookupResponseDtoMapper.toRestDto(protoResponse)).thenReturn(restResponse);
 
-        DisputeLookupResponseDto actual = handler.handleRequest(request);
+        ResponseEntity<ApiResponse<osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto>> response =
+                disputeOrcaService.lookupDisputeFolder("issuer", "cardRef");
 
-        assertEquals(expected, actual);
+        assertEquals(200, response.getStatusCodeValue());
+        assertEquals("success", response.getBody().getStatus());
+        assertEquals(restResponse, response.getBody().getData());
+
+        verify(disputeLookupResponseTracker).register(anyString());
+        verify(mockTopic).publish(any(byte[].class));
     }
 
-    /**
-     * Testet das korrekte Verpacken des Lookup-Antwortobjekts.
-     */
     @Test
-    void shouldWrapResponseCorrectly() {
-        DisputeLookupResponseDto response = DisputeLookupResponseDto.newBuilder().build();
-        Object wrapped = handler.wrapResponse("corr-id", response);
+    void publishDisputeDetailRequest_shouldReturnSuccessResponse() {
+        DisputeResponseDto protoResponse = mock(DisputeResponseDto.class);
+        osplus.pkptuna.rest.dispute.model.DisputeResponseDto restResponse =
+                mock(osplus.pkptuna.rest.dispute.model.DisputeResponseDto.class);
 
-        assertTrue(wrapped instanceof DisputeLookupResponseWrapperDto);
-        assertEquals("corr-id", ((DisputeLookupResponseWrapperDto) wrapped).getCorrelationId());
-    }
+        when(hazelRelTopicConfigProps.disputeDetailLookupReq()).thenReturn("topic-detail-req");
 
-    @TestConfiguration
-    static class TestConfig {
-        @Bean
-        public DisputeLookupFlowHandler disputeLookupFlowHandler(
-                DisputeService disputeService,
-                ReliableTopicPublisher reliableTopicPublisher,
-                ProtobufDeserializer<DisputeLookupRequestWrapperDto> deserializer
-        ) {
-            return new DisputeLookupFlowHandler(disputeService, reliableTopicPublisher, deserializer);
-        }
+        CompletableFuture future = CompletableFuture.completedFuture(protoResponse);
+        when(disputeDetailResponseTracker.await(anyString())).thenReturn(future);
+        when(disputeResponseDtoMapper.toRestDto(protoResponse)).thenReturn(restResponse);
 
-        @Bean
-        public DisputeService disputeService() {
-            return mock(DisputeService.class);
-        }
+        ResponseEntity<ApiResponse<osplus.pkptuna.rest.dispute.model.DisputeResponseDto>> response =
+                disputeOrcaService.publishDisputeDetailRequest("issuer", "folder123", "events,documents");
 
-        @Bean
-        public ReliableTopicPublisher reliableTopicPublisher() {
-            return mock(ReliableTopicPublisher.class);
-        }
+        assertEquals(200, response.getStatusCodeValue());
+        assertEquals("success", response.getBody().getStatus());
+        assertEquals(restResponse, response.getBody().getData());
 
-        @Bean
-        public ProtobufDeserializer<DisputeLookupRequestWrapperDto> deserializer() {
-            return mock(ProtobufDeserializer.class);
-        }
-
-        @Bean
-        public HazelcastInstance hazelcastInstance() {
-            return mock(HazelcastInstance.class);
-        }
+        verify(disputeDetailResponseTracker).register(anyString());
+        verify(mockTopic).publish(any(byte[].class));
     }
 }
