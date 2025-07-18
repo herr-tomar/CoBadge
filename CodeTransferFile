@@ -1,6 +1,9 @@
-hazelcast:
-  topic:
-    dispute-detail-lookup-req: DisputeDetailRequestReliableTopic
-    dispute-detail-lookup-res: DisputeDetailResponseReliableTopic
-    disputes-lookup-res: DisputeLookupResponseReliableTopic
-    disputes-lookup-req: DisputeLookupRequestReliableTopic
+@SpringBootTest(
+    classes = {DisputeOrcaService.class, DisputeOrcaServiceTest.TestConfig.class},
+    properties = {
+        "hazelcast.topic.dispute-detail-lookup-req=DisputeDetailRequestReliableTopic",
+        "hazelcast.topic.dispute-detail-lookup-res=DisputeDetailResponseReliableTopic",
+        "hazelcast.topic.disputes-lookup-req=DisputeLookupRequestReliableTopic",
+        "hazelcast.topic.disputes-lookup-res=DisputeLookupResponseReliableTopic"
+    }
+)
