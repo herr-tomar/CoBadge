@@ -1,58 +1,6 @@
-@TestConfiguration
-static class TestConfig {
-
-    @Bean(destroyMethod = "shutdown")
-    public HazelcastInstance hazelcastInstance() {
-        Config config = new Config();
-        config.setClusterName("test-cluster-" + UUID.randomUUID());
-        config.getNetworkConfig().setPortAutoIncrement(true);
-        config.setProperty("hazelcast.logging.type", "slf4j");
-        return Hazelcast.newHazelcastInstance(config);
-    }
-
-    @Bean
-    public DisputeLookupResponseDtoMapper lookupMapper() {
-        return mock(DisputeLookupResponseDtoMapper.class);
-    }
-
-    @Bean
-    public DisputeResponseDtoMapper detailMapper() {
-        return mock(DisputeResponseDtoMapper.class);
-    }
-
-    @Bean
-    @SuppressWarnings("unchecked")
-    public GenericResponseTracker<DisputeLookupResponseDto> lookupResponseTracker() {
-        return mock(GenericResponseTracker.class);
-    }
-
-    @Bean
-    @SuppressWarnings("unchecked")
-    public GenericResponseTracker<DisputeResponseDto> detailResponseTracker() {
-        return mock(GenericResponseTracker.class);
-    }
-
-    @Bean
-    public HazelRelTopicConfigProps topicConfigProps() {
-        return mock(HazelRelTopicConfigProps.class);
-    }
-
-    @Bean
-    public DisputeOrcaService disputeOrcaService(
-            HazelcastInstance hazelcastInstance,
-            DisputeLookupResponseDtoMapper lookupMapper,
-            DisputeResponseDtoMapper detailMapper,
-            GenericResponseTracker<DisputeResponseDto> detailTracker,
-            GenericResponseTracker<DisputeLookupResponseDto> lookupTracker,
-            HazelRelTopicConfigProps props
-    ) {
-        return new DisputeOrcaService(
-                hazelcastInstance,
-                lookupMapper,
-                detailMapper,
-                detailTracker,
-                lookupTracker,
-                props
-        );
-    }
-}
+hazelcast:
+  topic:
+    dispute-detail-lookup-req: DisputeDetailRequestReliableTopic
+    dispute-detail-lookup-res: DisputeDetailResponseReliableTopic
+    disputes-lookup-res: DisputeLookupResponseReliableTopic
+    disputes-lookup-req: DisputeLookupRequestReliableTopic
