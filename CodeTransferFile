@@ -1,164 +1,58 @@
-package osplus.pkptuna.service;
+@TestConfiguration
+static class TestConfig {
 
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.topic.ITopic;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
-import org.mockito.Mockito;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import osplus.pkptuna.api.ApiResponse;
-import osplus.pkptuna.configprops.HazelRelTopicConfigProps;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
-import osplus.pkptuna.dispute.model.DisputeResponseDto;
-import osplus.pkptuna.rest.dispute.lookup.model.mapper.DisputeLookupResponseDtoMapper;
-import osplus.pkptuna.rest.dispute.model.mapper.DisputeResponseDtoMapper;
-import osplus.pkptuna.util.GenericResponseTracker;
-
-import java.util.concurrent.CompletableFuture;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
-
-@SpringBootTest(classes = {DisputeOrcaServiceTest.TestConfig.class})
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class DisputeOrcaServiceTest {
-
-    @Autowired
-    private DisputeOrcaService disputeOrcaService;
-
-    @Autowired
-    private HazelcastInstance hazelcastInstance;
-
-    @Autowired
-    private ITopic<byte[]> mockTopic;
-
-    @Autowired
-    private GenericResponseTracker<DisputeLookupResponseDto> disputeLookupResponseTracker;
-
-    @Autowired
-    private GenericResponseTracker<DisputeResponseDto> disputeDetailResponseTracker;
-
-    @Autowired
-    private DisputeLookupResponseDtoMapper disputeLookupResponseDtoMapper;
-
-    @Autowired
-    private DisputeResponseDtoMapper disputeResponseDtoMapper;
-
-    @Autowired
-    private HazelRelTopicConfigProps hazelRelTopicConfigProps;
-
-    @BeforeEach
-    void setupMocks() {
-        reset(disputeLookupResponseTracker, disputeDetailResponseTracker, disputeLookupResponseDtoMapper,
-                disputeResponseDtoMapper, hazelcastInstance, mockTopic, hazelRelTopicConfigProps);
-
-        when(hazelcastInstance.getReliableTopic(anyString())).thenReturn(mockTopic);
+    @Bean(destroyMethod = "shutdown")
+    public HazelcastInstance hazelcastInstance() {
+        Config config = new Config();
+        config.setClusterName("test-cluster-" + UUID.randomUUID());
+        config.getNetworkConfig().setPortAutoIncrement(true);
+        config.setProperty("hazelcast.logging.type", "slf4j");
+        return Hazelcast.newHazelcastInstance(config);
     }
 
-    @Test
-    void lookupDisputeFolder_shouldReturnSuccessResponse() {
-        DisputeLookupResponseDto protoResponse = mock(DisputeLookupResponseDto.class);
-        var restResponse = mock(osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto.class);
-
-        when(hazelRelTopicConfigProps.disputesLookupReq()).thenReturn("topic-lookup-req");
-        when(disputeLookupResponseTracker.await(anyString()))
-                .thenReturn(CompletableFuture.completedFuture(protoResponse));
-        when(disputeLookupResponseDtoMapper.toRestDto(protoResponse)).thenReturn(restResponse);
-
-        var response = disputeOrcaService.lookupDisputeFolder("issuer", "cardRef");
-
-        assertEquals(200, response.getStatusCodeValue());
-        assertEquals("success", response.getBody().getStatus());
-        assertEquals(restResponse, response.getBody().getData());
-
-        verify(disputeLookupResponseTracker).register(anyString());
-        verify(mockTopic).publish(any(byte[].class));
+    @Bean
+    public DisputeLookupResponseDtoMapper lookupMapper() {
+        return mock(DisputeLookupResponseDtoMapper.class);
     }
 
-    @Test
-    void publishDisputeDetailRequest_shouldReturnSuccessResponse() {
-        DisputeResponseDto protoResponse = mock(DisputeResponseDto.class);
-        var restResponse = mock(osplus.pkptuna.rest.dispute.model.DisputeResponseDto.class);
-
-        when(hazelRelTopicConfigProps.disputeDetailLookupReq()).thenReturn("topic-detail-req");
-        when(disputeDetailResponseTracker.await(anyString()))
-                .thenReturn(CompletableFuture.completedFuture(protoResponse));
-        when(disputeResponseDtoMapper.toRestDto(protoResponse)).thenReturn(restResponse);
-
-        var response = disputeOrcaService.publishDisputeDetailRequest("issuer", "folder123", "events,documents");
-
-        assertEquals(200, response.getStatusCodeValue());
-        assertEquals("success", response.getBody().getStatus());
-        assertEquals(restResponse, response.getBody().getData());
-
-        verify(disputeDetailResponseTracker).register(anyString());
-        verify(mockTopic).publish(any(byte[].class));
+    @Bean
+    public DisputeResponseDtoMapper detailMapper() {
+        return mock(DisputeResponseDtoMapper.class);
     }
 
-    @TestConfiguration
-    static class TestConfig {
+    @Bean
+    @SuppressWarnings("unchecked")
+    public GenericResponseTracker<DisputeLookupResponseDto> lookupResponseTracker() {
+        return mock(GenericResponseTracker.class);
+    }
 
-        @Bean
-        public HazelcastInstance hazelcastInstance() {
-            return mock(HazelcastInstance.class);
-        }
+    @Bean
+    @SuppressWarnings("unchecked")
+    public GenericResponseTracker<DisputeResponseDto> detailResponseTracker() {
+        return mock(GenericResponseTracker.class);
+    }
 
-        @Bean
-        @SuppressWarnings("unchecked")
-        public ITopic<byte[]> topic() {
-            return mock(ITopic.class);
-        }
+    @Bean
+    public HazelRelTopicConfigProps topicConfigProps() {
+        return mock(HazelRelTopicConfigProps.class);
+    }
 
-        @Bean
-        @SuppressWarnings("unchecked")
-        public GenericResponseTracker<DisputeLookupResponseDto> lookupResponseTracker() {
-            return mock(GenericResponseTracker.class);
-        }
-
-        @Bean
-        @SuppressWarnings("unchecked")
-        public GenericResponseTracker<DisputeResponseDto> detailResponseTracker() {
-            return mock(GenericResponseTracker.class);
-        }
-
-        @Bean
-        public DisputeLookupResponseDtoMapper lookupMapper() {
-            return mock(DisputeLookupResponseDtoMapper.class);
-        }
-
-        @Bean
-        public DisputeResponseDtoMapper detailMapper() {
-            return mock(DisputeResponseDtoMapper.class);
-        }
-
-        @Bean
-        public HazelRelTopicConfigProps topicConfigProps() {
-            return mock(HazelRelTopicConfigProps.class);
-        }
-
-        @Bean
-        public DisputeOrcaService disputeOrcaService(
-                HazelcastInstance hazelcastInstance,
-                DisputeLookupResponseDtoMapper lookupMapper,
-                DisputeResponseDtoMapper detailMapper,
-                GenericResponseTracker<DisputeResponseDto> detailTracker,
-                GenericResponseTracker<DisputeLookupResponseDto> lookupTracker,
-                HazelRelTopicConfigProps props
-        ) {
-            return new DisputeOrcaService(
-                    hazelcastInstance,
-                    lookupMapper,
-                    detailMapper,
-                    detailTracker,
-                    lookupTracker,
-                    props
-            );
-        }
+    @Bean
+    public DisputeOrcaService disputeOrcaService(
+            HazelcastInstance hazelcastInstance,
+            DisputeLookupResponseDtoMapper lookupMapper,
+            DisputeResponseDtoMapper detailMapper,
+            GenericResponseTracker<DisputeResponseDto> detailTracker,
+            GenericResponseTracker<DisputeLookupResponseDto> lookupTracker,
+            HazelRelTopicConfigProps props
+    ) {
+        return new DisputeOrcaService(
+                hazelcastInstance,
+                lookupMapper,
+                detailMapper,
+                detailTracker,
+                lookupTracker,
+                props
+        );
     }
 }
