@@ -1,15 +1,162 @@
-nJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
-[ERROR] Tests run: 2, Failures: 0, Errors: 2, Skipped: 0, Time elapsed: 17.64 s <<< FAILURE! -- in osplus.pkptuna.service.DisputeOrcaServiceTest
-[ERROR] osplus.pkptuna.service.DisputeOrcaServiceTest.publishDisputeDetailRequest_shouldReturnSuccessResponse -- Time elapsed: 0.235 s <<< ERROR!
-org.mockito.exceptions.misusing.InvalidUseOfMatchersException: 
-Invalid use of argument matchers!
-1 matchers expected, 2 recorded:
--> at osplus.pkptuna.service.DisputeOrcaServiceTest.publishDisputeDetailRequest_shouldReturnSuccessResponse(DisputeOrcaServiceTest.java:100)
--> at osplus.pkptuna.service.DisputeOrcaServiceTest.publishDisputeDetailRequest_shouldReturnSuccessResponse(DisputeOrcaServiceTest.java:101)
-This exception may occur if matchers are combined with raw values:
-    //incorrect:
-    someMethod(any(), "raw String");
-When using matchers, all arguments have to be provided by matchers.
-For example:
-    //correct:
-    someMethod(any(), eq("String by matcher"));
+
+package osplus.pkptuna.service;
+
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.topic.ITopic;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import osplus.apl.core.test.utils.AplTestRunner;
+import osplus.apl.core.test.utils.BaseAplTest;
+import osplus.pkptuna.configprops.HazelRelTopicConfigProps;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
+import osplus.pkptuna.dispute.model.DisputeResponseDto;
+import osplus.pkptuna.rest.dispute.lookup.model.mapper.DisputeLookupResponseDtoMapper;
+import osplus.pkptuna.rest.dispute.model.mapper.DisputeResponseDtoMapper;
+import osplus.pkptuna.util.GenericResponseTracker;
+
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+@SpringBootTest(classes = {
+        AplTestRunner.class,
+        DisputeOrcaServiceTest.TestConfig.class
+},
+        properties= {
+                "hazelcast.topic.dispute-detail-lookup-req=DisputeDetailRequestReliableTopic",
+                "hazelcast.topic.dispute-detail-lookup-res=DisputeDetailResponseReliableTopic",
+                "hazelcast.topic.disputes-lookup-req=DisputeLookupRequestReliableTopic",
+                "hazelcast.topic.disputes-lookup-res=DisputeLookupResponseReliableTopic",
+                "apl.application.name=uui",
+                "apl.application.version=0.0.1-TEST" })
+
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@TestConfiguration
+@EnableConfigurationProperties(HazelRelTopicConfigProps.class)
+class DisputeOrcaServiceTest extends BaseAplTest {
+
+    @Autowired
+    private DisputeOrcaService disputeOrcaService;
+
+    @Autowired
+    private HazelcastInstance hazelcastInstance;
+
+    @Autowired
+    private GenericResponseTracker<DisputeLookupResponseDto> disputeLookupResponseTracker;
+
+    @Autowired
+    private GenericResponseTracker<DisputeResponseDto> disputeDetailResponseTracker;
+
+    @Autowired
+    private DisputeLookupResponseDtoMapper disputeLookupResponseDtoMapper;
+
+    @Autowired
+    private DisputeResponseDtoMapper disputeResponseDtoMapper;
+
+    @Autowired
+    private HazelRelTopicConfigProps hazelRelTopicConfigProps;
+
+    private ITopic<byte[]> lookupTopic;
+    private ITopic<byte[]> detailTopic;
+
+    @BeforeEach
+    void setupTopics() {
+        lookupTopic = hazelcastInstance.getReliableTopic(hazelRelTopicConfigProps.disputesLookupReq());
+        detailTopic = hazelcastInstance.getReliableTopic(hazelRelTopicConfigProps.disputeDetailLookupReq());
+    }
+
+    @Test
+    void lookupDisputeFolder_shouldReturnSuccessResponse() {
+        var protoResponse = mock(DisputeLookupResponseDto.class);
+        var restResponse = mock(osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto.class);
+
+        disputeLookupResponseTracker.register(anyString());
+        disputeLookupResponseTracker.complete(anyString(), protoResponse);
+        when(disputeLookupResponseDtoMapper.toRestDto(protoResponse)).thenReturn(restResponse);
+
+        var response = disputeOrcaService.lookupDisputeFolder("issuer", "cardRef");
+
+        assertEquals(200, response.getStatusCodeValue());
+        assertEquals("success", response.getBody().getStatus());
+        assertEquals(restResponse, response.getBody().getData());
+    }
+
+    @Test
+    void publishDisputeDetailRequest_shouldReturnSuccessResponse() {
+        var protoResponse = mock(DisputeResponseDto.class);
+        var restResponse = mock(osplus.pkptuna.rest.dispute.model.DisputeResponseDto.class);
+
+        disputeDetailResponseTracker.register(anyString());
+        disputeDetailResponseTracker.complete(anyString(), protoResponse);
+        when(disputeResponseDtoMapper.toRestDto(protoResponse)).thenReturn(restResponse);
+
+        var response = disputeOrcaService.publishDisputeDetailRequest("issuer", "folder123", "events,documents");
+
+        assertEquals(200, response.getStatusCodeValue());
+        assertEquals("success", response.getBody().getStatus());
+        assertEquals(restResponse, response.getBody().getData());
+    }
+
+    @TestConfiguration
+    static class TestConfig {
+
+        @Bean(destroyMethod = "shutdown")
+        public HazelcastInstance hazelcastInstance() {
+            Config config = new Config();
+            config.setClusterName("test-cluster-" + UUID.randomUUID());
+            config.getNetworkConfig().setPortAutoIncrement(true);
+            config.setProperty("hazelcast.logging.type", "slf4j");
+            return Hazelcast.newHazelcastInstance(config);
+        }
+
+        @Bean
+        public DisputeLookupResponseDtoMapper lookupMapper() {
+            return mock(DisputeLookupResponseDtoMapper.class);
+        }
+
+        @Bean
+        public DisputeResponseDtoMapper detailMapper() {
+            return mock(DisputeResponseDtoMapper.class);
+        }
+
+        @Bean
+        public GenericResponseTracker<DisputeLookupResponseDto> lookupResponseTracker() {
+            return new GenericResponseTracker<>();
+        }
+
+        @Bean
+        public GenericResponseTracker<DisputeResponseDto> detailResponseTracker() {
+            return new GenericResponseTracker<>();
+        }
+
+        @Bean
+        public DisputeOrcaService disputeOrcaService(
+                HazelcastInstance hazelcastInstance,
+                DisputeLookupResponseDtoMapper lookupMapper,
+                DisputeResponseDtoMapper detailMapper,
+                GenericResponseTracker<DisputeResponseDto> detailTracker,
+                GenericResponseTracker<DisputeLookupResponseDto> lookupTracker,
+                HazelRelTopicConfigProps props
+        ) {
+            return new DisputeOrcaService(
+                    hazelcastInstance,
+                    lookupMapper,
+                    detailMapper,
+                    detailTracker,
+                    lookupTracker,
+                    props
+            );
+        }
+    }
+}
