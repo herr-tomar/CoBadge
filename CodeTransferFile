@@ -1,33 +1,15 @@
-NFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.227 s -- in osplus.pkptuna.util.HazelcastListenerUtilsTest
-OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
-[ERROR] Tests run: 2, Failures: 0, Errors: 2, Skipped: 0, Time elapsed: 18.32 s <<< FAILURE! -- in osplus.pkptuna.service.DisputeOrcaServiceTest
-[ERROR] osplus.pkptuna.service.DisputeOrcaServiceTest.publishDisputeDetailRequest_shouldReturnSuccessResponse -- Time elapsed: 0.225 s <<< ERROR!
-org.mockito.exceptions.misusing.MissingMethodInvocationException: 
-when() requires an argument which has to be 'a method call on a mock'.
+nJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+[ERROR] Tests run: 2, Failures: 0, Errors: 2, Skipped: 0, Time elapsed: 17.64 s <<< FAILURE! -- in osplus.pkptuna.service.DisputeOrcaServiceTest
+[ERROR] osplus.pkptuna.service.DisputeOrcaServiceTest.publishDisputeDetailRequest_shouldReturnSuccessResponse -- Time elapsed: 0.235 s <<< ERROR!
+org.mockito.exceptions.misusing.InvalidUseOfMatchersException: 
+Invalid use of argument matchers!
+1 matchers expected, 2 recorded:
+-> at osplus.pkptuna.service.DisputeOrcaServiceTest.publishDisputeDetailRequest_shouldReturnSuccessResponse(DisputeOrcaServiceTest.java:100)
+-> at osplus.pkptuna.service.DisputeOrcaServiceTest.publishDisputeDetailRequest_shouldReturnSuccessResponse(DisputeOrcaServiceTest.java:101)
+This exception may occur if matchers are combined with raw values:
+    //incorrect:
+    someMethod(any(), "raw String");
+When using matchers, all arguments have to be provided by matchers.
 For example:
-    when(mock.getArticles()).thenReturn(articles);
-Also, this error might show up because:
-1. you stub either of: final/private/native/equals()/hashCode() methods.
-   Those methods *cannot* be stubbed/verified.
-   Mocking methods declared on non-public parent classes is not supported.
-2. inside when() you don't call method on mock but on some other object.
-	at osplus.pkptuna.service.DisputeOrcaServiceTest.publishDisputeDetailRequest_shouldReturnSuccessResponse(DisputeOrcaServiceTest.java:101)
-	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-[ERROR] osplus.pkptuna.service.DisputeOrcaServiceTest.lookupDisputeFolder_shouldReturnSuccessResponse -- Time elapsed: 0.112 s <<< ERROR!
-org.mockito.exceptions.misusing.MissingMethodInvocationException: 
-when() requires an argument which has to be 'a method call on a mock'.
-For example:
-    when(mock.getArticles()).thenReturn(articles);
-Also, this error might show up because:
-1. you stub either of: final/private/native/equals()/hashCode() methods.
-   Those methods *cannot* be stubbed/verified.
-   Mocking methods declared on non-public parent classes is not supported.
-2. inside when() you don't call method on mock but on some other object.
-	at osplus.pkptuna.service.DisputeOrcaServiceTest.lookupDisputeFolder_shouldReturnSuccessResponse(DisputeOrcaServiceTest.java:84)
-	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-[INFO] 
-[INFO] Results:
+    //correct:
+    someMethod(any(), eq("String by matcher"));
