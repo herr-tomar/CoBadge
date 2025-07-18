@@ -1,13 +1,97 @@
-[ERROR] osplus.pkptuna.flows.handlers.DisputeDetailFlowHandlerTest -- Time elapsed: 0.720 s <<< ERROR!
-java.lang.IllegalStateException: Unable to find a @SpringBootConfiguration by searching packages upwards from the test. You can use @ContextConfiguration, @SpringBootTest(classes=...) or other Spring Test supported mechanisms to explicitly declare the configuration classes to load. Classes annotated with @TestConfiguration are not considered.
-	at org.springframework.util.Assert.state(Assert.java:79)
-	at org.springframework.boot.test.context.SpringBootTestContextBootstrapper.findConfigurationClass(SpringBootTestContextBootstrapper.java:246)
-	at org.springframework.boot.test.context.SpringBootTestContextBootstrapper.getOrFindConfigurationClasses(SpringBootTestContextBootstrapper.java:233)
-	at org.springframework.boot.test.context.SpringBootTestContextBootstrapper.processMergedContextConfiguration(SpringBootTestContextBootstrapper.java:150)
-	at org.springframework.test.context.support.AbstractTestContextBootstrapper.buildMergedContextConfiguration(AbstractTestContextBootstrapper.java:351)
-	at org.springframework.test.context.support.AbstractTestContextBootstrapper.buildDefaultMergedContextConfiguration(AbstractTestContextBootstrapper.java:267)
-	at org.springframework.test.context.support.AbstractTestContextBootstrapper.buildMergedContextConfiguration(AbstractTestContextBootstrapper.java:215)
-	at org.springframework.test.context.support.AbstractTestContextBootstrapper.buildTestContext(AbstractTestContextBootstrapper.java:108)
-	at org.springframework.boot.test.context.SpringBootTestContextBootstrapper.buildTestContext(SpringBootTestContextBootstrapper.java:111)
-	at org.springframework.test.context.TestContextManager.<init>(TestContextManager.java:142)
-	at org.springframework.test.context.TestContextManager.<init>(TestContextManager.java:126)
+package osplus.pkptuna.flows.handlers;
+
+import com.hazelcast.core.HazelcastInstance;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseWrapperDto;
+import osplus.pkptuna.dispute.service.DisputeService;
+import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
+import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.when;
+
+/**
+ * Testklasse für {@link DisputeLookupFlowHandler}.
+ * Validiert das Extrahieren der Korrelation-ID, den Lookup-Aufruf sowie das Verpacken der Antwort.
+ */
+@ExtendWith(MockitoExtension.class)
+class DisputeLookupFlowHandlerTest {
+
+    @Mock
+    private DisputeService disputeService;
+
+    @Mock
+    private ReliableTopicPublisher reliableTopicPublisher;
+
+    @Mock
+    private ProtobufDeserializer<DisputeLookupRequestWrapperDto> deserializer;
+
+    @Mock
+    private HazelcastInstance hazelcastInstance;
+
+    private DisputeLookupFlowHandler handler;
+
+    @BeforeEach
+    void setUp() {
+        handler = new DisputeLookupFlowHandler(
+                disputeService,
+                reliableTopicPublisher,
+                deserializer);
+    }
+
+    /**
+     * Testet die Extraktion der Korrelation-ID aus dem Wrapper.
+     */
+    @Test
+    void shouldExtractCorrelationId() {
+        DisputeLookupRequestWrapperDto request = DisputeLookupRequestWrapperDto.newBuilder()
+                .setCorrelationId("lookup-001")
+                .build();
+
+        String result = handler.extractCorrelationId(request);
+
+        assertEquals("lookup-001", result);
+    }
+
+    /**
+     * Testet, ob der Lookup-Service korrekt aufgerufen wird.
+     */
+    @Test
+    void shouldCallLookupService() {
+        DisputeLookupRequestDto dto = DisputeLookupRequestDto.newBuilder()
+                .setIssuerId("issuer")
+                .setCardReference("cardRef")
+                .build();
+
+        DisputeLookupRequestWrapperDto request = DisputeLookupRequestWrapperDto.newBuilder()
+                .setPayload(dto)
+                .build();
+
+        DisputeLookupResponseDto expected = DisputeLookupResponseDto.newBuilder().build();
+        when(disputeService.lookupDisputeFolder("issuer", "cardRef")).thenReturn(expected);
+
+        DisputeLookupResponseDto actual = handler.handleRequest(request);
+
+        assertEquals(expected, actual);
+    }
+
+    /**
+     * Testet das korrekte Verpacken des Lookup-Antwortobjekts.
+     */
+    @Test
+    void shouldWrapResponseCorrectly() {
+        DisputeLookupResponseDto response = DisputeLookupResponseDto.newBuilder().build();
+        Object wrapped = handler.wrapResponse("corr-id", response);
+
+        assertTrue(wrapped instanceof DisputeLookupResponseWrapperDto);
+        assertEquals("corr-id", ((DisputeLookupResponseWrapperDto) wrapped).getCorrelationId());
+    }
+}
