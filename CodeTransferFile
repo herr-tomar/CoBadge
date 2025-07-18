@@ -1,33 +1,180 @@
-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
-[ERROR] Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 16.92 s <<< FAILURE! -- in osplus.pkptuna.service.DisputeOrcaServiceTest
-[ERROR] osplus.pkptuna.service.DisputeOrcaServiceTest -- Time elapsed: 16.92 s <<< ERROR!
-org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'osplus.pkptuna.service.DisputeOrcaServiceTest': Unsatisfied dependency expressed through field 'mockTopic': No qualifying bean of type 'com.hazelcast.topic.ITopic<?>' available: expected at least 1 bean which qualifies as autowire candidate. Dependency annotations: {@org.springframework.beans.factory.annotation.Autowired(required=true)}
-	at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor$AutowiredFieldElement.resolveFieldValue(AutowiredAnnotationBeanPostProcessor.java:788)
-	at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor$AutowiredFieldElement.inject(AutowiredAnnotationBeanPostProcessor.java:768)
-	at org.springframework.beans.factory.annotation.InjectionMetadata.inject(InjectionMetadata.java:146)
-	at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor.postProcessProperties(AutowiredAnnotationBeanPostProcessor.java:509)
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.populateBean(AbstractAutowireCapableBeanFactory.java:1459)
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireBeanProperties(AbstractAutowireCapableBeanFactory.java:405)
-	at org.springframework.test.context.support.DependencyInjectionTestExecutionListener.injectDependencies(DependencyInjectionTestExecutionListener.java:156)
-	at org.springframework.test.context.support.DependencyInjectionTestExecutionListener.prepareTestInstance(DependencyInjectionTestExecutionListener.java:111)
-	at org.springframework.test.context.TestContextManager.prepareTestInstance(TestContextManager.java:260)
-	at org.springframework.test.context.junit.jupiter.SpringExtension.postProcessTestInstance(SpringExtension.java:159)
-	at java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.accept(ForEachOps.java:184)
-	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:197)
-	at java.base/java.util.stream.ReferencePipeline$2$1.accept(ReferencePipeline.java:179)
-	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:197)
-	at java.base/java.util.ArrayList$ArrayListSpliterator.forEachRemaining(ArrayList.java:1708)
-	at java.base/java.util.stream.AbstractPipeline.copyInto(AbstractPipeline.java:509)
-	at java.base/java.util.stream.AbstractPipeline.wrapAndCopyInto(AbstractPipeline.java:499)
-	at java.base/java.util.stream.ForEachOps$ForEachOp.evaluateSequential(ForEachOps.java:151)
-	at java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.evaluateSequential(ForEachOps.java:174)
-	at java.base/java.util.stream.AbstractPipeline.evaluate(AbstractPipeline.java:234)
-	at java.base/java.util.stream.ReferencePipeline.forEach(ReferencePipeline.java:596)
-	at java.base/java.util.Optional.orElseGet(Optional.java:364)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-Caused by: org.springframework.beans.factory.NoSuchBeanDefinitionException: No qualifying bean of type 'com.hazelcast.topic.ITopic<?>' available: expected at least 1 bean which qualifies as autowire candidate. Dependency annotations: {@org.springframework.beans.factory.annotation.Autowired(required=true)}
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.raiseNoMatchingBeanFound(DefaultListableBeanFactory.java:2284)
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1708)
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1628)
-	at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor$AutowiredFieldElement.resolveFieldValue(AutowiredAnnotationBeanPostProcessor.java:785)
-	... 22 more
+
+package osplus.pkptuna.service;
+
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.topic.ITopic;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import osplus.apl.core.test.utils.AplTestRunner;
+import osplus.apl.core.test.utils.BaseAplTest;
+import osplus.pkptuna.configprops.HazelRelTopicConfigProps;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
+import osplus.pkptuna.dispute.model.DisputeResponseDto;
+import osplus.pkptuna.rest.dispute.lookup.model.mapper.DisputeLookupResponseDtoMapper;
+import osplus.pkptuna.rest.dispute.model.mapper.DisputeResponseDtoMapper;
+import osplus.pkptuna.util.GenericResponseTracker;
+
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@SpringBootTest(classes = {
+        AplTestRunner.class,
+        DisputeOrcaServiceTest.TestConfig.class
+},
+        properties= {
+                "hazelcast.topic.dispute-detail-lookup-req=DisputeDetailRequestReliableTopic",
+                "hazelcast.topic.dispute-detail-lookup-res=DisputeDetailResponseReliableTopic",
+                "hazelcast.topic.disputes-lookup-req=DisputeLookupRequestReliableTopic",
+                "hazelcast.topic.disputes-lookup-res=DisputeLookupResponseReliableTopic",
+                "apl.application.name=uui",
+                "apl.application.version=0.0.1-TEST" })
+
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@TestConfiguration
+@EnableConfigurationProperties(HazelRelTopicConfigProps.class)
+class DisputeOrcaServiceTest extends BaseAplTest {
+
+    @Autowired
+    private DisputeOrcaService disputeOrcaService;
+
+    @Autowired
+    private HazelcastInstance hazelcastInstance;
+
+    @Autowired
+    private GenericResponseTracker<DisputeLookupResponseDto> disputeLookupResponseTracker;
+
+    @Autowired
+    private GenericResponseTracker<DisputeResponseDto> disputeDetailResponseTracker;
+
+    @Autowired
+    private DisputeLookupResponseDtoMapper disputeLookupResponseDtoMapper;
+
+    @Autowired
+    private DisputeResponseDtoMapper disputeResponseDtoMapper;
+
+    @Autowired
+    private HazelRelTopicConfigProps hazelRelTopicConfigProps;
+
+    @BeforeEach
+    void setupMocks() {
+        reset(disputeLookupResponseTracker, disputeDetailResponseTracker, disputeLookupResponseDtoMapper,
+                disputeResponseDtoMapper, hazelcastInstance, mockTopic, hazelRelTopicConfigProps);
+
+        when(hazelcastInstance.getReliableTopic(anyString())).thenReturn(mockTopic);
+    }
+
+    @Test
+    void lookupDisputeFolder_shouldReturnSuccessResponse() {
+        DisputeLookupResponseDto protoResponse = mock(DisputeLookupResponseDto.class);
+        var restResponse = mock(osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto.class);
+
+        when(hazelRelTopicConfigProps.disputesLookupReq()).thenReturn("topic-lookup-req");
+        when(disputeLookupResponseTracker.await(anyString()))
+                .thenReturn(CompletableFuture.completedFuture(protoResponse));
+        when(disputeLookupResponseDtoMapper.toRestDto(protoResponse)).thenReturn(restResponse);
+
+        var response = disputeOrcaService.lookupDisputeFolder("issuer", "cardRef");
+
+        assertEquals(200, response.getStatusCodeValue());
+        assertEquals("success", response.getBody().getStatus());
+        assertEquals(restResponse, response.getBody().getData());
+
+        verify(disputeLookupResponseTracker).register(anyString());
+        verify(mockTopic).publish(any(byte[].class));
+    }
+
+    @Test
+    void publishDisputeDetailRequest_shouldReturnSuccessResponse() {
+        DisputeResponseDto protoResponse = mock(DisputeResponseDto.class);
+        var restResponse = mock(osplus.pkptuna.rest.dispute.model.DisputeResponseDto.class);
+
+        when(hazelRelTopicConfigProps.disputeDetailLookupReq()).thenReturn("topic-detail-req");
+        when(disputeDetailResponseTracker.await(anyString()))
+                .thenReturn(CompletableFuture.completedFuture(protoResponse));
+        when(disputeResponseDtoMapper.toRestDto(protoResponse)).thenReturn(restResponse);
+
+        var response = disputeOrcaService.publishDisputeDetailRequest("issuer", "folder123", "events,documents");
+
+        assertEquals(200, response.getStatusCodeValue());
+        assertEquals("success", response.getBody().getStatus());
+        assertEquals(restResponse, response.getBody().getData());
+
+        verify(disputeDetailResponseTracker).register(anyString());
+        verify(mockTopic).publish(any(byte[].class));
+    }
+
+    @TestConfiguration
+    static class TestConfig {
+
+        @Bean(destroyMethod = "shutdown")
+        public HazelcastInstance hazelcastInstance() {
+            Config config = new Config();
+            config.setClusterName("test-cluster-" + UUID.randomUUID());
+            config.getNetworkConfig().setPortAutoIncrement(true);
+            config.setProperty("hazelcast.logging.type", "slf4j");
+            return Hazelcast.newHazelcastInstance(config);
+        }
+
+        @Bean
+        public DisputeLookupResponseDtoMapper lookupMapper() {
+            return mock(DisputeLookupResponseDtoMapper.class);
+        }
+
+        @Bean
+        public DisputeResponseDtoMapper detailMapper() {
+            return mock(DisputeResponseDtoMapper.class);
+        }
+
+        @Bean
+        public ITopic<byte[]> mockTopic(HazelcastInstance hazelcastInstance) {
+            return hazelcastInstance.getReliableTopic("some-test-topic");
+        }
+
+        @Bean
+        @SuppressWarnings("unchecked")
+        public GenericResponseTracker<DisputeLookupResponseDto> lookupResponseTracker() {
+            return new GenericResponseTracker<>();
+        }
+
+        @Bean
+        @SuppressWarnings("unchecked")
+        public GenericResponseTracker<DisputeResponseDto> detailResponseTracker() {
+            return new GenericResponseTracker<>();
+        }
+
+        @Bean
+        public DisputeOrcaService disputeOrcaService(
+                HazelcastInstance hazelcastInstance,
+                DisputeLookupResponseDtoMapper lookupMapper,
+                DisputeResponseDtoMapper detailMapper,
+                GenericResponseTracker<DisputeResponseDto> detailTracker,
+                GenericResponseTracker<DisputeLookupResponseDto> lookupTracker,
+                HazelRelTopicConfigProps props
+        ) {
+            return new DisputeOrcaService(
+                    hazelcastInstance,
+                    lookupMapper,
+                    detailMapper,
+                    detailTracker,
+                    lookupTracker,
+                    props
+            );
+        }
+    }
+}
