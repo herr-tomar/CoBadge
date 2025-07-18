@@ -3,49 +3,31 @@ package osplus.pkptuna.flows.handlers;
 import com.hazelcast.core.HazelcastInstance;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseWrapperDto;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Bean;
+import osplus.pkptuna.dispute.lookup.model.*;
 import osplus.pkptuna.dispute.service.DisputeService;
 import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
 import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
-/**
- * Testklasse für {@link DisputeLookupFlowHandler}.
- * Validiert das Extrahieren der Korrelation-ID, den Lookup-Aufruf sowie das Verpacken der Antwort.
- */
-@ExtendWith(MockitoExtension.class)
+@SpringBootTest(classes = {
+        DisputeLookupFlowHandlerTest.TestConfig.class
+})
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class DisputeLookupFlowHandlerTest {
 
-    @Mock
-    private DisputeService disputeService;
-
-    @Mock
-    private ReliableTopicPublisher reliableTopicPublisher;
-
-    @Mock
-    private ProtobufDeserializer<DisputeLookupRequestWrapperDto> deserializer;
-
-    @Mock
-    private HazelcastInstance hazelcastInstance;
-
+    @Autowired
     private DisputeLookupFlowHandler handler;
 
-    @BeforeEach
-    void setUp() {
-        handler = new DisputeLookupFlowHandler(
-                disputeService,
-                reliableTopicPublisher,
-                deserializer);
-    }
+    @Autowired
+    private DisputeService disputeService;
 
     /**
      * Testet die Extraktion der Korrelation-ID aus dem Wrapper.
@@ -93,5 +75,37 @@ class DisputeLookupFlowHandlerTest {
 
         assertTrue(wrapped instanceof DisputeLookupResponseWrapperDto);
         assertEquals("corr-id", ((DisputeLookupResponseWrapperDto) wrapped).getCorrelationId());
+    }
+
+    @TestConfiguration
+    static class TestConfig {
+        @Bean
+        public DisputeLookupFlowHandler disputeLookupFlowHandler(
+                DisputeService disputeService,
+                ReliableTopicPublisher reliableTopicPublisher,
+                ProtobufDeserializer<DisputeLookupRequestWrapperDto> deserializer
+        ) {
+            return new DisputeLookupFlowHandler(disputeService, reliableTopicPublisher, deserializer);
+        }
+
+        @Bean
+        public DisputeService disputeService() {
+            return mock(DisputeService.class);
+        }
+
+        @Bean
+        public ReliableTopicPublisher reliableTopicPublisher() {
+            return mock(ReliableTopicPublisher.class);
+        }
+
+        @Bean
+        public ProtobufDeserializer<DisputeLookupRequestWrapperDto> deserializer() {
+            return mock(ProtobufDeserializer.class);
+        }
+
+        @Bean
+        public HazelcastInstance hazelcastInstance() {
+            return mock(HazelcastInstance.class);
+        }
     }
 }
