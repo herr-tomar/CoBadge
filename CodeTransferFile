@@ -3,11 +3,13 @@ package osplus.pkptuna.flows.handlers;
 import com.hazelcast.core.HazelcastInstance;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import osplus.pkptuna.dispute.model.*;
-
 import osplus.pkptuna.dispute.service.DisputeDetailService;
 import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
 import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
@@ -16,43 +18,32 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 /**
- * Testklasse für {@link DisputeDetailFlowHandler}.
- * Überprüft das Extrahieren der Korrelation-ID, den Aufruf des Service und das Verpacken der Antwort.
+ * Integrationstest für {@link DisputeDetailFlowHandler}.
  */
-@ExtendWith(MockitoExtension.class)
+@SpringBootTest(classes = {
+        DisputeDetailFlowHandlerTest.TestConfig.class
+})
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class DisputeDetailFlowHandlerTest {
 
-    @Mock
-    private DisputeDetailService disputeDetailService;
-
-    @Mock
-    private ReliableTopicPublisher reliableTopicPublisher;
-
-    @Mock
-    private ProtobufDeserializer<DisputeDetailRequestWrapperDto> deserializer;
-
-    @Mock
-    private HazelcastInstance hazelcastInstance;
-
+    @Autowired
     private DisputeDetailFlowHandler handler;
 
-    @BeforeEach
-    void setUp() {
-        handler = new DisputeDetailFlowHandler(
-                disputeDetailService,
-                reliableTopicPublisher,
-                deserializer);
-    }
+    @Autowired
+    private DisputeDetailService disputeDetailService;
+
+    @Autowired
+    private ProtobufDeserializer<DisputeDetailRequestWrapperDto> deserializer;
 
     /**
      * Testet die Extraktion der Korrelation-ID aus dem Request.
      */
     @Test
     void shouldExtractCorrelationId() {
-        DisputeDetailRequestWrapperDto request = DisputeDetailRequestWrapperDto.newBuilder()
+        var request = DisputeDetailRequestWrapperDto.newBuilder()
                 .setCorrelationId("12345")
                 .build();
 
@@ -66,21 +57,21 @@ class DisputeDetailFlowHandlerTest {
      */
     @Test
     void shouldHandleRequestAndCallService() {
-        DisputeDetailRequestDto payload = DisputeDetailRequestDto.newBuilder()
+        var payload = DisputeDetailRequestDto.newBuilder()
                 .setIssuerId("issuer")
                 .setDisputeFolderReference("ref")
                 .setMetadata(DisputeDetailRequestMetadataDto.newBuilder().addEmbed("x"))
                 .build();
 
-        DisputeDetailRequestWrapperDto request = DisputeDetailRequestWrapperDto.newBuilder()
+        var request = DisputeDetailRequestWrapperDto.newBuilder()
                 .setPayload(payload)
                 .build();
 
-        DisputeResponseDto expectedResponse = DisputeResponseDto.newBuilder().build();
+        var expectedResponse = DisputeResponseDto.newBuilder().build();
         when(disputeDetailService.getDisputeFolderDetails("issuer", "ref", List.of("x")))
                 .thenReturn(expectedResponse);
 
-        DisputeResponseDto response = handler.handleRequest(request);
+        var response = handler.handleRequest(request);
 
         assertEquals(expectedResponse, response);
     }
@@ -90,10 +81,50 @@ class DisputeDetailFlowHandlerTest {
      */
     @Test
     void shouldWrapResponseCorrectly() {
-        DisputeResponseDto response = DisputeResponseDto.newBuilder().build();
-        Object wrapped = handler.wrapResponse("abc", response);
+        var response = DisputeResponseDto.newBuilder().build();
+        var wrapped = handler.wrapResponse("abc", response);
 
         assertTrue(wrapped instanceof DisputeDetailResponseWrapperDto);
         assertEquals("abc", ((DisputeDetailResponseWrapperDto) wrapped).getCorrelationId());
+    }
+
+    /**
+     * Testkonfiguration zur Bereitstellung von Mock-Beans.
+     */
+    @TestConfiguration
+    static class TestConfig {
+
+        @Bean
+        @Primary
+        public DisputeDetailService disputeDetailService() {
+            return mock(DisputeDetailService.class);
+        }
+
+        @Bean
+        @Primary
+        public ReliableTopicPublisher reliableTopicPublisher() {
+            return mock(ReliableTopicPublisher.class);
+        }
+
+        @Bean
+        @Primary
+        public ProtobufDeserializer<DisputeDetailRequestWrapperDto> protobufDeserializer() {
+            return mock(ProtobufDeserializer.class);
+        }
+
+        @Bean
+        @Primary
+        public HazelcastInstance hazelcastInstance() {
+            return mock(HazelcastInstance.class);
+        }
+
+        @Bean
+        public DisputeDetailFlowHandler disputeDetailFlowHandler(
+                DisputeDetailService service,
+                ReliableTopicPublisher publisher,
+                ProtobufDeserializer<DisputeDetailRequestWrapperDto> deserializer
+        ) {
+            return new DisputeDetailFlowHandler(service, publisher, deserializer);
+        }
     }
 }
