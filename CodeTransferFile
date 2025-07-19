@@ -1,59 +1,368 @@
-[ERROR] Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 14.98 s <<< FAILURE! -- in osplus.pkptuna.service.DisputeOrcaServiceTest
-[ERROR] osplus.pkptuna.service.DisputeOrcaServiceTest -- Time elapsed: 14.98 s <<< ERROR!
-java.lang.IllegalStateException: Failed to load ApplicationContext for [WebMergedContextConfiguration@789cdc12 testClass = osplus.pkptuna.service.DisputeOrcaServiceTest, locations = [], classes = [osplus.apl.core.test.utils.AplTestRunner, osplus.pkptuna.service.DisputeOrcaServiceTest.TestConfig], contextInitializerClasses = [], activeProfiles = [], propertySourceDescriptors = [PropertySourceDescriptor[locations=[classpath:/apl-local.properties, classpath:/apl-core.properties, classpath:/apl-administration.properties, classpath:/apl-httpclient.properties, classpath:/apl-auth-application.properties, classpath:/mkp-build.properties, classpath:/apl-grid.properties], ignoreResourceNotFound=false, name=null, propertySourceFactory=null, encoding=null]], propertySourceProperties = ["hazelcast.topic.dispute-detail-lookup-req=DisputeDetailRequestReliableTopic", "hazelcast.topic.dispute-detail-lookup-res=DisputeDetailResponseReliableTopic", "hazelcast.topic.disputes-lookup-req=DisputeLookupRequestReliableTopic", "hazelcast.topic.disputes-lookup-res=DisputeLookupResponseReliableTopic", "apl.application.name=uui", "apl.application.version=0.0.1-TEST", "org.springframework.boot.test.context.SpringBootTestContextBootstrapper=true"], contextCustomizers = [[ImportsContextCustomizer@4d5bfb1a key = [osplus.apl.core.test.utils.AplTestConfiguration]], org.springframework.boot.test.context.filter.ExcludeFilterContextCustomizer@3e6104fc, org.springframework.boot.test.json.DuplicateJsonObjectContextCustomizerFactory$DuplicateJsonObjectContextCustomizer@4f3bbf68, org.springframework.boot.test.mock.mockito.MockitoContextCustomizer@0, org.springframework.boot.test.web.client.TestRestTemplateContextCustomizer@6cc558c6, org.springframework.boot.test.web.reactive.server.WebTestClientContextCustomizer@5c2375a9, org.springframework.boot.test.web.reactor.netty.DisableReactorResourceFactoryGlobalResourcesContextCustomizerFactory$DisableReactorResourceFactoryGlobalResourcesContextCustomizerCustomizer@74589991, org.springframework.boot.test.autoconfigure.OnFailureConditionReportContextCustomizerFactory$OnFailureConditionReportContextCustomizer@1fc32e4f, org.springframework.boot.test.autoconfigure.actuate.observability.ObservabilityContextCustomizerFactory$DisableObservabilityContextCustomizer@1f, org.springframework.boot.test.autoconfigure.properties.PropertyMappingContextCustomizer@0, org.springframework.boot.test.autoconfigure.web.servlet.WebDriverContextCustomizer@a3d9978, org.springframework.test.context.support.DynamicPropertiesContextCustomizer@0, org.springframework.boot.test.context.SpringBootTestAnnotation@b50d0f6e], resourceBasePath = "src/main/webapp", contextLoader = org.springframework.boot.test.context.SpringBootContextLoader, parent = null]
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:180)
-	at org.springframework.test.context.support.DefaultTestContext.getApplicationContext(DefaultTestContext.java:130)
-	at org.springframework.test.context.web.ServletTestExecutionListener.setUpRequestContextIfNecessary(ServletTestExecutionListener.java:200)
-	at org.springframework.test.context.web.ServletTestExecutionListener.prepareTestInstance(ServletTestExecutionListener.java:139)
-	at org.springframework.test.context.TestContextManager.prepareTestInstance(TestContextManager.java:260)
-	at org.springframework.test.context.junit.jupiter.SpringExtension.postProcessTestInstance(SpringExtension.java:159)
-	at java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.accept(ForEachOps.java:184)
-	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:197)
-	at java.base/java.util.stream.ReferencePipeline$2$1.accept(ReferencePipeline.java:179)
-	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:197)
-	at java.base/java.util.ArrayList$ArrayListSpliterator.forEachRemaining(ArrayList.java:1708)
-	at java.base/java.util.stream.AbstractPipeline.copyInto(AbstractPipeline.java:509)
-	at java.base/java.util.stream.AbstractPipeline.wrapAndCopyInto(AbstractPipeline.java:499)
-	at java.base/java.util.stream.ForEachOps$ForEachOp.evaluateSequential(ForEachOps.java:151)
-	at java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.evaluateSequential(ForEachOps.java:174)
-	at java.base/java.util.stream.AbstractPipeline.evaluate(AbstractPipeline.java:234)
-	at java.base/java.util.stream.ReferencePipeline.forEach(ReferencePipeline.java:596)
-	at java.base/java.util.Optional.orElseGet(Optional.java:364)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-Caused by: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'lookupMapper': Unsatisfied dependency expressed through field 'disputeFolderEntryDtoMapper': No qualifying bean of type 'osplus.pkptuna.rest.dispute.lookup.model.mapper.DisputeFolderEntryDtoMapper' available: expected at least 1 bean which qualifies as autowire candidate. Dependency annotations: {@org.springframework.beans.factory.annotation.Autowired(required=true)}
-	at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor$AutowiredFieldElement.resolveFieldValue(AutowiredAnnotationBeanPostProcessor.java:788)
-	at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor$AutowiredFieldElement.inject(AutowiredAnnotationBeanPostProcessor.java:768)
-	at org.springframework.beans.factory.annotation.InjectionMetadata.inject(InjectionMetadata.java:146)
-	at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor.postProcessProperties(AutowiredAnnotationBeanPostProcessor.java:509)
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.populateBean(AbstractAutowireCapableBeanFactory.java:1459)
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:606)
-	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529)
-	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339)
-	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373)
-	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337)
-	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202)
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1222)
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1188)
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1123)
-	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:987)
-	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:627)
-	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
-	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
-	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
-	at org.springframework.boot.test.context.SpringBootContextLoader.lambda$loadContext$3(SpringBootContextLoader.java:144)
-	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:58)
-	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:46)
-	at org.springframework.boot.SpringApplication.withHook(SpringApplication.java:1461)
-	at org.springframework.boot.test.context.SpringBootContextLoader$ContextLoaderHook.run(SpringBootContextLoader.java:563)
-	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:144)
-	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:110)
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContextInternal(DefaultCacheAwareContextLoaderDelegate.java:225)
-	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:152)
-	... 18 more
-Caused by: org.springframework.beans.factory.NoSuchBeanDefinitionException: No qualifying bean of type 'osplus.pkptuna.rest.dispute.lookup.model.mapper.DisputeFolderEntryDtoMapper' available: expected at least 1 bean which qualifies as autowire candidate. Dependency annotations: {@org.springframework.beans.factory.annotation.Autowired(required=true)}
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.raiseNoMatchingBeanFound(DefaultListableBeanFactory.java:2284)
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1708)
-	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1628)
-	at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor$AutowiredFieldElement.resolveFieldValue(AutowiredAnnotationBeanPostProcessor.java:785)
-	... 45 more
-[INFO] 
+package osplus.pkptuna.hazelcast.pubsub;
+
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import jakarta.annotation.PostConstruct;
+import org.springframework.scheduling.TaskScheduler;
+import osplus.apl.core.api.AplComponent;
+import osplus.apl.core.api.administration.metrics.MetricTag;
+import osplus.apl.core.api.administration.metrics.MetricsService;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.config.HazelcastConfigProps;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.IntStream;
+
+/**
+ * Verarbeitet Nachrichten aus Hazelcast-Maps regelmäßig.
+ * Übernimmt (claim) Nachrichten zur Verarbeitung und entfernt sie bei Erfolg.
+ */
+@AplComponent
+public class GenericHazelcastConsumer {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastConsumer.class);
+    private final String instanceId = UUID.randomUUID().toString();
+
+    private final MetricsService metricsService;
+    private final HazelcastInstance hazelcastInstance;
+    private final TaskScheduler taskScheduler;
+    private final List<FlowConfig> flowConfigs;
+    private final FlowHandlerRegistry handlerRegistry;
+    private final HazelcastConfigProps hazelcastConfigProps;
+
+    public GenericHazelcastConsumer(
+            MetricsService metricsService,
+            HazelcastInstance hazelcastInstance,
+            TaskScheduler taskScheduler,
+            List<FlowConfig> flowConfigs,
+            FlowHandlerRegistry handlerRegistry,
+            HazelcastConfigProps hazelcastConfigProps
+    ) {
+        this.metricsService = metricsService;
+        this.hazelcastInstance = hazelcastInstance;
+        this.taskScheduler = taskScheduler;
+        this.flowConfigs = flowConfigs;
+        this.handlerRegistry = handlerRegistry;
+        this.hazelcastConfigProps = hazelcastConfigProps;
+    }
+
+    /**
+     * Initialisiert die periodische Abfrage von neuen Nachrichten.
+     */
+    @PostConstruct
+    public void startPolling() {
+        taskScheduler.scheduleAtFixedRate(
+                this::pollRequestMaps,
+                Duration.ofMillis(hazelcastConfigProps.pollingRate())
+        );
+        LOGGER.info("Scheduled Hazelcast consumer polling with fixed rate of {} ms.", hazelcastConfigProps.pollingRate());
+    }
+
+    /**
+     * Durchläuft alle konfigurierten Flows und verarbeitet Nachrichten aus den zugehörigen Maps.
+     */
+    public void pollRequestMaps() {
+        for (FlowConfig config : flowConfigs) {
+            handleFlow(config);
+        }
+    }
+
+    /**
+     * Verarbeitet Nachrichten für einen bestimmten Flow (alle Partitionen).
+     */
+    private void handleFlow(FlowConfig config) {
+        String flowName = config.name();
+        String baseMap = config.mapBase();
+        String responseTopic = config.responseTopic();
+        int partitions = config.partitions();
+
+        IMap<String, String> claimMap = hazelcastInstance.getMap("router-claim-map");
+
+        IntStream.range(0, partitions).forEach(partitionIndex -> {
+            String mapName = baseMap + partitionIndex;
+            IMap<String, Object> messageMap = hazelcastInstance.getMap(mapName);
+
+            for (var entry : messageMap.entrySet().stream().toList()) {
+                String correlationId = entry.getKey();
+                Object request = entry.getValue();
+                String claimKey = "route-lock-" + correlationId;
+
+                if (!claimMap.containsKey(claimKey)) {
+                    LOGGER.warn("No Claim-Key '{}' found. Bypassing this message.", claimKey);
+                    continue;
+                }
+
+                boolean claimed = claimMap.replace(claimKey, "", instanceId);
+                if (claimed) {
+                    try {
+                        boolean success = processEntry(flowName, correlationId, request, responseTopic);
+                        if (success) {
+                            messageMap.remove(correlationId);
+                            claimMap.remove(claimKey);
+                            LOGGER.info("Processed and removed entry from {} with correlationId={}", mapName, correlationId);
+                        } else {
+                            claimMap.replace(claimKey, instanceId, "");
+                        }
+                    } catch (Exception ex) {
+                        LOGGER.error("Processing error from {}: {}", correlationId, ex.getMessage(), ex);
+                        claimMap.replace(claimKey, instanceId, "");
+                        metricsService.increaseCounter("hazelcast.message.consume.error",
+                                MetricTag.create("flowName", flowName),
+                                MetricTag.create("exceptionClass", ex.getClass().getSimpleName()));
+                    }
+                }
+            }
+        });
+    }
+
+    /**
+     * Führt die Geschäftslogik für eine einzelne Anfrage aus.
+     *
+     * @return true, wenn erfolgreich verarbeitet wurde.
+     */
+    private boolean processEntry(String flowName, String correlationId, Object request, String responseTopic) {
+        @SuppressWarnings("unchecked")
+        FlowHandler<Object, Object> handler = handlerRegistry.getHandler(flowName);
+
+        if (handler == null) {
+            LOGGER.warn("No FlowHandler for '{}' registered. Request will be bypassed.", flowName);
+            metricsService.increaseCounter("hazelcast.message.consume.missingFlowHandler",
+                    MetricTag.create("flowName", flowName));
+            return false;
+        }
+
+        Object response = handler.handleRequest(request);
+        Object wrapped = handler.wrapResponse(correlationId, response);
+        handler.sendResponse(hazelcastInstance, responseTopic, wrapped);
+
+        metricsService.increaseCounter("hazelcast.message.consume.success",
+                MetricTag.create("flowName", flowName));
+        return true;
+    }
+}
+
+
+-----
+
+
+package osplus.pkptuna.hazelcast.pubsub;
+
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.topic.ITopic;
+import com.hazelcast.topic.Message;
+import com.hazelcast.topic.MessageListener;
+import jakarta.annotation.PreDestroy;
+import osplus.apl.core.api.AplComponent;
+import osplus.apl.core.api.administration.metrics.MetricTag;
+import osplus.apl.core.api.administration.metrics.MetricsService;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * Der {@code GenericHazelcastRouter} ist verantwortlich für das zentrale Routing eingehender Nachrichten
+ * aus ReliableTopics in partitionierte IMaps. Der Router verwendet eine zentrale Leader Election mit Heartbeat,
+ * um sicherzustellen, dass nur eine Instanz im Cluster aktiv routet.
+ */
+@AplComponent
+public class GenericHazelcastRouter {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastRouter.class);
+    private final MetricsService metricsService;
+
+    private final HazelcastInstance hazelcastInstance;
+    private final List<FlowConfig> flowConfigs;
+    private final FlowHandlerRegistry handlerRegistry;
+    private String routerInstanceId;
+    private final Map<String, AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
+    private final Map<String, UUID> listenerRegistrations = new ConcurrentHashMap<>();
+
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+
+    private final String debugInstanceId = UUID.randomUUID().toString();
+
+    public GenericHazelcastRouter(MetricsService metricsService,
+                                  HazelcastInstance hazelcastInstance,
+                                  List<FlowConfig> flowConfigs,
+                                  FlowHandlerRegistry handlerRegistry) {
+        this.metricsService = metricsService;
+        this.hazelcastInstance = hazelcastInstance;
+        this.flowConfigs = flowConfigs;
+        this.handlerRegistry = handlerRegistry;
+        this.routerInstanceId = UUID.randomUUID().toString();
+        LOGGER.info("Router created with ID={}", this.routerInstanceId );
+    }
+
+    public void initRouters() {
+        try {
+
+            LOGGER.info("[initRouters] Using routerInstanceId={}", this.routerInstanceId);
+
+            IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
+            IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
+
+            String currentLeader = leaderMap.get("active-router");
+            Long lastHeartbeat = heartbeatMap.get("heartbeat");
+
+            boolean heartbeatStale = (lastHeartbeat == null || System.currentTimeMillis() - lastHeartbeat > 5000);
+
+            if (heartbeatStale) {
+                // Either no leader or leader is stale; attempt to become the new leader
+                String previous = leaderMap.put("active-router", routerInstanceId);
+
+                if (previous == null || previous.equals(currentLeader)) {
+                    LOGGER.info("This node is elected as the ACTIVE router (ID={})", routerInstanceId);
+                    startHeartbeat();
+                    subscribeToTopics();
+                } else {
+                    LOGGER.info("Another node claimed leadership before us (ID={})", previous);
+                    unsubscribeFromTopics();
+                }
+            } else {
+                LOGGER.info("Leadership already exists and heartbeat is alive (Leader={}, LastBeat={})",
+                        currentLeader, lastHeartbeat);
+                unsubscribeFromTopics();
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to initialize router", e);
+        }
+    }
+
+    @PreDestroy
+    public void shutdown(){
+        unsubscribeFromTopics();
+        scheduler.shutdownNow();
+    }
+
+    public void setRouterInstanceId(String routerInstanceId) {
+        this.routerInstanceId = routerInstanceId;
+    }
+
+    private void startHeartbeat() {
+        IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
+        scheduler.scheduleAtFixedRate(() -> {
+            heartbeatMap.put("heartbeat", System.currentTimeMillis());
+        }, 0, 3, TimeUnit.SECONDS);
+        LOGGER.info("Heartbeat started for router ID={}", routerInstanceId);
+    }
+
+    private void subscribeToTopics() {
+        if (flowConfigs == null || flowConfigs.isEmpty()) {
+            LOGGER.warn("No Hazelcast flow configurations found.");
+            return;
+        }
+
+        flowConfigs.forEach(flowConfig -> {
+            String flowName = flowConfig.name();
+            roundRobinCounters.putIfAbsent(flowName, new AtomicInteger(0));
+
+            @SuppressWarnings("unchecked")
+            Optional<FlowHandler<Object, Object>> handler = Optional.of(
+                    (FlowHandler<Object, Object>) handlerRegistry.getHandler(flowName)
+            );
+
+            handler.ifPresentOrElse(value -> {
+                ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(flowConfig.requestTopic());
+                UUID registrationId = topic.addMessageListener(new RoutingListener(flowName, flowConfig, value));
+                listenerRegistrations.put(flowName, registrationId);
+                LOGGER.info("Listening on topic={} for flow={}", flowConfig.requestTopic(), flowName);
+            }, () -> LOGGER.warn("No FlowHandler registered for flow: {}", flowName));
+        });
+    }
+
+    private void unsubscribeFromTopics() {
+        listenerRegistrations.forEach((flowName, registrationId) -> {
+            String topicName = flowConfigs.stream()
+                    .filter(cfg -> cfg.name().equals(flowName))
+                    .findFirst()
+                    .map(FlowConfig::requestTopic)
+                    .orElse(null);
+
+            if (topicName != null) {
+                hazelcastInstance.getReliableTopic(topicName).removeMessageListener(registrationId);
+                LOGGER.info("Unsubscribed from topic={} for flow={}", topicName, flowName);
+            }
+        });
+        listenerRegistrations.clear();
+    }
+
+    private class RoutingListener<T> implements MessageListener<byte[]> {
+
+        private final String flowName;
+        private final FlowConfig config;
+        private final FlowHandler<T, ?> handler;
+
+        RoutingListener(String flowName, FlowConfig config, FlowHandler<T, ?> handler) {
+            this.flowName = flowName;
+            this.config = config;
+            this.handler = handler;
+        }
+
+        @Override
+        public void onMessage(Message<byte[]> message) {
+            try {
+                // Leadership validation
+                IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
+
+                String currentLeader = leaderMap.get("active-router");
+
+                LOGGER.info("[onMessage] Debug instance id={}, Router instance ID={}, Current Leader Id ={}, Message Source={}", debugInstanceId,
+                        routerInstanceId,
+                        currentLeader,
+                        message.getPublishingMember());
+
+                if (!routerInstanceId.equals(currentLeader)) {
+                    LOGGER.info("Ignoring message as this router is not the current leader (ID={})", routerInstanceId);
+                    return;
+                }
+
+                T request = handler.deserializeRequest(message.getMessageObject());
+                String correlationId = handler.extractCorrelationId(request);
+                String lockKey = "route-lock-" + correlationId;
+
+                IMap<String, String> routerMap = hazelcastInstance.getMap("router-claim-map");
+
+                String existing = routerMap.putIfAbsent(lockKey, "");
+                if (existing != null) {
+                    LOGGER.info("Skipped duplicate routing for correlationId={}", correlationId);
+                    metricsService.increaseCounter("hazelcast.message.received.duplicate", MetricTag.create("flowName", flowName));
+                    return;
+                }
+
+                int index = roundRobinCounters.get(flowName).getAndIncrement() % config.partitions();
+                String mapKey = config.mapBase() + index;
+
+                hazelcastInstance.getMap(mapKey).put(correlationId, request);
+                LOGGER.info("Routed correlationId='{}' to map '{}'", correlationId, mapKey);
+
+                metricsService.increaseCounter("hazelcast.message.received.valid", MetricTag.create("flowName", flowName));
+            } catch (Exception e) {
+                metricsService.increaseCounter(
+                        "hazelcast.message.received.error",
+                        MetricTag.create("flowName", flowName),
+                        MetricTag.create("exceptionClass", e.getClass().getCanonicalName())
+                );
+                LOGGER.error("Routing failure for flow '{}': {}", flowName, e.getMessage(), e);
+            }
+        }
+    }
+}
