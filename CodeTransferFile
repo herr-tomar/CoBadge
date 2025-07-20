@@ -1,63 +1,16 @@
-package osplus.pkptuna.util;
+2025-07-21 00:26:32.059  INFO 36564 --- [           main] o.p.h.pubsub.GenericHazelcastConsumer   : Registered EntryListener on IMap 'dispute-detail-request-map-1'
+2025-07-21 00:26:32.137  INFO 36564 --- [           main] o.p.h.pubsub.GenericHazelcastConsumer   : Registered EntryListener on IMap 'dispute-detail-request-map-2'
+2025-07-21 00:26:32.141  INFO 36564 --- [           main] o.p.h.config.FlowHandlerInitializer     : List of FlowConfigs for registration :[FlowConfig[name=dispute-lookup, requestTopic=DisputeLookupRequestReliableTopic, responseTopic=DisputeLookupResponseReliableTopic, mapBase=dispute-lookup-request-map-, partitions=4], FlowConfig[name=dispute-detail, requestTopic=DisputeDetailRequestReliableTopic, responseTopic=DisputeDetailResponseReliableTopic, mapBase=dispute-detail-request-map-, partitions=3]]
+2025-07-21 00:26:32.141  INFO 36564 --- [           main] o.p.h.config.FlowHandlerInitializer     : Map of Flowhandlers for registration{dispute-lookup=osplus.pkptuna.flows.handlers.DisputeLookupFlowHandler@597cb2f5, dispute-detail=osplus.pkptuna.flows.handlers.DisputeDetailFlowHandler@4aa8504f}
+2025-07-21 00:26:32.141  INFO 36564 --- [           main] o.p.h.pubsub.GenericHazelcastRouter     : [initRouters] Using routerInstanceId=30c6debf-0269-4840-b9ef-2e98ea048415
+2025-07-21 00:26:32.360  INFO 36564 --- [           main] o.p.h.pubsub.GenericHazelcastRouter     : This node is elected as the ACTIVE router (ID=30c6debf-0269-4840-b9ef-2e98ea048415)
+2025-07-21 00:26:32.361  INFO 36564 --- [           main] o.p.h.pubsub.GenericHazelcastRouter     : Heartbeat started for router ID=30c6debf-0269-4840-b9ef-2e98ea048415
+2025-07-21 00:26:32.506  INFO 36564 --- [           main] o.p.h.pubsub.GenericHazelcastRouter     : Listening on topic=DisputeLookupRequestReliableTopic for flow=dispute-lookup
+2025-07-21 00:26:32.662  INFO 36564 --- [           main] o.p.h.pubsub.GenericHazelcastRouter     : Listening on topic=DisputeDetailRequestReliableTopic for flow=dispute-detail
+2025-07-21 00:26:34.250  WARN 36564 --- [           main] .a.c.c.s.CorsConfigurerCustomizerFactory: Configuring restriction-less CORS Configuration for local development
 
-import com.google.protobuf.Message;
-import com.google.protobuf.Parser;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.topic.ITopic;
-import osplus.fi.core.logging.api.Logger;
 
-import java.util.concurrent.ExecutorService;
-import java.util.function.BiConsumer;
-import java.util.function.Function;
-
-/**
- * Hilfsklasse zur Registrierung generischer Hazelcast-Listener für Protobuf-Nachrichten.
- * Diese Listener lesen Nachrichten von einem Topic, parsen sie, und leiten die extrahierte Antwort
- * anhand der Korrelations-ID an einen Consumer weiter.
- */
-public class HazelcastListenerUtils {
-
-    /**
-     * Registriert einen generischen Listener auf einem Hazelcast-Topic, der Protobuf-Nachrichten verarbeitet.
-     *
-     * @param hazelcastInstance      Die Hazelcast-Instanz
-     * @param topicName              Der Name des Topics, das überwacht werden soll
-     * @param parser                 Protobuf-Parser zur Umwandlung des Payloads
-     * @param correlationIdExtractor Funktion zur Extraktion der Korrelations-ID aus dem Wrapper
-     * @param responseExtractor      Funktion zur Extraktion der Antwort-Nutzlast aus dem Wrapper
-     * @param responseConsumer       Callback zur Weitergabe der extrahierten Antwort
-     * @param logger                 Logger-Instanz für Fehlerprotokollierung
-     * @param executorService        Executor zum asynchronen Verarbeiten der Nachrichten
-     * @param <W>                    Typ des empfangenen Wrapper-Protobuf-Objekts
-     * @param <R>                    Typ der extrahierten Antwort
-     */
-    public static <W extends Message, R> void registerGenericResponseListener(
-            HazelcastInstance hazelcastInstance,
-            String topicName,
-            Parser<W> parser,
-            Function<W, String> correlationIdExtractor,
-            Function<W, R> responseExtractor,
-            BiConsumer<String, R> responseConsumer,
-            Logger logger,
-            ExecutorService executorService) {
-
-        ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
-
-        topic.addMessageListener(message -> executorService.submit(() -> {
-            try {
-                byte[] messageBytes = message.getMessageObject();
-                W wrapper = parser.parseFrom(messageBytes);
-
-                String correlationId = correlationIdExtractor.apply(wrapper);
-                R response = responseExtractor.apply(wrapper);
-
-                responseConsumer.accept(correlationId, response);
-
-            } catch (Exception e) {
-                logger.error("Failure in processing response from Topic '{}'", topicName, e);
-            }
-        }));
-
-        logger.info("Response-Listener registered on Topic '{}'", topicName);
-    }
-}
+2025-07-21 00:19:09.956  INFO 21920 --- [omcat-handler-0] o.pkptuna.service.DisputeOrcaService    : Published to topic [DisputeLookupRequestReliableTopic] for trace DISPUTES-LOOKUP
+2025-07-21 00:19:09.991  INFO 21920 --- [onPool-worker-1] o.p.h.pubsub.GenericHazelcastRouter     : [onMessage] Debug instance id=3d404d0f-0d1b-4f1e-901a-5cc803dce345, Router instance ID=d30726ef-7e4a-45d1-9f65-478895e3d304, Current Leader Id =null, Message Source=null
+2025-07-21 00:19:09.992  INFO 21920 --- [onPool-worker-1] o.p.h.pubsub.GenericHazelcastRouter     : Ignoring message as this router is not the current leader (ID=d30726ef-7e4a-45d1-9f65-478895e3d304)
+2025-07-21 00:19:10.042  INFO 21920 --- [pkptuna.event-1] o.p.h.pubsub.GenericHazelcastConsumer   : Skippin**********ng of correlationId=151abe90-c8ef-46d1-b93e-b7946c243cf7 as it is not claimable
