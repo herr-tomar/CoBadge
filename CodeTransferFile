@@ -1,8 +1,64 @@
-await()
-    .atMost(5, TimeUnit.SECONDS)
-    .pollInterval(100, TimeUnit.MILLISECONDS)
-    .untilAsserted(() -> {
-        assertTrue(testCollector.wasSent(flowConfig.responseTopic()));
-        assertFalse(requestMap.containsKey(correlationId));
-        assertFalse(routerMap.containsKey("route-lock-" + correlationId));
-    });
+package osplus.pkptuna.util;
+
+import com.google.protobuf.Message;
+import com.google.protobuf.Parser;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.topic.ITopic;
+import osplus.fi.core.logging.api.Logger;
+
+import java.util.function.BiConsumer;
+import java.util.function.Function;
+
+/**
+ * Hilfsklasse zur Registrierung generischer Hazelcast-Listener für Protobuf-Nachrichten.
+ * Diese Listener lesen Nachrichten von einem Topic, parsen sie, und leiten die extrahierte Antwort
+ * anhand der Korrelations-ID an einen Consumer weiter.
+ */
+public class HazelcastListenerUtils {
+
+    /**
+     * Registriert einen generischen Listener auf einem Hazelcast-Topic, der Protobuf-Nachrichten verarbeitet.
+     *
+     * @param hazelcastInstance      Die Hazelcast-Instanz
+     * @param topicName              Der Name des Topics, das überwacht werden soll
+     * @param parser                 Protobuf-Parser zur Umwandlung des Payloads
+     * @param correlationIdExtractor Funktion zur Extraktion der Korrelations-ID aus dem Wrapper
+     * @param responseExtractor      Funktion zur Extraktion der Antwort-Nutzlast aus dem Wrapper
+     * @param responseConsumer       Callback zur Weitergabe der extrahierten Antwort
+     * @param logger                 Logger-Instanz für Fehlerprotokollierung
+     * @param <W>                    Typ des empfangenen Wrapper-Protobuf-Objekts
+     * @param <R>                    Typ der extrahierten Antwort
+     */
+    public static <W extends Message, R> void registerGenericResponseListener(
+            HazelcastInstance hazelcastInstance,
+            String topicName,
+            Parser<W> parser,
+            Function<W, String> correlationIdExtractor,
+            Function<W, R> responseExtractor,
+            BiConsumer<String, R> responseConsumer,
+            Logger logger) {
+
+        // Zugriff auf das konfigurierte Topic
+        ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
+
+        // Registrierung eines Hazelcast-MessageListeners
+        topic.addMessageListener(message -> {
+            try {
+                byte[] messageBytes = message.getMessageObject();
+                W wrapper = parser.parseFrom(messageBytes);
+
+                // Extraktion von Korrelations-ID und Antwort
+                String correlationId = correlationIdExtractor.apply(wrapper);
+                R response = responseExtractor.apply(wrapper);
+
+                // Übergabe an den angegebenen Consumer
+                responseConsumer.accept(correlationId, response);
+
+            } catch (Exception e) {
+                logger.error("Failure in processing response from Topic '{}'", topicName, e);
+            }
+        });
+
+        logger.info("Response-Listener register on Topic '{}'", topicName);
+    }
+}
