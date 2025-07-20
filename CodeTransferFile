@@ -6,6 +6,7 @@ import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.topic.ITopic;
 import osplus.fi.core.logging.api.Logger;
 
+import java.util.concurrent.ExecutorService;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
@@ -26,6 +27,7 @@ public class HazelcastListenerUtils {
      * @param responseExtractor      Funktion zur Extraktion der Antwort-Nutzlast aus dem Wrapper
      * @param responseConsumer       Callback zur Weitergabe der extrahierten Antwort
      * @param logger                 Logger-Instanz für Fehlerprotokollierung
+     * @param executorService        Executor zum asynchronen Verarbeiten der Nachrichten
      * @param <W>                    Typ des empfangenen Wrapper-Protobuf-Objekts
      * @param <R>                    Typ der extrahierten Antwort
      */
@@ -36,29 +38,26 @@ public class HazelcastListenerUtils {
             Function<W, String> correlationIdExtractor,
             Function<W, R> responseExtractor,
             BiConsumer<String, R> responseConsumer,
-            Logger logger) {
+            Logger logger,
+            ExecutorService executorService) {
 
-        // Zugriff auf das konfigurierte Topic
         ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
 
-        // Registrierung eines Hazelcast-MessageListeners
-        topic.addMessageListener(message -> {
+        topic.addMessageListener(message -> executorService.submit(() -> {
             try {
                 byte[] messageBytes = message.getMessageObject();
                 W wrapper = parser.parseFrom(messageBytes);
 
-                // Extraktion von Korrelations-ID und Antwort
                 String correlationId = correlationIdExtractor.apply(wrapper);
                 R response = responseExtractor.apply(wrapper);
 
-                // Übergabe an den angegebenen Consumer
                 responseConsumer.accept(correlationId, response);
 
             } catch (Exception e) {
                 logger.error("Failure in processing response from Topic '{}'", topicName, e);
             }
-        });
+        }));
 
-        logger.info("Response-Listener register on Topic '{}'", topicName);
+        logger.info("Response-Listener registered on Topic '{}'", topicName);
     }
 }
