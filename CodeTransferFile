@@ -62,12 +62,15 @@ public class GenericHazelcastRouter {
 
     public void initRouters() {
 
-      LOGGER.info("[initRouters] Using routerInstanceId={}", this.routerInstanceId);
+       LOGGER.info("[initRouters] Using routerInstanceId={}", this.routerInstanceId);
 
-      tryBecomeLeaderIfStale(); // Reused for startup
+       hazelcastInstance.getMap("router-leader-map")
+                    .addEntryListener(new LeaderMapListener(this), true);
+
+       tryBecomeLeaderIfStale(); // Reused for startup
     }
 
-    private void tryBecomeLeaderIfStale() {
+    public void tryBecomeLeaderIfStale() {
         if (isLeader){
             return; // No need to re-elect if we're already the leader
         }
@@ -226,3 +229,46 @@ public class GenericHazelcastRouter {
         }
     }
 }
+
+
+package osplus.pkptuna.hazelcast.pubsub;
+
+import com.hazelcast.core.EntryEvent;
+import com.hazelcast.map.listener.EntryAddedListener;
+import com.hazelcast.map.listener.EntryExpiredListener;
+import com.hazelcast.map.listener.EntryRemovedListener;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+
+public class LeaderMapListener implements EntryAddedListener, EntryRemovedListener, EntryExpiredListener {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(LeaderMapListener.class);
+
+    private GenericHazelcastRouter genericHazelcastRouter;
+
+    public LeaderMapListener(GenericHazelcastRouter genericHazelcastRouter) {
+        this.genericHazelcastRouter = genericHazelcastRouter;
+    }
+
+    @Override
+    public void entryAdded(EntryEvent entryEvent) {
+        LOGGER.info("Leader map entry added {} VALUE {}",entryEvent.getKey(), entryEvent.getValue());
+    }
+
+    @Override
+    public void entryExpired(EntryEvent entryEvent) {
+        LOGGER.info("Leader entry expired, trying to become leader");
+        tryToBecomeLeader();
+    }
+
+    @Override
+    public void entryRemoved(EntryEvent entryEvent) {
+        LOGGER.info("leader entry removed, trying to become leader");
+        tryToBecomeLeader();
+    }
+
+    private void tryToBecomeLeader() {
+        genericHazelcastRouter.tryBecomeLeaderIfStale();
+    }
+}
+
