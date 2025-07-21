@@ -57,7 +57,7 @@ public void testDuplicateMessageNotProcessed() throws Exception {
            .untilAsserted(() -> assertFalse(targetMap.containsKey(corrId)));
 }
 @Test
-public void testDuplicateMessageNotProcessed() throws Exception {
+public void testRoutingHandlerThrowsException() throws Exception {
     leaderMap.clear();
     heartbeatMap.clear();
     routerMap.clear();
@@ -69,15 +69,15 @@ public void testDuplicateMessageNotProcessed() throws Exception {
 
     Thread.sleep(500); // Let router subscribe
 
-    Map<String, Object> requestMap = Map.of("dup", "check");
-    String corrId = sampleFlowHandler.extractCorrelationId(requestMap);
-    routerMap.put("route-lock-" + corrId, "existing"); // Simulate duplicate
+    Map<String, Object> faulty = Map.of("key", "faultyRequest"); // Triggers exception
+    String corrId = sampleFlowHandler.extractCorrelationId(faulty);
 
-    topic.publish(new ObjectMapper().writeValueAsBytes(requestMap));
+    topic.publish(new ObjectMapper().writeValueAsBytes(faulty));
 
     await().atMost(2, TimeUnit.SECONDS)
            .untilAsserted(() -> assertFalse(targetMap.containsKey(corrId)));
 }
+
 @Override
 public String extractCorrelationId(Object request) {
     Map<?, ?> map = (Map<?, ?>) request;
