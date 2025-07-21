@@ -1,13 +1,7 @@
-public void initRouters() {
-    LOGGER.info("[initRouters] Using routerInstanceId={}", this.routerInstanceId);
-
-    hazelcastInstance.getMap("router-leader-map")
-        .addEntryListener(new LeaderMapListener(), true);
-
-    tryBecomeLeaderIfStale(); // Reused for startup
-}
-
+private volatile boolean isLeader = false;
 private void tryBecomeLeaderIfStale() {
+    if (isLeader) return; // No need to re-elect if we're already the leader
+
     try {
         IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
         IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
@@ -22,6 +16,7 @@ private void tryBecomeLeaderIfStale() {
 
             if (previous == null || previous.equals(currentLeader)) {
                 LOGGER.info("This node is elected as the ACTIVE router (ID={})", routerInstanceId);
+                isLeader = true;
                 startHeartbeat();
                 subscribeToTopics();
             } else {
@@ -29,7 +24,7 @@ private void tryBecomeLeaderIfStale() {
                 unsubscribeFromTopics();
             }
         } else {
-            LOGGER.info("Leadership already exists and heartbeat is alive (Leader={}, LastBeat={})",
+            LOGGER.info("Leadership exists and heartbeat is alive (Leader={}, LastBeat={})",
                     currentLeader, lastHeartbeat);
             unsubscribeFromTopics();
         }
@@ -37,15 +32,8 @@ private void tryBecomeLeaderIfStale() {
         LOGGER.error("Failed to check or claim leadership", e);
     }
 }
-
-
-private void startHeartbeat() {
-    IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
-    scheduler.scheduleAtFixedRate(() ->
-        heartbeatMap.put("heartbeat", System.currentTimeMillis()), 0, 3, TimeUnit.SECONDS);
-
-    // Re-election logic in case current leader dies
-    scheduler.scheduleAtFixedRate(this::tryBecomeLeaderIfStale, 5, 5, TimeUnit.SECONDS);
-
-    LOGGER.info("Heartbeat started for router ID={}", routerInstanceId);
+public void shutdown() {
+    unsubscribeFromTopics();
+    scheduler.shutdownNow();
+    isLeader = false;
 }
