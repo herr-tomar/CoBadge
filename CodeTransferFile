@@ -3,35 +3,29 @@ package osplus.pkptuna.util;
 import com.google.protobuf.Message;
 import com.google.protobuf.Parser;
 import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.ringbuffer.Ringbuffer;
 import com.hazelcast.topic.ITopic;
-import com.hazelcast.topic.Message;
-import com.hazelcast.topic.ReliableMessageListener;
 import osplus.fi.core.logging.api.Logger;
 
-import java.util.concurrent.ExecutorService;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 /**
- * Utility for registering generic Hazelcast listeners for Protobuf messages.
- * This variant ensures only new messages (not old cached ones) are processed.
+ * Utility class for registering generic Hazelcast listeners for Protobuf messages.
  */
 public class HazelcastListenerUtils {
 
     /**
-     * Registers a tail-only listener for a Hazelcast ReliableTopic that processes Protobuf messages.
+     * Registers a generic listener on a Hazelcast ReliableTopic to process Protobuf messages.
      *
-     * @param hazelcastInstance      Hazelcast instance
-     * @param topicName              Name of the topic to subscribe to
-     * @param parser                 Protobuf parser for incoming messages
-     * @param correlationIdExtractor Extracts correlation ID from message
-     * @param responseExtractor      Extracts response payload from message
-     * @param responseConsumer       Logic to execute with correlationId and response
-     * @param logger                 Logger instance
-     * @param executorService        ExecutorService to handle async processing
-     * @param <W>                    Protobuf wrapper type
-     * @param <R>                    Extracted response type
+     * @param hazelcastInstance      Hazelcast client instance
+     * @param topicName              Topic to listen on
+     * @param parser                 Protobuf parser for deserialization
+     * @param correlationIdExtractor Function to extract correlation ID from message
+     * @param responseExtractor      Function to extract response payload from message
+     * @param responseConsumer       Consumer to pass the parsed response to
+     * @param logger                 Logger for diagnostics
+     * @param <W>                    Wrapper Protobuf message type
+     * @param <R>                    Response payload type
      */
     public static <W extends Message, R> void registerGenericResponseListener(
             HazelcastInstance hazelcastInstance,
@@ -40,54 +34,37 @@ public class HazelcastListenerUtils {
             Function<W, String> correlationIdExtractor,
             Function<W, R> responseExtractor,
             BiConsumer<String, R> responseConsumer,
-            Logger logger,
-            ExecutorService executorService) {
-
+            Logger logger
+    ) {
         ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
 
-        topic.addMessageListener(new ReliableMessageListener<>() {
+        topic.addMessageListener(message -> {
+            try {
+                byte[] messageBytes = message.getMessageObject();
+                W wrapper = parser.parseFrom(messageBytes);
 
-            @Override
-            public void onMessage(Message<byte[]> message) {
-                executorService.submit(() -> {
-                    try {
-                        byte[] messageBytes = message.getMessageObject();
-                        W wrapper = parser.parseFrom(messageBytes);
-                        String correlationId = correlationIdExtractor.apply(wrapper);
-                        R response = responseExtractor.apply(wrapper);
-                        responseConsumer.accept(correlationId, response);
-                    } catch (Exception e) {
-                        logger.error("Error while processing response from topic '{}'", topicName, e);
-                    }
-                });
-            }
+                String correlationId = correlationIdExtractor.apply(wrapper);
+                R response = responseExtractor.apply(wrapper);
 
-            @Override
-            public long retrieveInitialSequence() {
-                return Ringbuffer.RETENTION_POLICY_TAIL; // Only listen to new messages
-            }
+                if (correlationId == null || correlationId.isBlank()) {
+                    logger.warn("Received message on topic '{}' with missing or invalid correlation ID", topicName);
+                    return;
+                }
 
-            @Override
-            public boolean isLossTolerant() {
-                return false;
-            }
+                // Check whether the correlation ID is known before processing
+                boolean accepted = GenericResponseTracker.hasTrackerFor(correlationId);
+                if (!accepted) {
+                    logger.warn("Ignoring response with unknown correlationId='{}' on topic '{}'", correlationId, topicName);
+                    return;
+                }
 
-            @Override
-            public boolean isTerminal(Throwable failure) {
-                return false;
-            }
+                responseConsumer.accept(correlationId, response);
 
-            @Override
-            public void storeSequence(long sequence) {
-                // No-op: stateless listener
-            }
-
-            @Override
-            public long getStoredSequence() {
-                return -1;
+            } catch (Exception e) {
+                logger.error("Failure in processing response from Topic '{}'", topicName, e);
             }
         });
 
-        logger.info("Registered tail-only ReliableMessageListener on topic '{}'", topicName);
+        logger.info("Response listener registered on topic '{}'", topicName);
     }
 }
