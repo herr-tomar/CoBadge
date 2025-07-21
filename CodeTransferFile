@@ -1,34 +1,12 @@
-@Test
-public void testMessageRoutedSuccessfully() throws Exception {
-    // Ensure router has a clean start and becomes leader
-    leaderMap.clear();
-    heartbeatMap.clear();
-    routerMap.clear();
-    targetMap.clear();
-    testCollector.clear();
-
-    router.setRouterInstanceId(routerInstanceId);
-    router.initRouters();
-
-    // Wait for router to assume leadership and start listening
-    await()
-        .atMost(2, TimeUnit.SECONDS)
-        .pollInterval(100, TimeUnit.MILLISECONDS)
-        .until(() -> "test-router-instance".equals(leaderMap.get("active-router")));
-
-    // Prepare a valid request
-    Map<String, Object> request = Map.of("key", "value");
-    String corrId = sampleFlowHandler.extractCorrelationId(request);
-
-    // Send the message AFTER listeners are active
-    topic.publish(new ObjectMapper().writeValueAsBytes(request));
-
-    // Verify the response was sent to the correct topic
-    await()
-        .atMost(2, TimeUnit.SECONDS)
-        .pollInterval(100, TimeUnit.MILLISECONDS)
-        .untilAsserted(() -> {
-            assertTrue(testCollector.wasSent(flowConfig.responseTopic()), "Expected message to be routed and response sent");
-            assertEquals("wrappedResponse", testCollector.getSent(flowConfig.responseTopic()));
-        });
-}
+[ERROR] Tests run: 3, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 21.62 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest
+[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully -- Time elapsed: 2.146 s <<< ERROR!
+org.awaitility.core.ConditionTimeoutException: Condition with Lambda expression in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest was not fulfilled within 2 seconds.
+	at org.awaitility.core.ConditionAwaiter.await(ConditionAwaiter.java:167)
+	at org.awaitility.core.CallableCondition.await(CallableCondition.java:78)
+	at org.awaitility.core.CallableCondition.await(CallableCondition.java:26)
+	at org.awaitility.core.ConditionFactory.until(ConditionFactory.java:1006)
+	at org.awaitility.core.ConditionFactory.until(ConditionFactory.java:975)
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully(GenericHazelcastRouterTest.java:98)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
