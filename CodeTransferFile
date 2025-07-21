@@ -1,56 +1,336 @@
+
 package osplus.pkptuna.hazelcast.pubsub;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
+import com.hazelcast.topic.ITopic;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import osplus.apl.core.test.utils.AplTestRunner;
+import osplus.apl.core.test.utils.BaseAplTest;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
 
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-/**
- * Periodically refreshes the leadership key and updates a separate heartbeat timestamp.
- * Ensures this instance retains leadership as long as it is alive.
- */
-public class RouterLeaderHeartbeat implements Runnable {
+import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(RouterLeaderHeartbeat.class);
-    private static final String LEADER_KEY = "active-router";
-    private static final String HEARTBEAT_KEY = "heartbeat";
+@SpringBootTest(classes = {
+        AplTestRunner.class,
+        GenericHazelcastRouterTest.LocalTestConfig.class,
+        FlowHandlerTestConfiguration.class
+},
+        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+        properties = {
+                "spring.main.allow-bean-definition-overriding=true",
+                "generichazelcast.polling-rate=20",
+                "apl.application.name=uui",
+                "apl.application.version=0.0.1-TEST"
+        })
+@AutoConfigureMockMvc
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+public class GenericHazelcastRouterTest extends BaseAplTest {
 
-    private final HazelcastInstance hazelcastInstance;
-    private final String routerInstanceId;
-    private final long ttlSeconds;
+    @Autowired private HazelcastInstance hazelcastInstance;
+    @Autowired private FlowHandler sampleFlowHandler;
+    @Autowired private FlowConfig flowConfig;
+    @Autowired private GenericHazelcastRouter router;
+    @Autowired private FlowHandlerTestConfiguration.TestCollector testCollector;
 
-    public RouterLeaderHeartbeat(HazelcastInstance hazelcastInstance, String routerInstanceId, long ttlSeconds) {
-        this.hazelcastInstance = hazelcastInstance;
-        this.routerInstanceId = routerInstanceId;
-        this.ttlSeconds = ttlSeconds;
+    private IMap<String, String> leaderMap;
+    private IMap<String, Long> heartbeatMap;
+    private IMap<String, String> routerMap;
+    private IMap<Object, Object> targetMap;
+    private ITopic<byte[]> topic;
+
+    private final String routerInstanceId = "test-router-instance";
+
+    @BeforeEach
+    public void setup() {
+        leaderMap = hazelcastInstance.getMap("router-leader-map");
+        heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
+        routerMap = hazelcastInstance.getMap("router-claim-map");
+        targetMap = hazelcastInstance.getMap("map-0");
+
+        leaderMap.clear();
+        heartbeatMap.clear();
+        routerMap.clear();
+        targetMap.clear();
+        testCollector.clear();
+
+        router.setRouterInstanceId(routerInstanceId);
+        leaderMap.put("active-router",routerInstanceId);
+        heartbeatMap.put("heartbeat", System.currentTimeMillis() -10_000);
+        topic = hazelcastInstance.getReliableTopic(flowConfig.requestTopic());
     }
 
-    @Override
-    public void run() {
-        try {
-            IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
-            IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
+    @Test
+    public void testMessageRoutedSuccessfully() throws Exception {
+        // Clear maps and allow router to become leader
+        leaderMap.clear();
+        heartbeatMap.clear();
 
-            // Refresh the leader key with TTL
-            leaderMap.put(LEADER_KEY, routerInstanceId, ttlSeconds, TimeUnit.SECONDS);
+        router.setRouterInstanceId(routerInstanceId);
+        router.initRouters();
 
-            // Update heartbeat timestamp
-            heartbeatMap.put(HEARTBEAT_KEY, System.currentTimeMillis());
+        // Prepare a valid request
+        Map<String, Object> request = Map.of("key", "value");
+        String corrId = sampleFlowHandler.extractCorrelationId(request);
+        topic.publish(new ObjectMapper().writeValueAsBytes(request));
 
-            LOGGER.debug("Heartbeat refreshed by router ID={}", routerInstanceId);
-        } catch (Exception e) {
-            LOGGER.error("Failed to refresh leader heartbeat: {}", e.getMessage(), e);
+        await()
+                .atMost(200, TimeUnit.SECONDS)
+                .pollInterval(50, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    assertTrue(testCollector.wasSent(flowConfig.responseTopic()), "Expected message to be routed and response sent");
+                    assertEquals("wrappedResponse", testCollector.getSent(flowConfig.responseTopic()));
+                });
+    }
+
+    @Test
+    public void testDuplicateMessageNotProcessed() throws Exception {
+        router.setRouterInstanceId(routerInstanceId);
+        leaderMap.put("active-router", routerInstanceId);
+        heartbeatMap.put("heartbeat", System.currentTimeMillis());
+
+        router.initRouters();
+
+        Map<String, Object> requestMap = Map.of("dup", "check");
+        String corrId = sampleFlowHandler.extractCorrelationId(requestMap);
+        routerMap.put("route-lock-" + corrId, "existing"); // Simulate pre-existing claim
+
+        topic.publish(new ObjectMapper().writeValueAsBytes(requestMap));
+
+        await()
+                .during(1, TimeUnit.SECONDS)
+                .atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(() -> {
+                    assertFalse(targetMap.containsKey(corrId), "Duplicate message should not be processed");
+                });
+    }
+
+    @Test
+    public void testRoutingHandlerThrowsException() throws Exception {
+        router.setRouterInstanceId(routerInstanceId);
+        leaderMap.put("active-router", routerInstanceId);
+        heartbeatMap.put("heartbeat", System.currentTimeMillis());
+
+        router.initRouters();
+
+        Map<String, Object> faulty = Map.of("key", "faultyRequest"); // triggers handler failure
+        String corrId = sampleFlowHandler.extractCorrelationId(faulty);
+        topic.publish(new ObjectMapper().writeValueAsBytes(faulty));
+
+        await()
+                .during(1, TimeUnit.SECONDS)
+                .atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(() -> {
+                    assertFalse(targetMap.containsKey(corrId), "Faulty message should not be routed");
+                });
+    }
+
+    @TestConfiguration
+    static class LocalTestConfig {
+        @Bean(destroyMethod = "shutdown")
+        public HazelcastInstance hazelcastInstance() {
+            Config config = new Config();
+            config.setClusterName("test-cluster" + UUID.randomUUID());
+            config.getNetworkConfig().setPortAutoIncrement(true);
+            config.setProperty("hazelcast.logging.type", "slf4j");
+            return Hazelcast.newHazelcastInstance(config);
         }
     }
+}
 
-    /**
-     * Schedules the heartbeat task using the provided executor.
-     */
-    public void schedule(ScheduledExecutorService scheduler) {
-        long intervalSeconds = Math.max(1, ttlSeconds / 2); // refresh faster than TTL expiry
-        scheduler.scheduleAtFixedRate(this, 0, intervalSeconds, TimeUnit.SECONDS);
+
+------
+
+
+
+package osplus.pkptuna.hazelcast.test.config;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hazelcast.core.HazelcastInstance;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import osplus.apl.core.api.administration.metrics.MetricsService;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.config.FlowHandlerInitializer;
+import osplus.pkptuna.hazelcast.config.HazelcastFlowBootstrap;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.mockito.Mockito.mock;
+
+@TestConfiguration
+public class FlowHandlerTestConfiguration {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(FlowHandlerTestConfiguration.class);
+
+    @Bean
+    public FlowHandlerRegistry<String, FlowHandler> handlerRegistry() {
+        FlowHandlerRegistry<String, FlowHandler> registry = new FlowHandlerRegistry<>();
+        registry.register("myFlow", sampleFlowHandler());
+        return registry;
+    }
+
+    @Bean
+    public FlowHandlerInitializer flowHandlerInitializer(List<FlowConfig> configs,
+                                                         Map<String, FlowHandler> handlerMap,
+                                                         FlowHandlerRegistry<String, FlowHandler> registry,
+                                                         HazelcastFlowBootstrap bootstrap) {
+        return new FlowHandlerInitializer(configs, handlerMap, registry, bootstrap);
+    }
+
+    @Bean
+    public FlowConfig flowConfig() {
+        return new FlowConfig("myFlow",
+                "req-topic" + UUID.randomUUID(),
+                "res-topic" + UUID.randomUUID(),
+                "map-", 1);
+    }
+
+    @Bean
+    public List<FlowConfig> flowConfigs(FlowConfig flowConfig) {
+        return List.of(flowConfig);
+    }
+
+    @Bean
+    public Map<String, FlowHandler> handlerMap() {
+        return Map.of("myFlow", sampleFlowHandler());
+    }
+
+    @Bean
+    public FlowHandler sampleFlowHandler() {
+        return new FlowHandler<Object, Object>() {
+            private final ObjectMapper objectMapper = new ObjectMapper();
+
+            @Override
+            public Object deserializeRequest(byte[] data) {
+                try {
+                    return objectMapper.readValue(data, Map.class);
+                } catch (Exception e) {
+                    throw new RuntimeException("Deserialization failed", e);
+                }
+            }
+
+            @Override
+            public String extractCorrelationId(Object request) {
+                return "corr-" + request.hashCode();
+            }
+
+            @Override
+            public Object handleRequest(Object request) {
+                if ("faultyRequest".equals(request)) {
+                    throw new RuntimeException("Expected failure");
+                }
+                LOGGER.info("[TestHandler] Handling request:" + request);
+                return "response1";
+            }
+
+            @Override
+            public Object wrapResponse(String correlationId, Object result) {
+                return "wrappedResponse";
+            }
+
+            @Override
+            public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Object response) {
+                LOGGER.info("[TestHandler] Sending response to topic: "+ topicName + " | response:  " + response);
+                testCollector().recordSent(topicName, response);
+            }
+
+            @Override
+            public String getFlowName() {
+                return "myFlow";
+            }
+        };
+    }
+
+    @Bean
+    public HazelcastFlowBootstrap hazelcastFlowBootstrap(GenericHazelcastRouter router,
+                                                         GenericHazelcastConsumer consumer) {
+        return new HazelcastFlowBootstrap(router, consumer);
+    }
+
+    @Bean
+    public GenericHazelcastRouter hazelcastRouter(MetricsService metricsService,
+                                                  HazelcastInstance hazelcastInstance,
+                                                  List<FlowConfig> flowConfigs,
+                                                  FlowHandlerRegistry<String, FlowHandler> registry) {
+        return new GenericHazelcastRouter(metricsService, hazelcastInstance, flowConfigs, registry);
+    }
+
+    @Bean
+    public GenericHazelcastConsumer hazelcastConsumer(MetricsService metricsService,
+                                                      HazelcastInstance hazelcastInstance,
+                                                      List<FlowConfig> flowConfigs,
+                                                      FlowHandlerRegistry<String, FlowHandler> registry) {
+        return new GenericHazelcastConsumer(metricsService, hazelcastInstance, flowConfigs, registry);
+    }
+
+    @Bean("flowTaskScheduler")
+    public ThreadPoolTaskScheduler taskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(1);
+        scheduler.setThreadNamePrefix("hazelcast-scheduler-");
+        scheduler.initialize();
+        return scheduler;
+    }
+
+    @Bean
+    public TestCollector testCollector() {
+        return new TestCollector();
+    }
+
+    @Bean
+    @Primary
+    public MetricsService metricsService() {
+        return mock(MetricsService.class);
+    }
+
+    public static class TestCollector {
+        private final Map<String, Object> sentResponses = new HashMap<>();
+
+        public void recordSent(String topic, Object response) {
+            sentResponses.put(topic, response);
+        }
+
+        public Object getSent(String topic) {
+            return sentResponses.get(topic);
+        }
+
+        public boolean wasSent(String topic) {
+            return sentResponses.containsKey(topic);
+        }
+
+        public void clear() {
+            sentResponses.clear();
+        }
     }
 }
