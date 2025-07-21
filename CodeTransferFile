@@ -1,7 +1,56 @@
-IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
-    String currentLeader = leaderMap.get("active-router");
-    if (routerInstanceId.equals(currentLeader)) {
-        leaderMap.remove("active-router");
-        hazelcastInstance.getMap("router-heartbeat-map").remove("heartbeat");
-        LOGGER.info("Router {} removed itself from leader map during shutdown.", routerInstanceId);
+package osplus.pkptuna.hazelcast.pubsub;
+
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Periodically refreshes the leadership key and updates a separate heartbeat timestamp.
+ * Ensures this instance retains leadership as long as it is alive.
+ */
+public class RouterLeaderHeartbeat implements Runnable {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(RouterLeaderHeartbeat.class);
+    private static final String LEADER_KEY = "active-router";
+    private static final String HEARTBEAT_KEY = "heartbeat";
+
+    private final HazelcastInstance hazelcastInstance;
+    private final String routerInstanceId;
+    private final long ttlSeconds;
+
+    public RouterLeaderHeartbeat(HazelcastInstance hazelcastInstance, String routerInstanceId, long ttlSeconds) {
+        this.hazelcastInstance = hazelcastInstance;
+        this.routerInstanceId = routerInstanceId;
+        this.ttlSeconds = ttlSeconds;
     }
+
+    @Override
+    public void run() {
+        try {
+            IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
+            IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
+
+            // Refresh the leader key with TTL
+            leaderMap.put(LEADER_KEY, routerInstanceId, ttlSeconds, TimeUnit.SECONDS);
+
+            // Update heartbeat timestamp
+            heartbeatMap.put(HEARTBEAT_KEY, System.currentTimeMillis());
+
+            LOGGER.debug("Heartbeat refreshed by router ID={}", routerInstanceId);
+        } catch (Exception e) {
+            LOGGER.error("Failed to refresh leader heartbeat: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Schedules the heartbeat task using the provided executor.
+     */
+    public void schedule(ScheduledExecutorService scheduler) {
+        long intervalSeconds = Math.max(1, ttlSeconds / 2); // refresh faster than TTL expiry
+        scheduler.scheduleAtFixedRate(this, 0, intervalSeconds, TimeUnit.SECONDS);
+    }
+}
