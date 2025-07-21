@@ -1,39 +1,49 @@
-private volatile boolean isLeader = false;
-private void tryBecomeLeaderIfStale() {
-    if (isLeader) return; // No need to re-elect if we're already the leader
+package osplus.pkptuna.hazelcast.pubsub;
 
-    try {
-        IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
-        IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
 
-        String currentLeader = leaderMap.get("active-router");
-        Long lastHeartbeat = heartbeatMap.get("heartbeat");
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
 
-        boolean heartbeatStale = (lastHeartbeat == null || System.currentTimeMillis() - lastHeartbeat > 5000);
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
-        if (heartbeatStale) {
-            String previous = leaderMap.put("active-router", routerInstanceId);
+public class RouterLeaderHeartbeat implements Runnable {
 
-            if (previous == null || previous.equals(currentLeader)) {
-                LOGGER.info("This node is elected as the ACTIVE router (ID={})", routerInstanceId);
-                isLeader = true;
-                startHeartbeat();
-                subscribeToTopics();
-            } else {
-                LOGGER.info("Another node claimed leadership before us (ID={})", previous);
-                unsubscribeFromTopics();
-            }
-        } else {
-            LOGGER.info("Leadership exists and heartbeat is alive (Leader={}, LastBeat={})",
-                    currentLeader, lastHeartbeat);
-            unsubscribeFromTopics();
-        }
-    } catch (Exception e) {
-        LOGGER.error("Failed to check or claim leadership", e);
+    private static final Logger LOGGER = LoggerFactory.getLogger(RouterLeaderHeartbeat.class);
+    private final static String LEADER_KEY = "active-router";
+
+    private final IMap<String, String> leaderMap;
+    private final String routerInstanceId;
+
+    private final long ttlSeconds;
+
+    public RouterLeaderHeartbeat(
+            HazelcastInstance hazelcastInstance,
+            String routerInstanceId,
+            long ttlSeconds) {
+        this.leaderMap = hazelcastInstance.getMap("router-leader-map");
+        this.routerInstanceId = routerInstanceId;
+        this.ttlSeconds = ttlSeconds;
     }
-}
-public void shutdown() {
-    unsubscribeFromTopics();
-    scheduler.shutdownNow();
-    isLeader = false;
+
+    @Override
+    public void run() {
+        try {
+            // Update with TTL
+            leaderMap.put(LEADER_KEY, routerInstanceId, ttlSeconds, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            LOGGER.error("refresh leader entry: " + e.getMessage());
+        }
+    }
+
+    public void start() {
+        Executors.newSingleThreadScheduledExecutor().scheduleAtFixedRate(
+                this,
+                0,
+                ttlSeconds,
+                TimeUnit.MILLISECONDS
+        );
+    }
 }
