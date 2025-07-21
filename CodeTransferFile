@@ -1,70 +1,61 @@
 package osplus.pkptuna.util;
 
-import com.google.protobuf.Message;
-import com.google.protobuf.Parser;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.topic.ITopic;
-import osplus.fi.core.logging.api.Logger;
+import osplus.apl.core.api.AplComponent;
 
-import java.util.function.BiConsumer;
-import java.util.function.Function;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Utility class for registering generic Hazelcast listeners for Protobuf messages.
+ * Generischer Antwort-Tracker basierend auf Korrelations-IDs.
+ * Ermöglicht asynchrone Zuordnung von Antworten zu Anfragen in verteilten Systemen.
+ *
+ * @param <T> Typ der erwarteten Antwort
  */
-public class HazelcastListenerUtils {
+@AplComponent
+public class GenericResponseTracker<T> {
+
+    // Thread-sichere Map zur Speicherung aller laufenden Anfragen
+    private final Map<String, CompletableFuture<?>> pending = new ConcurrentHashMap<>();
 
     /**
-     * Registers a generic listener on a Hazelcast ReliableTopic to process Protobuf messages.
+     * Registriert eine neue erwartete Antwort anhand ihrer Korrelations-ID.
      *
-     * @param hazelcastInstance      Hazelcast client instance
-     * @param topicName              Topic to listen on
-     * @param parser                 Protobuf parser for deserialization
-     * @param correlationIdExtractor Function to extract correlation ID from message
-     * @param responseExtractor      Function to extract response payload from message
-     * @param responseConsumer       Consumer to pass the parsed response to
-     * @param logger                 Logger for diagnostics
-     * @param <W>                    Wrapper Protobuf message type
-     * @param <R>                    Response payload type
+     * @param correlationId Die eindeutige ID, die zur späteren Zuordnung der Antwort verwendet wird
+     * @param <T>           Der erwartete Typ der Antwort
      */
-    public static <W extends Message, R> void registerGenericResponseListener(
-            HazelcastInstance hazelcastInstance,
-            String topicName,
-            Parser<W> parser,
-            Function<W, String> correlationIdExtractor,
-            Function<W, R> responseExtractor,
-            BiConsumer<String, R> responseConsumer,
-            Logger logger
-    ) {
-        ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
+    public <T> void register(String correlationId) {
+        pending.put(correlationId, new CompletableFuture<T>());
+    }
 
-        topic.addMessageListener(message -> {
-            try {
-                byte[] messageBytes = message.getMessageObject();
-                W wrapper = parser.parseFrom(messageBytes);
+    /**
+     * Markiert eine Antwort als empfangen und löst das zugehörige Future aus.
+     *
+     * @param correlationId Die ID, mit der die Antwort zugeordnet wird
+     * @param response      Die empfangene Antwort vom Typ T
+     * @param <T>           Der Typ der Antwort
+     */
+    public <T> void complete(String correlationId, T response) {
+        @SuppressWarnings("unchecked")
+        CompletableFuture<T> future = (CompletableFuture<T>) pending.remove(correlationId);
+        if (future != null) {
+            future.complete(response);
+        }
+    }
 
-                String correlationId = correlationIdExtractor.apply(wrapper);
-                R response = responseExtractor.apply(wrapper);
-
-                if (correlationId == null || correlationId.isBlank()) {
-                    logger.warn("Received message on topic '{}' with missing or invalid correlation ID", topicName);
-                    return;
-                }
-
-                // Check whether the correlation ID is known before processing
-                boolean accepted = GenericResponseTracker.hasTrackerFor(correlationId);
-                if (!accepted) {
-                    logger.warn("Ignoring response with unknown correlationId='{}' on topic '{}'", correlationId, topicName);
-                    return;
-                }
-
-                responseConsumer.accept(correlationId, response);
-
-            } catch (Exception e) {
-                logger.error("Failure in processing response from Topic '{}'", topicName, e);
-            }
-        });
-
-        logger.info("Response listener registered on topic '{}'", topicName);
+    /**
+     * Gibt das Future-Objekt zurück, das auf die Antwort wartet.
+     *
+     * @param correlationId Die zugehörige Korrelations-ID
+     * @param <T>           Der erwartete Typ der Antwort
+     * @return              CompletableFuture, das bei Antwort abgeschlossen wird
+     */
+    @SuppressWarnings("unchecked")
+    public <T> CompletableFuture<T> await(String correlationId) {
+        return (CompletableFuture<T>) pending.get(correlationId);
+    }
+    
+    public static boolean hasTrackerFor(String correlationId) {
+        return instanceMap.containsKey(correlationId);
     }
 }
