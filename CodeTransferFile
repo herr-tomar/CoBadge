@@ -1,92 +1,75 @@
-@Test
-public void testMessageRoutedSuccessfully() throws Exception {
-    // Clear and re-init
-    leaderMap.clear();
-    heartbeatMap.clear();
-    routerMap.clear();
-    targetMap.clear();
-    testCollector.clear();
 
-    router.setRouterInstanceId(routerInstanceId);
-    router.initRouters();
+2025-07-21T19:18:23.376+02:00  WARN 39136 --- [uui] [           main] o.a.core.AplExtendedComponentValidation  : WARNUNG: Singleton Bean osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter enthält folgende Felder, die nicht 'final' deklariert sind: routerInstanceId, isLeader - bitte abändern.
+2025-07-21T19:18:23.476+02:00  INFO 39136 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastConsumer    : Registered EntryListener on IMap 'map-0'
+2025-07-21T19:18:23.491+02:00  INFO 39136 --- [uui] [           main] o.p.h.config.FlowHandlerInitializer      : List of FlowConfigs for registration :[FlowConfig[name=myFlow, requestTopic=req-topic94373a74-d890-4012-b567-caedcaac2a0f, responseTopic=res-topic69f4b2d4-faf9-453c-989f-5e9200c239bd, mapBase=map-, partitions=1]]
+2025-07-21T19:18:23.491+02:00  INFO 39136 --- [uui] [           main] o.p.h.config.FlowHandlerInitializer      : Map of Flowhandlers for registration{myFlow=osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration$1@2dad7323}
+2025-07-21T19:18:23.491+02:00  INFO 39136 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : [initRouters] Using routerInstanceId=8bf64d96-a295-4f7e-8d98-06710ec8ab0d
+2025-07-21T19:18:23.509+02:00  INFO 39136 --- [uui] [           main] c.h.i.p.impl.PartitionStateManager       : [16.160.188.219]:5701 [test-cluster0e8afbfd-c7b4-4512-a819-cebb25b7193b] [5.3.0] Initializing cluster partition table arrangement...
+2025-07-21T19:18:23.676+02:00  INFO 39136 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : This node is elected as the ACTIVE router (ID=8bf64d96-a295-4f7e-8d98-06710ec8ab0d)
+2025-07-21T19:18:23.678+02:00  INFO 39136 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Heartbeat started for router ID=8bf64d96-a295-4f7e-8d98-06710ec8ab0d
+2025-07-21T19:18:23.684+02:00  INFO 39136 --- [uui] [ebyshev.event-1] o.p.hazelcast.pubsub.LeaderMapListener   : Leader map entry added active-router VALUE 8bf64d96-a295-4f7e-8d98-06710ec8ab0d
+2025-07-21T19:18:23.694+02:00  INFO 39136 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : Listening on topic=req-topic94373a74-d890-4012-b567-caedcaac2a0f for flow=myFlow
+2025-07-21T19:18:24.922+02:00  WARN 39136 --- [uui] [           main] i.m.core.instrument.MeterRegistry        : This Gauge has been already registered (MeterId{name='utc.timediff', tags=[]}), the registration will be ignored. Note that subsequent logs will be logged at debug level.
+2025-07-21T19:18:25.513+02:00  INFO 39136 --- [uui] [           main] c.u.j.encryptor.DefaultLazyEncryptor     : String Encryptor custom Bean not found with name 'jasyptStringEncryptor'. Initializing Default String Encryptor
+2025-07-21T19:18:25.540+02:00  INFO 39136 --- [uui] [           main] c.u.j.c.StringEncryptorBuilder           : Encryptor config not found for property jasypt.encryptor.algorithm, using default value: PBEWITHHMACSHA512ANDAES_256
+2025-07-21T19:18:25.541+02:00  INFO 39136 --- [uui] [           main] c.u.j.c.StringEncryptorBuilder           : Encryptor config not found for property jasypt.encryptor.key-obtention-iterations, using default value: 1000
+2025-07-21T19:18:25.541+02:00  INFO 39136 --- [uui] [           main] c.u.j.c.StringEncryptorBuilder           : Encryptor config not found for property jasypt.encryptor.pool-size, using default value: 1
+2025-07-21T19:18:25.542+02:00  INFO 39136 --- [uui] [           main] c.u.j.c.StringEncryptorBuilder           : Encryptor config not found for property jasypt.encryptor.provider-name, using default value: null
+2025-07-21T19:18:25.542+02:00  INFO 39136 --- [uui] [           main] c.u.j.c.StringEncryptorBuilder           : Encryptor config not found for property jasypt.encryptor.provider-class-name, using default value: null
+2025-07-21T19:18:25.543+02:00  INFO 39136 --- [uui] [           main] c.u.j.c.StringEncryptorBuilder           : Encryptor config not found for property jasypt.encryptor.salt-generator-classname, using default value: org.jasypt.salt.RandomSaltGenerator
+2025-07-21T19:18:25.545+02:00  INFO 39136 --- [uui] [           main] c.u.j.c.StringEncryptorBuilder           : Encryptor config not found for property jasypt.encryptor.iv-generator-classname, using default value: org.jasypt.iv.RandomIvGenerator
+2025-07-21T19:18:25.546+02:00  INFO 39136 --- [uui] [           main] c.u.j.c.StringEncryptorBuilder           : Encryptor config not found for property jasypt.encryptor.string-output-type, using default value: base64
+2025-07-21T19:18:28.040+02:00  WARN 39136 --- [uui] [           main] .a.c.c.s.CorsConfigurerCustomizerFactory : Configuring restriction-less CORS Configuration for local development
+2025-07-21T19:18:28.056+02:00  WARN 39136 --- [uui] [           main] .a.c.c.s.CorsConfigurerCustomizerFactory : Configuring restriction-less CORS Configuration for local development
+2025-07-21T19:18:28.057+02:00  INFO 39136 --- [uui] [           main] o.a.c.a.AplCoreSecurityConfiguration     : anonymousPathList: [osplus.apl.uui.service.security.UuiAnonymousPaths@11088420, osplus.apl.autoconfigure.UniversalUiAutoConfiguration$1@6271a097]
+2025-07-21T19:18:28.150+02:00  INFO 39136 --- [uui] [           main] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2025-07-21T19:18:28.151+02:00  INFO 39136 --- [uui] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2025-07-21T19:18:28.153+02:00  INFO 39136 --- [uui] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 2 ms
+2025-07-21T19:18:28.242+02:00  INFO 39136 --- [uui] [           main] o.a.configuration.DynsAplConfiguration   : Activate DynsAplConfiguration with Ausfallmenge (EN02)
+20250721 19:18:28 DynSSystemConfiguration: ***###*** Start einer neuen Applikation ***###*** Framework Version 5.Y2  Java-Version: 21.0.3
+2025-07-21T19:18:28.270+02:00  INFO 39136 --- [uui] [           main] d.s.d.s.DynSSystemConfiguration          : ***###*** Start einer neuen Applikation ***###*** Framework Version 5.Y2  Java-Version: 21.0.3
+2025-07-21T19:18:28.271+02:00  INFO 39136 --- [uui] [           main] d.s.d.s.DynSSystemConfiguration          : DynSSystemConfigurationInitialisierung... Frameworkversion 5.Y2
+2025-07-21T19:18:28.273+02:00  INFO 39136 --- [uui] [           main] d.s.d.s.DynSSystemConfiguration          : Die System-Property sun.net.http.retryPost wurde auf false gesetzt, damit langlaufende POST-Requests im Fall eines Verbindungs-Abbruchs nicht erneut gesendet werden. Siehe dazu auch https://docs.oracle.com/javase/8/docs/technotes/guides/net/properties.html sowie https://bugs.java.com/bugdatabase/view_bug.do?bug_id=6382788
+2025-07-21T19:18:28.274+02:00  INFO 39136 --- [uui] [           main] d.s.d.s.DynSSystemConfiguration          : DynS-Properties werden gelesen aus: C:\Users\j769180\AppData\Local\Temp\dyns15806028957901127514
+20250721 19:18:28 DynSSystemConfiguration: C:\Users\j769180\AppData\Local\Temp\dyns15806028957901127514: Version null / null / null
+20250721 19:18:28 DynSSystemConfiguration: Das Laden der Systemkonfiguration erfolgte mit folgenden Werten:
+*** DynSSystemConfiguration ***
+*** Umgebung ***
++ UMG_ENV_INTERNET: false
++ UMG_ENV_TYPE: PROD
+*** Schema ***
++ transaktion: PMS3
++ programmContainerC: MDC24000
++ programmContainerJavaFdp: JPGMDY
++ programmContainerJavaOo: JPGMDY
++ cics-codepage: IBM273
+*** Defaults ***
++ evasion-duration: 1800000
++ evasion-no-switch-time: 0
++ CICS-heartbeat-timeout: 5000
++ langlaeufer-warnung: 30000
++ DatenTransport Java-Strg: DTT_FREE(???)
++ use-internal-WS-Pool: false
++ use-jca: false
++ max-anzahl-bfdp-ws-instanzen: 50
 
-    Thread.sleep(500); // Let router subscribe
-
-    // Wait for leadership
-    await().atMost(5, TimeUnit.SECONDS)
-           .pollInterval(100, TimeUnit.MILLISECONDS)
-           .until(() -> routerInstanceId.equals(leaderMap.get("active-router")));
-
-    // Prepare request
-    Map<String, Object> request = Map.of("key", "value");
-    String corrId = sampleFlowHandler.extractCorrelationId(request);
-
-    // Assert no pre-existing claim
-    assertFalse(routerMap.containsKey("route-lock-" + corrId));
-
-    topic.publish(new ObjectMapper().writeValueAsBytes(request));
-
-    await().atMost(5, TimeUnit.SECONDS)
-           .pollInterval(100, TimeUnit.MILLISECONDS)
-           .untilAsserted(() -> {
-               assertTrue(testCollector.wasSent(flowConfig.responseTopic()));
-               assertEquals("wrappedResponse", testCollector.getSent(flowConfig.responseTopic()));
-               assertTrue(targetMap.containsKey(corrId));
-           });
-}
-@Test
-public void testDuplicateMessageNotProcessed() throws Exception {
-    leaderMap.clear();
-    heartbeatMap.clear();
-    routerMap.clear();
-    targetMap.clear();
-    testCollector.clear();
-
-    router.setRouterInstanceId(routerInstanceId);
-    router.initRouters();
-
-    Thread.sleep(500); // Let router subscribe
-
-    Map<String, Object> requestMap = Map.of("dup", "check");
-    String corrId = sampleFlowHandler.extractCorrelationId(requestMap);
-    routerMap.put("route-lock-" + corrId, "existing"); // Simulate duplicate
-
-    topic.publish(new ObjectMapper().writeValueAsBytes(requestMap));
-
-    await().atMost(2, TimeUnit.SECONDS)
-           .untilAsserted(() -> assertFalse(targetMap.containsKey(corrId)));
-}
-@Test
-public void testRoutingHandlerThrowsException() throws Exception {
-    leaderMap.clear();
-    heartbeatMap.clear();
-    routerMap.clear();
-    targetMap.clear();
-    testCollector.clear();
-
-    router.setRouterInstanceId(routerInstanceId);
-    router.initRouters();
-
-    Thread.sleep(500); // Let router subscribe
-
-    Map<String, Object> faulty = Map.of("key", "faultyRequest"); // Triggers exception
-    String corrId = sampleFlowHandler.extractCorrelationId(faulty);
-
-    topic.publish(new ObjectMapper().writeValueAsBytes(faulty));
-
-    await().atMost(2, TimeUnit.SECONDS)
-           .untilAsserted(() -> assertFalse(targetMap.containsKey(corrId)));
-}
-
-@Override
-public String extractCorrelationId(Object request) {
-    Map<?, ?> map = (Map<?, ?>) request;
-    if (map.containsKey("key") && "faultyRequest".equals(map.get("key"))) {
-        return "corr-fault";
-    } else if (map.containsKey("key")) {
-        return "corr-key";
-    } else if (map.containsKey("dup")) {
-        return "corr-dup";
-    }
-    return "corr-" + request.hashCode();
-}
+2025-07-21T19:18:28.989+02:00  INFO 39136 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouterTest  : Started GenericHazelcastRouterTest in 16.933 seconds (process running for 18.222)
+2025-07-21T19:18:29.123+02:00  INFO 39136 --- [uui] [ebyshev.event-1] o.p.hazelcast.pubsub.LeaderMapListener   : Leader map entry added active-router VALUE test-router-instance
+2025-07-21T19:18:29.135+02:00  INFO 39136 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : [initRouters] Using routerInstanceId=test-router-instance
+2025-07-21T19:18:29.693+02:00  INFO 39136 --- [uui] [ebyshev.event-1] o.p.hazelcast.pubsub.LeaderMapListener   : Leader map entry added active-router VALUE 8bf64d96-a295-4f7e-8d98-06710ec8ab0d
+2025-07-21T19:18:29.693+02:00  INFO 39136 --- [uui] [ebyshev.event-1] o.p.hazelcast.pubsub.LeaderMapListener   : Leader map entry added active-router VALUE 8bf64d96-a295-4f7e-8d98-06710ec8ab0d
+2025-07-21T19:18:29.707+02:00  INFO 39136 --- [uui] [.async.thread-9] o.p.h.pubsub.GenericHazelcastRouter      : [onMessage] Debug instance id=60a48260-33f7-4d6a-a050-8a0e76b4baae, Router instance ID=test-router-instance, Current Leader Id =8bf64d96-a295-4f7e-8d98-06710ec8ab0d, Message Source=Member [16.160.188.219]:5701 - 403c513e-0e32-42dc-a442-279d1eb489bd this
+2025-07-21T19:18:29.707+02:00  INFO 39136 --- [uui] [.async.thread-9] o.p.h.pubsub.GenericHazelcastRouter      : Ignoring message as this router is not the current leader (ID=test-router-instance)
+2025-07-21T19:18:29.869+02:00  INFO 39136 --- [uui] [ebyshev.event-1] o.p.hazelcast.pubsub.LeaderMapListener   : Leader map entry added active-router VALUE test-router-instance
+2025-07-21T19:18:29.870+02:00  INFO 39136 --- [uui] [ebyshev.event-1] o.p.hazelcast.pubsub.LeaderMapListener   : Leader map entry added active-router VALUE test-router-instance
+2025-07-21T19:18:29.877+02:00  INFO 39136 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : [initRouters] Using routerInstanceId=test-router-instance
+2025-07-21T19:18:30.386+02:00  INFO 39136 --- [uui] [async.thread-18] o.p.h.pubsub.GenericHazelcastRouter      : [onMessage] Debug instance id=60a48260-33f7-4d6a-a050-8a0e76b4baae, Router instance ID=test-router-instance, Current Leader Id =null, Message Source=Member [16.160.188.219]:5701 - 403c513e-0e32-42dc-a442-279d1eb489bd this
+2025-07-21T19:18:30.386+02:00  INFO 39136 --- [uui] [async.thread-18] o.p.h.pubsub.GenericHazelcastRouter      : Ignoring message as this router is not the current leader (ID=test-router-instance)
+2025-07-21T19:18:30.513+02:00  INFO 39136 --- [uui] [ebyshev.event-1] o.p.hazelcast.pubsub.LeaderMapListener   : Leader map entry added active-router VALUE test-router-instance
+2025-07-21T19:18:30.513+02:00  INFO 39136 --- [uui] [ebyshev.event-1] o.p.hazelcast.pubsub.LeaderMapListener   : Leader map entry added active-router VALUE test-router-instance
+2025-07-21T19:18:30.513+02:00  INFO 39136 --- [uui] [ebyshev.event-1] o.p.hazelcast.pubsub.LeaderMapListener   : Leader map entry added active-router VALUE test-router-instance
+2025-07-21T19:18:30.518+02:00  INFO 39136 --- [uui] [           main] o.p.h.pubsub.GenericHazelcastRouter      : [initRouters] Using routerInstanceId=test-router-instance
+2025-07-21T19:18:31.684+02:00  INFO 39136 --- [uui] [ebyshev.event-1] o.p.hazelcast.pubsub.LeaderMapListener   : Leader map entry added active-router VALUE 8bf64d96-a295-4f7e-8d98-06710ec8ab0d
+2025-07-21T19:18:31.685+02:00  INFO 39136 --- [uui] [ebyshev.event-1] o.p.hazelcast.pubsub.LeaderMapListener   : Leader map entry added active-router VALUE 8bf64d96-a295-4f7e-8d98-06710ec8ab0d
+2025-07-21T19:18:31.685+02:00  INFO 39136 --- [uui] [ebyshev.event-1] o.p.hazelcast.pubsub.LeaderMapListener   : Leader map entry added active-router VALUE 8bf64d96-a295-4f7e-8d98-06710ec8ab0d
+2025-07-21T19:18:31.685+02:00  INFO 39136 --- [uui] [ebyshev.event-1] o.p.hazelcast.pubsub.LeaderMapListener   : Leader map entry added active-router VALUE 8bf64d96-a295-4f7e-8d98-06710ec8ab0d
