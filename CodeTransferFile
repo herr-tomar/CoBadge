@@ -1,205 +1,51 @@
-package osplus.pkptuna.service;
+public static <W extends Message, R> void registerGenericResponseListener(
+        HazelcastInstance hazelcastInstance,
+        String topicName,
+        Parser<W> parser,
+        Function<W, String> correlationIdExtractor,
+        Function<W, R> responseExtractor,
+        BiConsumer<String, R> responseConsumer,
+        Logger logger) {
 
-import com.google.protobuf.Message;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.topic.ITopic;
-import jakarta.annotation.PostConstruct;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import osplus.apl.core.api.AplComponent;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkptuna.api.ApiResponse;
-import osplus.pkptuna.configprops.HazelRelTopicConfigProps;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestMetadataDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseWrapperDto;
-import osplus.pkptuna.dispute.model.DisputeDetailRequestDto;
-import osplus.pkptuna.dispute.model.DisputeDetailRequestMetadataDto;
-import osplus.pkptuna.dispute.model.DisputeDetailRequestWrapperDto;
-import osplus.pkptuna.dispute.model.DisputeDetailResponseWrapperDto;
-import osplus.pkptuna.dispute.model.DisputeResponseDto;
-import osplus.pkptuna.rest.dispute.lookup.model.mapper.DisputeLookupResponseDtoMapper;
-import osplus.pkptuna.rest.dispute.model.mapper.DisputeResponseDtoMapper;
-import osplus.pkptuna.util.GenericResponseTracker;
-import osplus.pkptuna.util.HazelcastListenerUtils;
+    ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
 
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-
-@AplComponent
-public class DisputeOrcaService {
-    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeOrcaService.class);
-    public static final String DISPUTES_LOOKUP = "DISPUTES-LOOKUP";
-    public static final String DISPUTE_DETAIL_LOOKUP = "DISPUTE-DETAIL-LOOKUP";
-    public static final int EXECUTOR_THREAD_POOL_SIZE = 4;
-
-
-    private ExecutorService executorService = Executors.newFixedThreadPool(EXECUTOR_THREAD_POOL_SIZE);
-    private final HazelcastInstance hazelcastInstance;
-    private final DisputeLookupResponseDtoMapper disputeLookupResponseDtoMapper;
-    private final DisputeResponseDtoMapper disputeResponseDtoMapper;
-    private GenericResponseTracker<DisputeResponseDto> disputeDetailResponseTracker;
-    private GenericResponseTracker<osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto> disputeLookupResponseTracker;
-    private final HazelRelTopicConfigProps hazelRelTopicConfigProps;
-
-    public DisputeOrcaService(HazelcastInstance hazelcastInstance,
-                              DisputeLookupResponseDtoMapper disputeLookupResponseDtoMapper,
-                              DisputeResponseDtoMapper disputeResponseDtoMapper,
-                              GenericResponseTracker<DisputeResponseDto> disputeDetailResponseTracker,
-                              GenericResponseTracker<osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto> disputeLookupResponseTracker,
-                              HazelRelTopicConfigProps hazelRelTopicConfigProps) {
-        this.hazelcastInstance = hazelcastInstance;
-        this.disputeLookupResponseDtoMapper = disputeLookupResponseDtoMapper;
-        this.disputeResponseDtoMapper = disputeResponseDtoMapper;
-        this.disputeDetailResponseTracker = disputeDetailResponseTracker;
-        this.disputeLookupResponseTracker = disputeLookupResponseTracker;
-        this.hazelRelTopicConfigProps = hazelRelTopicConfigProps;
-    }
-
-    public ResponseEntity<ApiResponse<osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto>> lookupDisputeFolder(String issuerId, String cardReference) {
-        try {
-            String correlationId = UUID.randomUUID().toString();
-
-            DisputeLookupRequestMetadataDto metadataDto = DisputeLookupRequestMetadataDto.newBuilder()
-                    .setRequestChannel("APL-UI")
-                    .setMessageType("DISPUTE_LOOKUP")
-                    .setRequestedBy("UI-MANUAL-TEST")
-                    .setBusinessContext("test")
-                    .build();
-
-            DisputeLookupRequestDto request = DisputeLookupRequestDto.newBuilder()
-                    .setMetadata(metadataDto)
-                    .setIssuerId(issuerId)
-                    .setCardReference(cardReference)
-                    .build();
-
-            DisputeLookupRequestWrapperDto wrapper = DisputeLookupRequestWrapperDto.newBuilder()
-                    .setCorrelationId(correlationId)
-                    .setPayload(request)
-                    .build();
-
-            sendMessage(hazelRelTopicConfigProps.disputesLookupReq(),
-                    DISPUTES_LOOKUP, wrapper);
-
-            disputeLookupResponseTracker.register(correlationId);
-            CompletableFuture<DisputeLookupResponseDto> future = disputeLookupResponseTracker.await(correlationId);
-
-            DisputeLookupResponseDto protoResponse = future.get(5, TimeUnit.SECONDS);
-
-            osplus.pkptuna.rest.dispute.lookup.model.DisputeLookupResponseDto restResponse =
-                    disputeLookupResponseDtoMapper.toRestDto(protoResponse);
-
-            return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
-
-        } catch (TimeoutException te) {
-            return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
-                    .body(new ApiResponse<>("timeout", "No response in 5 seconds", null));
-
-        } catch (Exception e) {
-            LOGGER.error("Failed to process publishDisputesLookupRequest", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ApiResponse<>("error", "Internal server error", null));
-        }
-    }
-
-    public ResponseEntity<ApiResponse<osplus.pkptuna.rest.dispute.model.DisputeResponseDto>> publishDisputeDetailRequest(
-            String issuerId,
-            String disputeFolderReference,
-            String embed) {
-        try {
-
-            String correlationId = UUID.randomUUID().toString();
-
-            DisputeDetailRequestMetadataDto.Builder metaBuilder = DisputeDetailRequestMetadataDto.newBuilder()
-                    .setRequestChannel("APL-UI")
-                    .setMessageType("DISPUTE_FOLDER_DETAIL")
-                    .setRequestedBy("UI-MANUAL-TEST")
-                    .setBusinessContext("test");
-
-            if (embed != null && !embed.isBlank()) {
-                for (String val : embed.split("\\s*,\\s*")) {
-                    metaBuilder.addEmbed(val);
-                }
+    topic.addMessageListener(new ReliableMessageListener<>() {
+        @Override
+        public void onMessage(Message<byte[]> message) {
+            try {
+                W wrapper = parser.parseFrom(message.getMessageObject());
+                String correlationId = correlationIdExtractor.apply(wrapper);
+                R response = responseExtractor.apply(wrapper);
+                responseConsumer.accept(correlationId, response);
+            } catch (Exception e) {
+                logger.error("Error in listener for topic {}", topicName, e);
             }
-
-            DisputeDetailRequestDto request = DisputeDetailRequestDto.newBuilder()
-                    .setMetadata(metaBuilder.build())
-                    .setIssuerId(issuerId)
-                    .setDisputeFolderReference(disputeFolderReference)
-                    .build();
-
-            DisputeDetailRequestWrapperDto wrapper = DisputeDetailRequestWrapperDto.newBuilder()
-                    .setCorrelationId(correlationId)
-                    .setPayload(request)
-                    .build();
-
-            sendMessage(hazelRelTopicConfigProps.disputeDetailLookupReq(),
-                    DISPUTE_DETAIL_LOOKUP, wrapper);
-
-            disputeDetailResponseTracker.register(correlationId);
-            CompletableFuture<DisputeResponseDto> future = disputeDetailResponseTracker.await(correlationId);
-
-            DisputeResponseDto protoResponse = future.get(5, TimeUnit.SECONDS);
-            osplus.pkptuna.rest.dispute.model.DisputeResponseDto restResponse =
-                    disputeResponseDtoMapper.toRestDto(protoResponse);
-
-            return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
-
-        } catch (TimeoutException te) {
-            return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
-                    .body(new ApiResponse<>("timeout", "No response in 5 seconds", null));
-
-        } catch (Exception e) {
-            LOGGER.error("Failed to process publishDisputeDetailRequest", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ApiResponse<>("error", "Internal server error", null));
         }
-    }
 
-
-    /**
-     * Initialisiert nach dem Start der Bean die Listener für eingehende Antworten auf Hazelcast-Themen.
-     */
-    @PostConstruct
-    public void initResponseListeners() {
-        HazelcastListenerUtils.registerGenericResponseListener(
-                hazelcastInstance,
-                hazelRelTopicConfigProps.disputeDetailLookupRes(),
-                DisputeDetailResponseWrapperDto.parser(),
-                DisputeDetailResponseWrapperDto::getCorrelationId,
-                DisputeDetailResponseWrapperDto::getResponse,
-                disputeDetailResponseTracker::complete,
-                LOGGER,
-                executorService
-        );
-
-        HazelcastListenerUtils.registerGenericResponseListener(
-                hazelcastInstance,
-                hazelRelTopicConfigProps.disputesLookupRes(),
-                DisputeLookupResponseWrapperDto.parser(),
-                DisputeLookupResponseWrapperDto::getCorrelationId,
-                DisputeLookupResponseWrapperDto::getResponse,
-                disputeLookupResponseTracker::complete,
-                LOGGER,
-                executorService
-        );
-    }
-
-    private void sendMessage(String topicName, String traceCode, Message payload) {
-        try {
-            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
-            topic.publish(payload.toByteArray());
-            LOGGER.info("Published to topic [" + topicName + "] for trace " + traceCode);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to publish to topic " + topicName, e);
+        @Override
+        public long retrieveInitialSequence() {
+            return Ringbuffer.RETENTION_POLICY_TAIL; // skip historical messages
         }
-    }
 
+        @Override
+        public boolean isLossTolerant() {
+            return false;
+        }
+
+        @Override
+        public boolean isTerminal(Throwable failure) {
+            return false;
+        }
+
+        @Override
+        public void storeSequence(long sequence) {
+        }
+
+        @Override
+        public long getStoredSequence() {
+            return -1;
+        }
+    });
+
+    logger.info("Registered tail-only ReliableMessageListener on topic '{}'", topicName);
 }
