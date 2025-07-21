@@ -8,54 +8,55 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Generischer Antwort-Tracker basierend auf Korrelations-IDs.
- * Ermöglicht asynchrone Zuordnung von Antworten zu Anfragen in verteilten Systemen.
+ * Unterstützt die asynchrone Zuordnung von Antworten zu Anfragen in verteilten Systemen.
  *
  * @param <T> Typ der erwarteten Antwort
  */
 @AplComponent
 public class GenericResponseTracker<T> {
 
-    // Thread-sichere Map zur Speicherung aller laufenden Anfragen
-    private final Map<String, CompletableFuture<?>> pending = new ConcurrentHashMap<>();
+    // Thread-sichere Map, die Korrelations-IDs mit ausstehenden CompletableFutures verknüpft
+    private final Map<String, CompletableFuture<T>> pending = new ConcurrentHashMap<>();
 
     /**
-     * Registriert eine neue erwartete Antwort anhand ihrer Korrelations-ID.
+     * Registriert eine neue erwartete Antwort für eine gegebene Korrelations-ID.
      *
-     * @param correlationId Die eindeutige ID, die zur späteren Zuordnung der Antwort verwendet wird
-     * @param <T>           Der erwartete Typ der Antwort
+     * @param correlationId Die eindeutige ID zur Verfolgung der Antwort
      */
-    public <T> void register(String correlationId) {
-        pending.put(correlationId, new CompletableFuture<T>());
+    public void register(String correlationId) {
+        pending.put(correlationId, new CompletableFuture<>());
     }
 
     /**
-     * Markiert eine Antwort als empfangen und löst das zugehörige Future aus.
+     * Vervollständigt das Future mit der empfangenen Antwort.
      *
-     * @param correlationId Die ID, mit der die Antwort zugeordnet wird
-     * @param response      Die empfangene Antwort vom Typ T
-     * @param <T>           Der Typ der Antwort
+     * @param correlationId Die ID zur Identifikation der zugehörigen Anfrage
+     * @param response      Die Antwort, mit der das Future abgeschlossen wird
      */
-    public <T> void complete(String correlationId, T response) {
-        @SuppressWarnings("unchecked")
-        CompletableFuture<T> future = (CompletableFuture<T>) pending.remove(correlationId);
+    public void complete(String correlationId, T response) {
+        CompletableFuture<T> future = pending.remove(correlationId);
         if (future != null) {
             future.complete(response);
         }
     }
 
     /**
-     * Gibt das Future-Objekt zurück, das auf die Antwort wartet.
+     * Gibt das Future zurück, das auf die Antwort wartet.
      *
      * @param correlationId Die zugehörige Korrelations-ID
-     * @param <T>           Der erwartete Typ der Antwort
-     * @return              CompletableFuture, das bei Antwort abgeschlossen wird
+     * @return CompletableFuture, das bei Eintreffen der Antwort abgeschlossen wird
      */
-    @SuppressWarnings("unchecked")
-    public <T> CompletableFuture<T> await(String correlationId) {
-        return (CompletableFuture<T>) pending.get(correlationId);
+    public CompletableFuture<T> await(String correlationId) {
+        return pending.get(correlationId);
     }
-    
-    public static boolean hasTrackerFor(String correlationId) {
-        return instanceMap.containsKey(correlationId);
+
+    /**
+     * Prüft, ob für die angegebene Korrelations-ID bereits ein Tracker existiert.
+     *
+     * @param correlationId Die zu prüfende Korrelations-ID
+     * @return true, wenn ein Tracker registriert ist, sonst false
+     */
+    public boolean hasTrackerFor(String correlationId) {
+        return pending.containsKey(correlationId);
     }
 }
