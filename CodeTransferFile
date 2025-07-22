@@ -1,215 +1,351 @@
-package osplus.pkppuma.flows.handlers;
+package pkppuma.service;
 
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.topic.ITopic;
+import com.hazelcast.topic.MessageListener;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
-import osplus.pkppuma.card.lookup.model.*;
-import osplus.pkppuma.card.service.MappingService;
-import osplus.pkppuma.hazelcast.protobuf.impl.ProtobufDeserializer;
-import osplus.pkppuma.hazelcast.pubsub.ReliableTopicPublisher;
+import osplus.apl.core.test.utils.AplTestRunner;
+import osplus.apl.core.test.utils.BaseAplTest;
+import osplus.pkptuna.configprops.HazelRelTopicConfigProps;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
+import osplus.pkptuna.dispute.model.DisputeDetailRequestWrapperDto;
+import osplus.pkptuna.dispute.model.DisputeResponseDto;
+import osplus.pkptuna.rest.dispute.lookup.model.mapper.DisputeLookupResponseDtoMapper;
+import osplus.pkptuna.rest.dispute.model.mapper.DisputeResponseDtoMapper;
+import osplus.pkptuna.util.GenericResponseTracker;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import java.util.UUID;
+
+import static org.mockito.Mockito.mock;
 
 @SpringBootTest(classes = {
-        CardLookupByFriendFlowHandlerTest.TestConfig.class
+        AplTestRunner.class,
+        CardOrcaServiceTest.TestConfig.class
+}, properties = {
+        "hazelcast.topic.dispute-detail-lookup-req=DisputeDetailRequestReliableTopic",
+        "hazelcast.topic.dispute-detail-lookup-res=DisputeDetailResponseReliableTopic",
+        "hazelcast.topic.disputes-lookup-req=DisputeLookupRequestReliableTopic",
+        "hazelcast.topic.disputes-lookup-res=DisputeLookupResponseReliableTopic",
+        "apl.application.name=uui",
+        "apl.application.version=0.0.1-TEST"
 })
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class CardLookupByFriendFlowHandlerTest {
+class CardOrcaServiceTest extends BaseAplTest {
 
     @Autowired
-    private CardLookupByFriendFlowHandler handler;
+    private DisputeOrcaService disputeOrcaService;
 
     @Autowired
-    private MappingService mappingService;
+    private HazelcastInstance hazelcastInstance;
 
     @Autowired
-    private FriendDto friend;
+    private GenericResponseTracker<DisputeLookupResponseDto> disputeLookupResponseTracker;
 
     @Autowired
-    private CardDto card;
+    private GenericResponseTracker<DisputeResponseDto> disputeDetailResponseTracker;
 
     @Autowired
-    private CardLookupByFriendRequestWrapperDto requestWrapperDto;
+    private HazelRelTopicConfigProps hazelRelTopicConfigProps;
 
-    @Autowired
-    private CardLookupByFriendRequestDto requestDto;
+    private ITopic<byte[]> lookupTopic;
+    private ITopic<byte[]> detailTopic;
 
-    @Test
-    void shouldExtractCorrelationId() {
-        when(requestWrapperDto.getCorrelationId()).thenReturn("corr-id-123");
-        String result = handler.extractCorrelationId(requestWrapperDto);
-        assertEquals("corr-id-123", result);
+    @BeforeEach
+    void setupTopics() {
+        lookupTopic = hazelcastInstance.getReliableTopic(hazelRelTopicConfigProps.disputesLookupReq());
+        detailTopic = hazelcastInstance.getReliableTopic(hazelRelTopicConfigProps.disputeDetailLookupReq());
     }
 
     @Test
-    void shouldHandleRequestAndCallService() {
-        when(requestWrapperDto.getPayload()).thenReturn(requestDto);
-        when(requestDto.getFriend()).thenReturn(friend);
-        when(mappingService.findCardByFriend(friend)).thenReturn(card);
+    void lookupDisputeFolder_shouldSendAndReceiveRealProto() {
+        lookupTopic.addMessageListener((MessageListener<byte[]>) message -> {
+            try {
+                var req = DisputeLookupRequestWrapperDto.parseFrom(message.getMessageObject());
+                var res = DisputeLookupResponseDto.newBuilder()
+                        .setDisputeFolderExists(false)
+                        .build();
+                disputeLookupResponseTracker.complete(req.getCorrelationId(), res);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
 
-        CardLookupResponseDto result = handler.handleRequest(requestWrapperDto);
-        assertEquals(card, result.getCard());
+        var response = disputeOrcaService.lookupDisputeFolder("issuer-001", "card-abc");
+
+        assertEquals(200, response.getStatusCodeValue());
+        assertEquals("success", response.getBody().getStatus());
     }
 
     @Test
-    void shouldWrapResponseCorrectly() {
-        CardLookupResponseDto response = CardLookupResponseDto.newBuilder().setCard(card).build();
-        Object wrapped = handler.wrapResponse("corr-id-789", response);
+    void publishDisputeDetailRequest_shouldSendAndReceiveRealProto() {
+        detailTopic.addMessageListener((MessageListener<byte[]>) message -> {
+            try {
+                var req = DisputeDetailRequestWrapperDto.parseFrom(message.getMessageObject());
+                var res = DisputeResponseDto.newBuilder()
+                        .build();
+                disputeDetailResponseTracker.complete(req.getCorrelationId(), res);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
 
-        assertTrue(wrapped instanceof CardLookupByFriendResponseWrapperDto);
+        var response = disputeOrcaService.publishDisputeDetailRequest("issuer-002", "folder123", "events,documents");
 
-        var actual = (CardLookupByFriendResponseWrapperDto) wrapped;
-        assertEquals("corr-id-789", actual.getCorrelationId());
-        assertEquals(card, actual.getResponse().getCard());
+        assertEquals(200, response.getStatusCodeValue());
+        assertEquals("success", response.getBody().getStatus());
     }
 
     @TestConfiguration
+    @EnableConfigurationProperties(HazelRelTopicConfigProps.class)
     static class TestConfig {
 
-        @Bean
-        @Primary
-        public MappingService mappingService() {
-            return mock(MappingService.class);
+        @Bean(destroyMethod = "shutdown")
+        public HazelcastInstance hazelcastInstance() {
+            Config config = new Config();
+            config.setClusterName("test-cluster-" + UUID.randomUUID());
+            config.getNetworkConfig().setPortAutoIncrement(true);
+            config.setProperty("hazelcast.logging.type", "slf4j");
+            return Hazelcast.newHazelcastInstance(config);
         }
 
         @Bean
-        @Primary
-        public ReliableTopicPublisher reliableTopicPublisher() {
-            return mock(ReliableTopicPublisher.class);
+        public DisputeLookupResponseDtoMapper lookupMapper() {
+            return mock(DisputeLookupResponseDtoMapper.class);
         }
 
         @Bean
-        @Primary
-        public ProtobufDeserializer<CardLookupByFriendRequestWrapperDto> protobufDeserializer() {
-            return mock(ProtobufDeserializer.class);
+        public DisputeResponseDtoMapper detailMapper() {
+            return mock(DisputeResponseDtoMapper.class);
         }
 
         @Bean
-        public CardLookupByFriendFlowHandler handler(MappingService mappingService,
-                                                     ReliableTopicPublisher publisher,
-                                                     ProtobufDeserializer<CardLookupByFriendRequestWrapperDto> deserializer) {
-            return new CardLookupByFriendFlowHandler(mappingService, publisher, deserializer);
+        public GenericResponseTracker<DisputeLookupResponseDto> lookupResponseTracker() {
+            return new GenericResponseTracker<>();
         }
 
-        @Bean public CardLookupByFriendRequestWrapperDto requestWrapperDto() {
-            return mock(CardLookupByFriendRequestWrapperDto.class);
+        @Bean
+        public GenericResponseTracker<DisputeResponseDto> detailResponseTracker() {
+            return new GenericResponseTracker<>();
         }
 
-        @Bean public CardLookupByFriendRequestDto requestDto() {
-            return mock(CardLookupByFriendRequestDto.class);
-        }
-
-        @Bean public FriendDto friendDto() {
-            return mock(FriendDto.class);
-        }
-
-        @Bean public CardDto cardDto() {
-            return mock(CardDto.class);
-        }
-
-        @Bean public HazelcastInstance hazelcastInstance() {
-            return mock(HazelcastInstance.class);
+        @Bean
+        public DisputeOrcaService disputeOrcaService(
+                HazelcastInstance hazelcastInstance,
+                DisputeLookupResponseDtoMapper lookupMapper,
+                DisputeResponseDtoMapper detailMapper,
+                GenericResponseTracker<DisputeResponseDto> detailTracker,
+                GenericResponseTracker<DisputeLookupResponseDto> lookupTracker,
+                HazelRelTopicConfigProps props
+        ) {
+            return new DisputeOrcaService(
+                    hazelcastInstance,
+                    lookupMapper,
+                    detailMapper,
+                    detailTracker,
+                    lookupTracker,
+                    props
+            );
         }
     }
 }
 
 
-@SpringBootTest(classes = {
-        CardLookupByPanFlowHandlerTest.TestConfig.class
-})
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class CardLookupByPanFlowHandlerTest {
 
-    @Autowired
-    private CardLookupByPanFlowHandler handler;
+--------------------------
 
-    @Autowired private MappingService mappingService;
-    @Autowired private CardDto cardDto;
-    @Autowired private PanDto panDto;
-    @Autowired private CardLookupByPanRequestWrapperDto requestWrapperDto;
-    @Autowired private CardLookupByPanRequestDto requestDto;
 
-    @Test
-    void shouldExtractCorrelationId() {
-        when(requestWrapperDto.getCorrelationId()).thenReturn("pan-corr-456");
-        String result = handler.extractCorrelationId(requestWrapperDto);
-        assertEquals("pan-corr-456", result);
+package osplus.pkppuma.service;
+
+import com.google.protobuf.Message;
+import com.google.protobuf.util.JsonFormat;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.topic.ITopic;
+import jakarta.annotation.PostConstruct;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import osplus.apl.core.api.AplComponent;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkppuma.api.ApiResponse;
+import osplus.pkppuma.card.lookup.model.CardLookupByFriendRequestDto;
+import osplus.pkppuma.card.lookup.model.CardLookupByFriendRequestWrapperDto;
+import osplus.pkppuma.card.lookup.model.CardLookupByFriendResponseWrapperDto;
+import osplus.pkppuma.card.lookup.model.CardLookupByPanRequestDto;
+import osplus.pkppuma.card.lookup.model.CardLookupByPanRequestWrapperDto;
+import osplus.pkppuma.card.lookup.model.CardLookupByPanResponseWrapperDto;
+import osplus.pkppuma.card.lookup.model.CardLookupResponseDto;
+import osplus.pkppuma.card.lookup.model.FriendDto;
+import osplus.pkppuma.card.lookup.model.PanDto;
+import osplus.pkppuma.configprops.HazelRelTopicConfigProps;
+import osplus.pkppuma.rest.card.lookup.model.mapper.CardLookupResponseDtoMapper;
+import osplus.pkppuma.util.GenericResponseTracker;
+import osplus.pkppuma.util.HazelcastListenerUtils;
+
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
+@AplComponent
+public class CardOrcaService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(CardOrcaService.class);
+    public static final String CARD_LOOKUP_BY_PAN = "CARD_LOOKUP_BY_PAN";
+    public static final String CARD_LOOKUP_BY_FRIEND = "CARD_LOOKUP_BY_FRIEND";
+    public static final int EXECUTOR_THREAD_POOL_SIZE = 4;
+
+    private ExecutorService executorService = Executors.newFixedThreadPool(EXECUTOR_THREAD_POOL_SIZE);
+    private final HazelcastInstance hazelcastInstance;
+    private final GenericResponseTracker<CardLookupResponseDto> cardByPanResponseTracker;
+    private final GenericResponseTracker<CardLookupResponseDto> cardByFriendResponseTracker;
+    private final CardLookupResponseDtoMapper cardLookupResponseDtoMapper;
+    private final HazelRelTopicConfigProps hazelRelTopicConfigProps;
+
+    public CardOrcaService(HazelcastInstance hazelcastInstance,
+                           GenericResponseTracker<CardLookupResponseDto> cardByPanResponseTracker,
+                           GenericResponseTracker<CardLookupResponseDto> cardByFriendResponseTracker,
+                           CardLookupResponseDtoMapper cardLookupResponseDtoMapper,
+                           HazelRelTopicConfigProps hazelRelTopicConfigProps
+                           ) {
+        this.hazelcastInstance = hazelcastInstance;
+        this.cardByPanResponseTracker = cardByPanResponseTracker;
+        this.cardByFriendResponseTracker = cardByFriendResponseTracker;
+        this.cardLookupResponseDtoMapper = cardLookupResponseDtoMapper;
+        this.hazelRelTopicConfigProps = hazelRelTopicConfigProps;
     }
 
-    @Test
-    void shouldHandleRequestAndCallService() {
-        when(requestWrapperDto.getPayload()).thenReturn(requestDto);
-        when(requestDto.getPan()).thenReturn(panDto);
-        when(mappingService.findCardByPan(panDto)).thenReturn(cardDto);
+    public ResponseEntity<ApiResponse<osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto>> publishCardByPanRequest(String requestPayload) {
+        try {
+            String correlationId = UUID.randomUUID().toString();
 
-        CardLookupResponseDto result = handler.handleRequest(requestWrapperDto);
-        assertEquals(cardDto, result.getCard());
+            PanDto.Builder builder = PanDto.newBuilder();
+            JsonFormat.parser().ignoringUnknownFields().merge(requestPayload, builder);
+            PanDto panDto = builder.build();
+
+            CardLookupByPanRequestDto cardLookupByPanRequestDto = CardLookupByPanRequestDto.newBuilder().
+                    setPan(panDto).build();
+
+            CardLookupByPanRequestWrapperDto wrapper =
+                    CardLookupByPanRequestWrapperDto.newBuilder()
+                                    .setCorrelationId(correlationId)
+                                            .setPayload(cardLookupByPanRequestDto).build();
+
+
+            sendMessage(hazelRelTopicConfigProps.panToCardReq(),
+                    CARD_LOOKUP_BY_PAN, wrapper);
+
+            cardByPanResponseTracker.register(correlationId);
+
+            CompletableFuture<CardLookupResponseDto> future = cardByPanResponseTracker.await(correlationId);
+
+            CardLookupResponseDto protoResponse = future.get(5, TimeUnit.SECONDS);
+
+            osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto restResponse =
+                    cardLookupResponseDtoMapper.toRestDto(protoResponse);
+
+            return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
+
+        } catch (TimeoutException te) {
+            return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
+                    .body(new ApiResponse<>("timeout", "No response in 5 seconds", null));
+
+        } catch (Exception e) {
+            LOGGER.error("Failed to process publishCardByPanRequest", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ApiResponse<>("error", "Internal server error", null));
+        }
     }
 
-    @Test
-    void shouldWrapResponseCorrectly() {
-        CardLookupResponseDto response = CardLookupResponseDto.newBuilder().setCard(cardDto).build();
-        Object wrapped = handler.wrapResponse("corr-id-pan", response);
+    public ResponseEntity<ApiResponse<osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto>> publishCardByFriendRequest(String requestPayload) {
+        try {
+            String correlationId = UUID.randomUUID().toString();
 
-        assertTrue(wrapped instanceof CardLookupByPanResponseWrapperDto);
+            FriendDto.Builder builder = FriendDto.newBuilder();
+            JsonFormat.parser().ignoringUnknownFields().merge(requestPayload, builder);
+            FriendDto friendDto = builder.build();
 
-        var actual = (CardLookupByPanResponseWrapperDto) wrapped;
-        assertEquals("corr-id-pan", actual.getCorrelationId());
-        assertEquals(cardDto, actual.getResponse().getCard());
+            CardLookupByFriendRequestDto cardLookupByFriendRequestDto = CardLookupByFriendRequestDto.newBuilder().
+                    setFriend(friendDto).build();
+
+            CardLookupByFriendRequestWrapperDto wrapper =
+                    CardLookupByFriendRequestWrapperDto.newBuilder()
+                            .setCorrelationId(correlationId)
+                            .setPayload(cardLookupByFriendRequestDto).build();
+
+
+            sendMessage(hazelRelTopicConfigProps.friendToCardReq(),
+                    CARD_LOOKUP_BY_FRIEND, wrapper);
+
+            cardByFriendResponseTracker.register(correlationId);
+
+            CompletableFuture<CardLookupResponseDto> future = cardByFriendResponseTracker.await(correlationId);
+
+            CardLookupResponseDto protoResponse = future.get(5, TimeUnit.SECONDS);
+
+            osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto restResponse =
+                    cardLookupResponseDtoMapper.toRestDto(protoResponse);
+
+            return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
+
+        } catch (TimeoutException te) {
+            return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
+                    .body(new ApiResponse<>("timeout", "No response in 5 seconds", null));
+
+        } catch (Exception e) {
+            LOGGER.error("Failed to process publishCardByFriendRequest", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ApiResponse<>("error", "Internal server error", null));
+        }
     }
 
-    @TestConfiguration
-    static class TestConfig {
 
-        @Bean
-        @Primary
-        public MappingService mappingService() {
-            return mock(MappingService.class);
-        }
+    /**
+     * Initialisiert nach dem Start der Bean die Listener für eingehende Antworten auf Hazelcast-Themen.
+     */
+    @PostConstruct
+    public void initResponseListeners() {
+        HazelcastListenerUtils.registerGenericResponseListener(
+                hazelcastInstance,
+                hazelRelTopicConfigProps.panToCardRes(),
+                CardLookupByPanResponseWrapperDto.parser(),
+                CardLookupByPanResponseWrapperDto::getCorrelationId,
+                CardLookupByPanResponseWrapperDto::getResponse,
+                cardByPanResponseTracker::complete,
+                LOGGER,
+                executorService
+        );
 
-        @Bean
-        @Primary
-        public ReliableTopicPublisher reliableTopicPublisher() {
-            return mock(ReliableTopicPublisher.class);
-        }
+        HazelcastListenerUtils.registerGenericResponseListener(
+                hazelcastInstance,
+                hazelRelTopicConfigProps.friendToCardRes(),
+                CardLookupByFriendResponseWrapperDto.parser(),
+                CardLookupByFriendResponseWrapperDto::getCorrelationId,
+                CardLookupByFriendResponseWrapperDto::getResponse,
+                cardByFriendResponseTracker::complete,
+                LOGGER,
+                executorService
+        );
+    }
 
-        @Bean
-        @Primary
-        public ProtobufDeserializer<CardLookupByPanRequestWrapperDto> protobufDeserializer() {
-            return mock(ProtobufDeserializer.class);
-        }
 
-        @Bean
-        public CardLookupByPanFlowHandler handler(MappingService mappingService,
-                                                  ReliableTopicPublisher publisher,
-                                                  ProtobufDeserializer<CardLookupByPanRequestWrapperDto> deserializer) {
-            return new CardLookupByPanFlowHandler(mappingService, publisher, deserializer);
-        }
-
-        @Bean public CardLookupByPanRequestWrapperDto requestWrapperDto() {
-            return mock(CardLookupByPanRequestWrapperDto.class);
-        }
-
-        @Bean public CardLookupByPanRequestDto requestDto() {
-            return mock(CardLookupByPanRequestDto.class);
-        }
-
-        @Bean public PanDto panDto() {
-            return mock(PanDto.class);
-        }
-
-        @Bean public CardDto cardDto() {
-            return mock(CardDto.class);
-        }
-
-        @Bean public HazelcastInstance hazelcastInstance() {
-            return mock(HazelcastInstance.class);
+    private void sendMessage(String topicName, String traceCode, Message payload) {
+        try {
+            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
+            topic.publish(payload.toByteArray());
+            LOGGER.info("Published to topic [" + topicName + "] for trace " + traceCode);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to publish to topic " + topicName, e);
         }
     }
 }
