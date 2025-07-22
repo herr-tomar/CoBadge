@@ -15,94 +15,109 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import osplus.apl.core.test.utils.AplTestRunner;
 import osplus.apl.core.test.utils.BaseAplTest;
-import osplus.pkptuna.configprops.HazelRelTopicConfigProps;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
-import osplus.pkptuna.dispute.model.DisputeDetailRequestWrapperDto;
-import osplus.pkptuna.dispute.model.DisputeResponseDto;
-import osplus.pkptuna.rest.dispute.lookup.model.mapper.DisputeLookupResponseDtoMapper;
-import osplus.pkptuna.rest.dispute.model.mapper.DisputeResponseDtoMapper;
-import osplus.pkptuna.util.GenericResponseTracker;
+import osplus.pkppuma.card.lookup.model.*;
+import osplus.pkppuma.configprops.HazelRelTopicConfigProps;
+import osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto;
+import osplus.pkppuma.rest.card.lookup.model.mapper.CardLookupResponseDtoMapper;
+import osplus.pkppuma.util.GenericResponseTracker;
 
 import java.util.UUID;
 
-import static org.mockito.Mockito.mock;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.*;
 
 @SpringBootTest(classes = {
         AplTestRunner.class,
         CardOrcaServiceTest.TestConfig.class
 }, properties = {
-        "hazelcast.topic.dispute-detail-lookup-req=DisputeDetailRequestReliableTopic",
-        "hazelcast.topic.dispute-detail-lookup-res=DisputeDetailResponseReliableTopic",
-        "hazelcast.topic.disputes-lookup-req=DisputeLookupRequestReliableTopic",
-        "hazelcast.topic.disputes-lookup-res=DisputeLookupResponseReliableTopic",
+        "hazelcast.topic.pan-to-card-req=PanToCardReqTopic",
+        "hazelcast.topic.pan-to-card-res=PanToCardResTopic",
+        "hazelcast.topic.friend-to-card-req=FriendToCardReqTopic",
+        "hazelcast.topic.friend-to-card-res=FriendToCardResTopic",
         "apl.application.name=uui",
         "apl.application.version=0.0.1-TEST"
 })
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CardOrcaServiceTest extends BaseAplTest {
 
-    @Autowired
-    private DisputeOrcaService disputeOrcaService;
+    @Autowired private CardOrcaService cardOrcaService;
+    @Autowired private HazelcastInstance hazelcastInstance;
+    @Autowired private GenericResponseTracker<CardLookupByPanResponseWrapperDto> panTracker;
+    @Autowired private GenericResponseTracker<CardLookupByFriendResponseWrapperDto> friendTracker;
+    @Autowired private HazelRelTopicConfigProps topicProps;
 
-    @Autowired
-    private HazelcastInstance hazelcastInstance;
-
-    @Autowired
-    private GenericResponseTracker<DisputeLookupResponseDto> disputeLookupResponseTracker;
-
-    @Autowired
-    private GenericResponseTracker<DisputeResponseDto> disputeDetailResponseTracker;
-
-    @Autowired
-    private HazelRelTopicConfigProps hazelRelTopicConfigProps;
-
-    private ITopic<byte[]> lookupTopic;
-    private ITopic<byte[]> detailTopic;
+    private ITopic<byte[]> panTopic;
+    private ITopic<byte[]> friendTopic;
 
     @BeforeEach
     void setupTopics() {
-        lookupTopic = hazelcastInstance.getReliableTopic(hazelRelTopicConfigProps.disputesLookupReq());
-        detailTopic = hazelcastInstance.getReliableTopic(hazelRelTopicConfigProps.disputeDetailLookupReq());
+        panTopic = hazelcastInstance.getReliableTopic(topicProps.panToCardReq());
+        friendTopic = hazelcastInstance.getReliableTopic(topicProps.friendToCardReq());
     }
 
     @Test
-    void lookupDisputeFolder_shouldSendAndReceiveRealProto() {
-        lookupTopic.addMessageListener((MessageListener<byte[]>) message -> {
+    void shouldProcessPanRequestAndSendResponse() {
+        panTopic.addMessageListener((MessageListener<byte[]>) message -> {
             try {
-                var req = DisputeLookupRequestWrapperDto.parseFrom(message.getMessageObject());
-                var res = DisputeLookupResponseDto.newBuilder()
-                        .setDisputeFolderExists(false)
+                var req = CardLookupByPanRequestWrapperDto.parseFrom(message.getMessageObject());
+                var card = CardDto.newBuilder().setCardNumber("9999").build();
+                var response = CardLookupResponseDto.newBuilder().setCard(card).build();
+                var wrapped = CardLookupByPanResponseWrapperDto.newBuilder()
+                        .setCorrelationId(req.getCorrelationId())
+                        .setResponse(response)
                         .build();
-                disputeLookupResponseTracker.complete(req.getCorrelationId(), res);
+                panTracker.complete(req.getCorrelationId(), wrapped);
             } catch (Exception e) {
-                throw new RuntimeException(e);
+                throw new RuntimeException("PAN listener failed", e);
             }
         });
 
-        var response = disputeOrcaService.lookupDisputeFolder("issuer-001", "card-abc");
+        String requestJson = """
+            {
+              "pan": {
+                "cardNumber": "9999"
+              }
+            }
+            """;
+
+        var response = cardOrcaService.publishCardByPanRequest(requestJson);
 
         assertEquals(200, response.getStatusCodeValue());
         assertEquals("success", response.getBody().getStatus());
+        assertEquals("9999", response.getBody().getData().getCard().getCardNumber());
     }
 
     @Test
-    void publishDisputeDetailRequest_shouldSendAndReceiveRealProto() {
-        detailTopic.addMessageListener((MessageListener<byte[]>) message -> {
+    void shouldProcessFriendRequestAndSendResponse() {
+        friendTopic.addMessageListener((MessageListener<byte[]>) message -> {
             try {
-                var req = DisputeDetailRequestWrapperDto.parseFrom(message.getMessageObject());
-                var res = DisputeResponseDto.newBuilder()
+                var req = CardLookupByFriendRequestWrapperDto.parseFrom(message.getMessageObject());
+                var card = CardDto.newBuilder().setCardNumber("1234").build();
+                var response = CardLookupResponseDto.newBuilder().setCard(card).build();
+                var wrapped = CardLookupByFriendResponseWrapperDto.newBuilder()
+                        .setCorrelationId(req.getCorrelationId())
+                        .setResponse(response)
                         .build();
-                disputeDetailResponseTracker.complete(req.getCorrelationId(), res);
+                friendTracker.complete(req.getCorrelationId(), wrapped);
             } catch (Exception e) {
-                throw new RuntimeException(e);
+                throw new RuntimeException("Friend listener failed", e);
             }
         });
 
-        var response = disputeOrcaService.publishDisputeDetailRequest("issuer-002", "folder123", "events,documents");
+        String requestJson = """
+            {
+              "friend": {
+                "firstName": "Alice",
+                "lastName": "Smith"
+              }
+            }
+            """;
+
+        var response = cardOrcaService.publishCardByFriendRequest(requestJson);
 
         assertEquals(200, response.getStatusCodeValue());
         assertEquals("success", response.getBody().getStatus());
+        assertEquals("1234", response.getBody().getData().getCard().getCardNumber());
     }
 
     @TestConfiguration
@@ -119,233 +134,32 @@ class CardOrcaServiceTest extends BaseAplTest {
         }
 
         @Bean
-        public DisputeLookupResponseDtoMapper lookupMapper() {
-            return mock(DisputeLookupResponseDtoMapper.class);
+        public CardLookupResponseDtoMapper responseMapper() {
+            // Simple passthrough for test
+            return proto -> CardLookupResponseDto.newBuilder()
+                    .setCard(proto.getCard())
+                    .build();
         }
 
         @Bean
-        public DisputeResponseDtoMapper detailMapper() {
-            return mock(DisputeResponseDtoMapper.class);
-        }
-
-        @Bean
-        public GenericResponseTracker<DisputeLookupResponseDto> lookupResponseTracker() {
+        public GenericResponseTracker<CardLookupByPanResponseWrapperDto> panResponseTracker() {
             return new GenericResponseTracker<>();
         }
 
         @Bean
-        public GenericResponseTracker<DisputeResponseDto> detailResponseTracker() {
+        public GenericResponseTracker<CardLookupByFriendResponseWrapperDto> friendResponseTracker() {
             return new GenericResponseTracker<>();
         }
 
         @Bean
-        public DisputeOrcaService disputeOrcaService(
+        public CardOrcaService cardOrcaService(
                 HazelcastInstance hazelcastInstance,
-                DisputeLookupResponseDtoMapper lookupMapper,
-                DisputeResponseDtoMapper detailMapper,
-                GenericResponseTracker<DisputeResponseDto> detailTracker,
-                GenericResponseTracker<DisputeLookupResponseDto> lookupTracker,
+                GenericResponseTracker<CardLookupByPanResponseWrapperDto> panTracker,
+                GenericResponseTracker<CardLookupByFriendResponseWrapperDto> friendTracker,
+                CardLookupResponseDtoMapper mapper,
                 HazelRelTopicConfigProps props
         ) {
-            return new DisputeOrcaService(
-                    hazelcastInstance,
-                    lookupMapper,
-                    detailMapper,
-                    detailTracker,
-                    lookupTracker,
-                    props
-            );
-        }
-    }
-}
-
-
-
---------------------------
-
-
-package osplus.pkppuma.service;
-
-import com.google.protobuf.Message;
-import com.google.protobuf.util.JsonFormat;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.topic.ITopic;
-import jakarta.annotation.PostConstruct;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import osplus.apl.core.api.AplComponent;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkppuma.api.ApiResponse;
-import osplus.pkppuma.card.lookup.model.CardLookupByFriendRequestDto;
-import osplus.pkppuma.card.lookup.model.CardLookupByFriendRequestWrapperDto;
-import osplus.pkppuma.card.lookup.model.CardLookupByFriendResponseWrapperDto;
-import osplus.pkppuma.card.lookup.model.CardLookupByPanRequestDto;
-import osplus.pkppuma.card.lookup.model.CardLookupByPanRequestWrapperDto;
-import osplus.pkppuma.card.lookup.model.CardLookupByPanResponseWrapperDto;
-import osplus.pkppuma.card.lookup.model.CardLookupResponseDto;
-import osplus.pkppuma.card.lookup.model.FriendDto;
-import osplus.pkppuma.card.lookup.model.PanDto;
-import osplus.pkppuma.configprops.HazelRelTopicConfigProps;
-import osplus.pkppuma.rest.card.lookup.model.mapper.CardLookupResponseDtoMapper;
-import osplus.pkppuma.util.GenericResponseTracker;
-import osplus.pkppuma.util.HazelcastListenerUtils;
-
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-
-@AplComponent
-public class CardOrcaService {
-    private static final Logger LOGGER = LoggerFactory.getLogger(CardOrcaService.class);
-    public static final String CARD_LOOKUP_BY_PAN = "CARD_LOOKUP_BY_PAN";
-    public static final String CARD_LOOKUP_BY_FRIEND = "CARD_LOOKUP_BY_FRIEND";
-    public static final int EXECUTOR_THREAD_POOL_SIZE = 4;
-
-    private ExecutorService executorService = Executors.newFixedThreadPool(EXECUTOR_THREAD_POOL_SIZE);
-    private final HazelcastInstance hazelcastInstance;
-    private final GenericResponseTracker<CardLookupResponseDto> cardByPanResponseTracker;
-    private final GenericResponseTracker<CardLookupResponseDto> cardByFriendResponseTracker;
-    private final CardLookupResponseDtoMapper cardLookupResponseDtoMapper;
-    private final HazelRelTopicConfigProps hazelRelTopicConfigProps;
-
-    public CardOrcaService(HazelcastInstance hazelcastInstance,
-                           GenericResponseTracker<CardLookupResponseDto> cardByPanResponseTracker,
-                           GenericResponseTracker<CardLookupResponseDto> cardByFriendResponseTracker,
-                           CardLookupResponseDtoMapper cardLookupResponseDtoMapper,
-                           HazelRelTopicConfigProps hazelRelTopicConfigProps
-                           ) {
-        this.hazelcastInstance = hazelcastInstance;
-        this.cardByPanResponseTracker = cardByPanResponseTracker;
-        this.cardByFriendResponseTracker = cardByFriendResponseTracker;
-        this.cardLookupResponseDtoMapper = cardLookupResponseDtoMapper;
-        this.hazelRelTopicConfigProps = hazelRelTopicConfigProps;
-    }
-
-    public ResponseEntity<ApiResponse<osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto>> publishCardByPanRequest(String requestPayload) {
-        try {
-            String correlationId = UUID.randomUUID().toString();
-
-            PanDto.Builder builder = PanDto.newBuilder();
-            JsonFormat.parser().ignoringUnknownFields().merge(requestPayload, builder);
-            PanDto panDto = builder.build();
-
-            CardLookupByPanRequestDto cardLookupByPanRequestDto = CardLookupByPanRequestDto.newBuilder().
-                    setPan(panDto).build();
-
-            CardLookupByPanRequestWrapperDto wrapper =
-                    CardLookupByPanRequestWrapperDto.newBuilder()
-                                    .setCorrelationId(correlationId)
-                                            .setPayload(cardLookupByPanRequestDto).build();
-
-
-            sendMessage(hazelRelTopicConfigProps.panToCardReq(),
-                    CARD_LOOKUP_BY_PAN, wrapper);
-
-            cardByPanResponseTracker.register(correlationId);
-
-            CompletableFuture<CardLookupResponseDto> future = cardByPanResponseTracker.await(correlationId);
-
-            CardLookupResponseDto protoResponse = future.get(5, TimeUnit.SECONDS);
-
-            osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto restResponse =
-                    cardLookupResponseDtoMapper.toRestDto(protoResponse);
-
-            return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
-
-        } catch (TimeoutException te) {
-            return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
-                    .body(new ApiResponse<>("timeout", "No response in 5 seconds", null));
-
-        } catch (Exception e) {
-            LOGGER.error("Failed to process publishCardByPanRequest", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ApiResponse<>("error", "Internal server error", null));
-        }
-    }
-
-    public ResponseEntity<ApiResponse<osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto>> publishCardByFriendRequest(String requestPayload) {
-        try {
-            String correlationId = UUID.randomUUID().toString();
-
-            FriendDto.Builder builder = FriendDto.newBuilder();
-            JsonFormat.parser().ignoringUnknownFields().merge(requestPayload, builder);
-            FriendDto friendDto = builder.build();
-
-            CardLookupByFriendRequestDto cardLookupByFriendRequestDto = CardLookupByFriendRequestDto.newBuilder().
-                    setFriend(friendDto).build();
-
-            CardLookupByFriendRequestWrapperDto wrapper =
-                    CardLookupByFriendRequestWrapperDto.newBuilder()
-                            .setCorrelationId(correlationId)
-                            .setPayload(cardLookupByFriendRequestDto).build();
-
-
-            sendMessage(hazelRelTopicConfigProps.friendToCardReq(),
-                    CARD_LOOKUP_BY_FRIEND, wrapper);
-
-            cardByFriendResponseTracker.register(correlationId);
-
-            CompletableFuture<CardLookupResponseDto> future = cardByFriendResponseTracker.await(correlationId);
-
-            CardLookupResponseDto protoResponse = future.get(5, TimeUnit.SECONDS);
-
-            osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto restResponse =
-                    cardLookupResponseDtoMapper.toRestDto(protoResponse);
-
-            return ResponseEntity.ok(new ApiResponse<>("success", null, restResponse));
-
-        } catch (TimeoutException te) {
-            return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
-                    .body(new ApiResponse<>("timeout", "No response in 5 seconds", null));
-
-        } catch (Exception e) {
-            LOGGER.error("Failed to process publishCardByFriendRequest", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ApiResponse<>("error", "Internal server error", null));
-        }
-    }
-
-
-    /**
-     * Initialisiert nach dem Start der Bean die Listener für eingehende Antworten auf Hazelcast-Themen.
-     */
-    @PostConstruct
-    public void initResponseListeners() {
-        HazelcastListenerUtils.registerGenericResponseListener(
-                hazelcastInstance,
-                hazelRelTopicConfigProps.panToCardRes(),
-                CardLookupByPanResponseWrapperDto.parser(),
-                CardLookupByPanResponseWrapperDto::getCorrelationId,
-                CardLookupByPanResponseWrapperDto::getResponse,
-                cardByPanResponseTracker::complete,
-                LOGGER,
-                executorService
-        );
-
-        HazelcastListenerUtils.registerGenericResponseListener(
-                hazelcastInstance,
-                hazelRelTopicConfigProps.friendToCardRes(),
-                CardLookupByFriendResponseWrapperDto.parser(),
-                CardLookupByFriendResponseWrapperDto::getCorrelationId,
-                CardLookupByFriendResponseWrapperDto::getResponse,
-                cardByFriendResponseTracker::complete,
-                LOGGER,
-                executorService
-        );
-    }
-
-
-    private void sendMessage(String topicName, String traceCode, Message payload) {
-        try {
-            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
-            topic.publish(payload.toByteArray());
-            LOGGER.info("Published to topic [" + topicName + "] for trace " + traceCode);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to publish to topic " + topicName, e);
+            return new CardOrcaService(hazelcastInstance, panTracker, friendTracker, mapper, props);
         }
     }
 }
