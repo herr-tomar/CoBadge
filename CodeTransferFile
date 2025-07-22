@@ -1,165 +1,50 @@
-package pkppuma.service;
+ich habe mir das Ticket sowie den bisherigen Umsetzungsvorschlag durchgesehen.
+Die Idee zur technischen Realisierung finde ich grundsätzlich gut und nachvollziehbar.
+Allerdings wirkt für mich die ursprüngliche Anforderung noch nicht klar genug definiert, und entsprechend erscheint mir auch die architektonische Lösung aktuell noch unvollständig.
 
-import com.hazelcast.config.Config;
-import com.hazelcast.core.Hazelcast;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.topic.ITopic;
-import com.hazelcast.topic.MessageListener;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import osplus.apl.core.test.utils.AplTestRunner;
-import osplus.apl.core.test.utils.BaseAplTest;
-import osplus.pkppuma.card.lookup.model.*;
-import osplus.pkppuma.configprops.HazelRelTopicConfigProps;
-import osplus.pkppuma.rest.card.lookup.model.CardLookupResponseDto;
-import osplus.pkppuma.rest.card.lookup.model.mapper.CardLookupResponseDtoMapper;
-import osplus.pkppuma.util.GenericResponseTracker;
+Deshalb würde ich gerne mein Verständnis davon, was unter einem "Feature" und unter "Feature-Isolation" zu verstehen ist, mit euch teilen – mit dem Ziel, die Anforderungen gemeinsam zu schärfen und eine fundierte Diskussionsbasis für die weitere Architekturentwicklung zu schaffen.
 
-import java.util.UUID;
+Was bedeutet "Feature" aus meiner Sicht?
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.*;
+Ein Feature ist für mich nicht einfach ein technischer Endpunkt oder ein einzelner Microservice, sondern eine geschäftliche Fähigkeit, die typischerweise durch eine Kombination aus:
 
-@SpringBootTest(classes = {
-        AplTestRunner.class,
-        CardOrcaServiceTest.TestConfig.class
-}, properties = {
-        "hazelcast.topic.pan-to-card-req=PanToCardReqTopic",
-        "hazelcast.topic.pan-to-card-res=PanToCardResTopic",
-        "hazelcast.topic.friend-to-card-req=FriendToCardReqTopic",
-        "hazelcast.topic.friend-to-card-res=FriendToCardResTopic",
-        "apl.application.name=uui",
-        "apl.application.version=0.0.1-TEST"
-})
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class CardOrcaServiceTest extends BaseAplTest {
+    mehreren technischen Endpunkten (z. B. in Orca),
 
-    @Autowired private CardOrcaService cardOrcaService;
-    @Autowired private HazelcastInstance hazelcastInstance;
-    @Autowired private GenericResponseTracker<CardLookupByPanResponseWrapperDto> panTracker;
-    @Autowired private GenericResponseTracker<CardLookupByFriendResponseWrapperDto> friendTracker;
-    @Autowired private HazelRelTopicConfigProps topicProps;
+    verschiedenen orchestrierten Abläufen,
 
-    private ITopic<byte[]> panTopic;
-    private ITopic<byte[]> friendTopic;
+    und einer oder mehreren Backend-Business-Services
 
-    @BeforeEach
-    void setupTopics() {
-        panTopic = hazelcastInstance.getReliableTopic(topicProps.panToCardReq());
-        friendTopic = hazelcastInstance.getReliableTopic(topicProps.friendToCardReq());
-    }
+realisiert wird.
 
-    @Test
-    void shouldProcessPanRequestAndSendResponse() {
-        panTopic.addMessageListener((MessageListener<byte[]>) message -> {
-            try {
-                var req = CardLookupByPanRequestWrapperDto.parseFrom(message.getMessageObject());
-                var card = CardDto.newBuilder().setCardNumber("9999").build();
-                var response = CardLookupResponseDto.newBuilder().setCard(card).build();
-                var wrapped = CardLookupByPanResponseWrapperDto.newBuilder()
-                        .setCorrelationId(req.getCorrelationId())
-                        .setResponse(response)
-                        .build();
-                panTracker.complete(req.getCorrelationId(), wrapped);
-            } catch (Exception e) {
-                throw new RuntimeException("PAN listener failed", e);
-            }
-        });
+Was bedeutet das Abschalten eines Features?
 
-        String requestJson = """
-            {
-              "pan": {
-                "cardNumber": "9999"
-              }
-            }
-            """;
+Wenn ein Feature deaktiviert wird, dann sollte es vollständig und konsistent deaktiviert sein – so, als wäre es gar nicht vorhanden:
 
-        var response = cardOrcaService.publishCardByPanRequest(requestJson);
+    Keine API-Endpunkte dürfen erreichbar oder dokumentiert sein.
 
-        assertEquals(200, response.getStatusCodeValue());
-        assertEquals("success", response.getBody().getStatus());
-        assertEquals("9999", response.getBody().getData().getCard().getCardNumber());
-    }
+    Kein Flow darf versehentlich ausgelöst werden können.
 
-    @Test
-    void shouldProcessFriendRequestAndSendResponse() {
-        friendTopic.addMessageListener((MessageListener<byte[]>) message -> {
-            try {
-                var req = CardLookupByFriendRequestWrapperDto.parseFrom(message.getMessageObject());
-                var card = CardDto.newBuilder().setCardNumber("1234").build();
-                var response = CardLookupResponseDto.newBuilder().setCard(card).build();
-                var wrapped = CardLookupByFriendResponseWrapperDto.newBuilder()
-                        .setCorrelationId(req.getCorrelationId())
-                        .setResponse(response)
-                        .build();
-                friendTracker.complete(req.getCorrelationId(), wrapped);
-            } catch (Exception e) {
-                throw new RuntimeException("Friend listener failed", e);
-            }
-        });
+    Keine geteilte Business-Logik darf unintendiert von anderen aktiven Features darauf zugreifen.
 
-        String requestJson = """
-            {
-              "friend": {
-                "firstName": "Alice",
-                "lastName": "Smith"
-              }
-            }
-            """;
+Was ist mit Shared Services?
 
-        var response = cardOrcaService.publishCardByFriendRequest(requestJson);
+Viele Business-Services werden von mehreren Features gemeinsam verwendet.
+Daher ist es wichtig, nicht den Service selbst zu deaktivieren, sondern klar zu definieren, welche Features darauf noch zugreifen dürfen, wenn ein anderes Feature deaktiviert ist.
 
-        assertEquals(200, response.getStatusCodeValue());
-        assertEquals("success", response.getBody().getStatus());
-        assertEquals("1234", response.getBody().getData().getCard().getCardNumber());
-    }
+Vorschlag:
 
-    @TestConfiguration
-    @EnableConfigurationProperties(HazelRelTopicConfigProps.class)
-    static class TestConfig {
+    Pro Feature wird festgelegt, welche geteilten Services erlaubt sind.
 
-        @Bean(destroyMethod = "shutdown")
-        public HazelcastInstance hazelcastInstance() {
-            Config config = new Config();
-            config.setClusterName("test-cluster-" + UUID.randomUUID());
-            config.getNetworkConfig().setPortAutoIncrement(true);
-            config.setProperty("hazelcast.logging.type", "slf4j");
-            return Hazelcast.newHazelcastInstance(config);
-        }
+    Shared Services führen ggf. Kontextprüfungen durch, um Zugriffe abhängig vom aufrufenden Feature zu erlauben oder abzulehnen.
 
-        @Bean
-        public CardLookupResponseDtoMapper responseMapper() {
-            // Simple passthrough for test
-            return proto -> CardLookupResponseDto.newBuilder()
-                    .setCard(proto.getCard())
-                    .build();
-        }
+Vorschlag zum weiteren Vorgehen
 
-        @Bean
-        public GenericResponseTracker<CardLookupByPanResponseWrapperDto> panResponseTracker() {
-            return new GenericResponseTracker<>();
-        }
+Bevor wir uns mit der konkreten technischen Umsetzung beschäftigen, schlage ich vor:
 
-        @Bean
-        public GenericResponseTracker<CardLookupByFriendResponseWrapperDto> friendResponseTracker() {
-            return new GenericResponseTracker<>();
-        }
+    Zuerst eine gemeinsame Klärung der Begriffe und Anforderungen (Was genau ist ein Feature? Wie soll Isolation aussehen?),
 
-        @Bean
-        public CardOrcaService cardOrcaService(
-                HazelcastInstance hazelcastInstance,
-                GenericResponseTracker<CardLookupByPanResponseWrapperDto> panTracker,
-                GenericResponseTracker<CardLookupByFriendResponseWrapperDto> friendTracker,
-                CardLookupResponseDtoMapper mapper,
-                HazelRelTopicConfigProps props
-        ) {
-            return new CardOrcaService(hazelcastInstance, panTracker, friendTracker, mapper, props);
-        }
-    }
-}
+    Danach eine Diskussion über ein geeignetes architektonisches Modell,
+
+    Und schließlich eine technische Umsetzung, die auf einer sauberen fachlichen Basis aufbaut.
+
+Ich freue mich auf eure Meinungen und eine gemeinsame Diskussion dazu!
