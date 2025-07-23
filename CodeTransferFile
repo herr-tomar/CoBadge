@@ -1,47 +1,26 @@
+package osplus.pkp.datenbank.client;
 
-try (Connection conn = (password == null || password.isEmpty())
-        ? DriverManager.getConnection(jdbcUrl, user, (String) null)
-        : DriverManager.getConnection(jdbcUrl, user, password)) {
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-    // Execute queries
-}
-
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
-         http://maven.apache.org/xsd/maven-4.0.0.xsd">
-
-    <modelVersion>4.0.0</modelVersion>
-    <groupId>com.example</groupId>
-    <artifactId>db-client</artifactId>
-    <version>1.0-SNAPSHOT</version>
-
-    <dependencies>
-        <!-- Oracle JDBC Driver -->
-        <dependency>
-            <groupId>com.oracle.database.jdbc</groupId>
-            <artifactId>ojdbc8</artifactId>
-            <version>19.16.0.0</version> <!-- Compatible with Oracle 11 -->
-        </dependency>
-
-        <!-- Logging -->
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
-            <version>2.0.9</version>
-        </dependency>
-    </dependencies>
-</project>
-
-
-package com.example.dbclient;
-
-import java.io.*;
-import java.sql.*;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintWriter;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.Date;
+import java.util.Properties;
 
 public class DbClient {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(DbClient.class);
 
     private static final String DB_CONFIG_FILE = "db.properties";
     private static final String QUERY_FILE = "queries.properties";
@@ -51,7 +30,9 @@ public class DbClient {
         Properties dbProps = loadProperties(DB_CONFIG_FILE);
         Properties queries = loadProperties(QUERY_FILE);
 
-        if (dbProps == null || queries == null) return;
+        if (dbProps == null || queries == null) {
+            return;
+        }
 
         String jdbcUrl = dbProps.getProperty("db.url");
         String user = dbProps.getProperty("db.user");
@@ -59,14 +40,17 @@ public class DbClient {
 
         new File(OUTPUT_DIR).mkdirs();
 
-        try (Connection conn = DriverManager.getConnection(jdbcUrl, user, password)) {
+        try (Connection conn = (password == null || password.isEmpty())
+                ? DriverManager.getConnection(jdbcUrl, user, (String) null)
+                : DriverManager.getConnection(jdbcUrl, user, password)) {
+
             for (String key : queries.stringPropertyNames()) {
                 String sql = queries.getProperty(key);
-                System.out.println("Executing " + key + ": " + sql);
+                LOGGER.info("Executing " + key + ": " + sql);
                 executeQueryAndSave(conn, key, sql);
             }
         } catch (SQLException e) {
-            System.err.println("Database connection failed: " + e.getMessage());
+            LOGGER.error("Database connection failed: " + e.getMessage());
         }
     }
 
@@ -74,12 +58,12 @@ public class DbClient {
         Properties props = new Properties();
         try (InputStream input = DbClient.class.getClassLoader().getResourceAsStream(fileName)) {
             if (input == null) {
-                System.err.println("File not found: " + fileName);
+                LOGGER.error("File not found: " + fileName);
                 return null;
             }
             props.load(input);
         } catch (IOException e) {
-            System.err.println("Failed to load " + fileName + ": " + e.getMessage());
+            LOGGER.error("Failed to load " + fileName + ": " + e.getMessage());
             return null;
         }
         return props;
@@ -99,7 +83,9 @@ public class DbClient {
             // Header
             for (int i = 1; i <= columnCount; i++) {
                 writer.print(meta.getColumnName(i));
-                if (i < columnCount) writer.print(",");
+                if (i < columnCount) {
+                    writer.print(",");
+                }
             }
             writer.println();
 
@@ -107,24 +93,17 @@ public class DbClient {
             while (rs.next()) {
                 for (int i = 1; i <= columnCount; i++) {
                     writer.print(rs.getString(i));
-                    if (i < columnCount) writer.print(",");
+                    if (i < columnCount) {
+                        writer.print(",");
+                    }
                 }
                 writer.println();
             }
 
-            System.out.println("Output written to " + fileName);
+            LOGGER.info("Output written to " + fileName);
 
         } catch (SQLException | IOException e) {
-            System.err.println("Error executing query [" + queryKey + "]: " + e.getMessage());
+            LOGGER.error("Error executing query [" + queryKey + "]: " + e.getMessage());
         }
     }
 }
-
-db.url=jdbc:oracle:thin:@//your-host:1521/your-service
-db.user=your_username
-db.password=your_password
-
-
-query1=SELECT SYSDATE FROM dual
-query2=SELECT * FROM all_users WHERE ROWNUM <= 3
-
