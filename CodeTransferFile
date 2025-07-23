@@ -18,6 +18,22 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Properties;
 
+/**
+ * Der {@code DbClient} ist ein einfaches Dienstprogramm zur Ausführung von SQL-Abfragen
+ * gegen eine Oracle-Datenbank. Die Konfigurationsparameter und SQL-Befehle werden aus
+ * Properties-Dateien geladen. Die Ergebnisse jeder Abfrage werden sowohl in der Konsole
+ * als auch in einer CSV-Datei mit Zeitstempel ausgegeben.
+ *
+ * <p>Die folgenden Dateien werden erwartet:
+ * <ul>
+ *     <li><b>db.properties</b> – enthält JDBC-URL, Benutzername und optional das Passwort</li>
+ *     <li><b>queries.properties</b> – enthält benannte SQL-Abfragen (z. B. query1, query2)</li>
+ * </ul>
+ *
+ * <p>Die Ausgaben werden in einem Unterordner <code>output/</code> gespeichert.
+ *
+ * @author (Ihr Name)
+ */
 public class DbClient {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DbClient.class);
@@ -26,6 +42,12 @@ public class DbClient {
     private static final String QUERY_FILE = "queries.properties";
     private static final String OUTPUT_DIR = "output";
 
+    /**
+     * Einstiegspunkt des Programms. Lädt die Konfiguration, stellt die Datenbankverbindung her
+     * und führt alle definierten SQL-Abfragen aus.
+     *
+     * @param args nicht verwendet
+     */
     public static void main(String[] args) {
         Properties dbProps = loadProperties(DB_CONFIG_FILE);
         Properties queries = loadProperties(QUERY_FILE);
@@ -54,6 +76,12 @@ public class DbClient {
         }
     }
 
+    /**
+     * Lädt eine Properties-Datei aus dem Ressourcenverzeichnis.
+     *
+     * @param fileName Name der Properties-Datei (z. B. "db.properties")
+     * @return das geladene {@code Properties}-Objekt oder {@code null} im Fehlerfall
+     */
     private static Properties loadProperties(String fileName) {
         Properties props = new Properties();
         try (InputStream input = DbClient.class.getClassLoader().getResourceAsStream(fileName)) {
@@ -69,6 +97,14 @@ public class DbClient {
         return props;
     }
 
+    /**
+     * Führt eine einzelne SQL-Abfrage aus und speichert das Ergebnis in einer
+     * CSV-Datei mit Zeitstempel. Zusätzlich wird die Abfrage in der Konsole ausgegeben.
+     *
+     * @param conn      die geöffnete JDBC-Verbindung
+     * @param queryKey  Schlüsselbezeichnung der Abfrage (z. B. "query1")
+     * @param sql       der auszuführende SQL-Befehl
+     */
     private static void executeQueryAndSave(Connection conn, String queryKey, String sql) {
         String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS").format(new Date());
         String fileName = OUTPUT_DIR + File.separator + queryKey + "_" + timestamp + ".csv";
@@ -80,7 +116,7 @@ public class DbClient {
             ResultSetMetaData meta = rs.getMetaData();
             int columnCount = meta.getColumnCount();
 
-            // Header
+            // Kopfzeile schreiben
             for (int i = 1; i <= columnCount; i++) {
                 writer.print(meta.getColumnName(i));
                 if (i < columnCount) {
@@ -89,7 +125,7 @@ public class DbClient {
             }
             writer.println();
 
-            // Data
+            // Zeilen schreiben
             while (rs.next()) {
                 for (int i = 1; i <= columnCount; i++) {
                     writer.print(rs.getString(i));
