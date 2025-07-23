@@ -52,12 +52,3 @@ metricsService.increaseCounter("hazelcast.message.consume.handler.missing", Metr
 
 --------
 
-Publisher Bulk Metric
-
-In sendMessages, metrics are not aggregated. You may want to:
-
-    Add a bulk metric: hazelcast.message.send.bulk.count
-
-    Or wrap the loop with timing logic
-
-----------
