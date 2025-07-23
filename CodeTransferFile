@@ -1,50 +1,467 @@
-ich habe mir das Ticket sowie den bisherigen Umsetzungsvorschlag durchgesehen.
-Die Idee zur technischen Realisierung finde ich grundsätzlich gut und nachvollziehbar.
-Allerdings wirkt für mich die ursprüngliche Anforderung noch nicht klar genug definiert, und entsprechend erscheint mir auch die architektonische Lösung aktuell noch unvollständig.
+package osplus.pkppuma.hazelcast.pubsub;
 
-Deshalb würde ich gerne mein Verständnis davon, was unter einem "Feature" und unter "Feature-Isolation" zu verstehen ist, mit euch teilen – mit dem Ziel, die Anforderungen gemeinsam zu schärfen und eine fundierte Diskussionsbasis für die weitere Architekturentwicklung zu schaffen.
+import com.hazelcast.core.EntryEvent;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.map.listener.EntryAddedListener;
+import com.hazelcast.map.listener.EntryUpdatedListener;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
+import osplus.apl.core.api.AplComponent;
+import osplus.apl.core.api.administration.metrics.MetricTag;
+import osplus.apl.core.api.administration.metrics.MetricsService;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkppuma.hazelcast.config.FlowConfig;
+import osplus.pkppuma.hazelcast.flows.FlowHandler;
+import osplus.pkppuma.hazelcast.flows.FlowHandlerRegistry;
 
-Was bedeutet "Feature" aus meiner Sicht?
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
-Ein Feature ist für mich nicht einfach ein technischer Endpunkt oder ein einzelner Microservice, sondern eine geschäftliche Fähigkeit, die typischerweise durch eine Kombination aus:
+@AplComponent
+public class GenericHazelcastConsumer {
 
-    mehreren technischen Endpunkten (z. B. in Orca),
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastConsumer.class);
+    private final String instanceId = UUID.randomUUID().toString();
 
-    verschiedenen orchestrierten Abläufen,
+    private final MetricsService metricsService;
+    private final HazelcastInstance hazelcastInstance;
+    private final List<FlowConfig> flowConfigs;
+    private final FlowHandlerRegistry handlerRegistry;
 
-    und einer oder mehreren Backend-Business-Services
+    private final ConcurrentMap<String, String> listenerRegistrationMap = new ConcurrentHashMap<>();
 
-realisiert wird.
+    public GenericHazelcastConsumer(
+            MetricsService metricsService,
+            HazelcastInstance hazelcastInstance,
+            List<FlowConfig> flowConfigs,
+            FlowHandlerRegistry handlerRegistry
+    ) {
+        this.metricsService = metricsService;
+        this.hazelcastInstance = hazelcastInstance;
+        this.flowConfigs = flowConfigs;
+        this.handlerRegistry = handlerRegistry;
+    }
 
-Was bedeutet das Abschalten eines Features?
+    @PostConstruct
+    public void registerMapListeners() {
+        for (FlowConfig config : flowConfigs) {
+            String flowName = config.name();
+            int partitions = config.partitions();
+            String baseMap = config.mapBase();
+            String responseTopic = config.responseTopic();
 
-Wenn ein Feature deaktiviert wird, dann sollte es vollständig und konsistent deaktiviert sein – so, als wäre es gar nicht vorhanden:
+            for (int i = 0; i < partitions; i++) {
+                String mapName = baseMap + i;
+                IMap<String, Object> map = hazelcastInstance.getMap(mapName);
 
-    Keine API-Endpunkte dürfen erreichbar oder dokumentiert sein.
+                var listener = new MapEntryListener(flowName, mapName, responseTopic);
+                String registrationId = map.addEntryListener(listener, true).toString();
+                listenerRegistrationMap.put(mapName, registrationId);
 
-    Kein Flow darf versehentlich ausgelöst werden können.
+                LOGGER.info("Registered EntryListener on IMap '{}'", mapName);
+            }
+        }
+    }
 
-    Keine geteilte Business-Logik darf unintendiert von anderen aktiven Features darauf zugreifen.
+    @PreDestroy
+    public void cleanupListeners() {
+        for (var entry : listenerRegistrationMap.entrySet()) {
+            String mapName = entry.getKey();
+            String id = entry.getValue();
+            try {
+                hazelcastInstance.getMap(mapName).removeEntryListener(UUID.fromString(id));
+                LOGGER.info("Removed EntryListener from IMap '{}'", mapName);
+            } catch (Exception e) {
+                LOGGER.warn("Failed to remove listener from '{}'", mapName, e);
+            }
+        }
+    }
 
-Was ist mit Shared Services?
+    private class MapEntryListener implements EntryAddedListener<String, Object>, EntryUpdatedListener<String, Object> {
+        private final String flowName;
+        private final String mapName;
+        private final String responseTopic;
 
-Viele Business-Services werden von mehreren Features gemeinsam verwendet.
-Daher ist es wichtig, nicht den Service selbst zu deaktivieren, sondern klar zu definieren, welche Features darauf noch zugreifen dürfen, wenn ein anderes Feature deaktiviert ist.
+        public MapEntryListener(String flowName, String mapName, String responseTopic) {
+            this.flowName = flowName;
+            this.mapName = mapName;
+            this.responseTopic = responseTopic;
+        }
 
-Vorschlag:
+        @Override
+        public void entryAdded(EntryEvent<String, Object> event) {
+            processEntry(event.getKey(), event.getValue());
+        }
 
-    Pro Feature wird festgelegt, welche geteilten Services erlaubt sind.
+        @Override
+        public void entryUpdated(EntryEvent<String, Object> event) {
+            LOGGER.debug("Ignoring entryUpdated event for key {}", event.getKey());
+        }
 
-    Shared Services führen ggf. Kontextprüfungen durch, um Zugriffe abhängig vom aufrufenden Feature zu erlauben oder abzulehnen.
+        private void processEntry(String correlationId, Object request) {
+            IMap<String, String> claimMap = hazelcastInstance.getMap("router-claim-map");
+            String claimKey = "route-lock-" + correlationId;
 
-Vorschlag zum weiteren Vorgehen
+            String current = claimMap.get(claimKey);
+            if (current == null || !current.isEmpty()) {
+                LOGGER.info("Skipping processing of correlationId={} as it is not claimable", correlationId);
+                return;
+            }
 
-Bevor wir uns mit der konkreten technischen Umsetzung beschäftigen, schlage ich vor:
+            boolean claimed = claimMap.replace(claimKey, "", instanceId);
+            if (!claimed) {
+                LOGGER.info("Could not claim message for correlationId={} (already claimed)", correlationId);
+                return;
+            }
 
-    Zuerst eine gemeinsame Klärung der Begriffe und Anforderungen (Was genau ist ein Feature? Wie soll Isolation aussehen?),
+            try {
+                FlowHandler<Object, Object> handler = handlerRegistry.getHandler(flowName);
+                if (handler == null) {
+                    LOGGER.warn("No FlowHandler for '{}' registered. Message will be skipped.", flowName);
+                    return;
+                }
 
-    Danach eine Diskussion über ein geeignetes architektonisches Modell,
+                Object response = handler.handleRequest(request);
+                Object wrapped = handler.wrapResponse(correlationId, response);
+                handler.sendResponse(hazelcastInstance, responseTopic, wrapped);
 
-    Und schließlich eine technische Umsetzung, die auf einer sauberen fachlichen Basis aufbaut.
+                hazelcastInstance.getMap(mapName).remove(correlationId);
+                claimMap.remove(claimKey);
 
-Ich freue mich auf eure Meinungen und eine gemeinsame Diskussion dazu!
+                metricsService.increaseCounter("hazelcast.message.consume.success",
+                        MetricTag.create("flowName", flowName));
+                LOGGER.info("Processed and removed message with correlationId={} from map={}", correlationId, mapName);
+            } catch (Exception ex) {
+                LOGGER.error("Error processing correlationId={}: {}", correlationId, ex.getMessage(), ex);
+                claimMap.replace(claimKey, instanceId, "");
+                metricsService.increaseCounter("hazelcast.message.consume.error",
+                        MetricTag.create("flowName", flowName),
+                        MetricTag.create("exceptionClass", ex.getClass().getSimpleName()));
+            }
+        }
+    }
+}
+
+
+package osplus.pkptuna.hazelcast.pubsub;
+
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.topic.ITopic;
+import com.hazelcast.topic.Message;
+import com.hazelcast.topic.MessageListener;
+import jakarta.annotation.PreDestroy;
+import osplus.apl.core.api.AplComponent;
+import osplus.apl.core.api.administration.metrics.MetricTag;
+import osplus.apl.core.api.administration.metrics.MetricsService;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * Der {@code GenericHazelcastRouter} ist verantwortlich für das zentrale Routing eingehender Nachrichten
+ * aus ReliableTopics in partitionierte IMaps. Der Router verwendet eine zentrale Leader Election mit Heartbeat,
+ * um sicherzustellen, dass nur eine Instanz im Cluster aktiv routet.
+ */
+@AplComponent
+public class GenericHazelcastRouter {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastRouter.class);
+    private final MetricsService metricsService;
+
+    private final HazelcastInstance hazelcastInstance;
+    private final List<FlowConfig> flowConfigs;
+    private final FlowHandlerRegistry handlerRegistry;
+    private String routerInstanceId;
+    private final Map<String, AtomicInteger> roundRobinCounters = new ConcurrentHashMap<>();
+    private final Map<String, UUID> listenerRegistrations = new ConcurrentHashMap<>();
+    private volatile boolean isLeader = false;
+
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+
+    private final String debugInstanceId = UUID.randomUUID().toString();
+
+    public GenericHazelcastRouter(MetricsService metricsService,
+                                  HazelcastInstance hazelcastInstance,
+                                  List<FlowConfig> flowConfigs,
+                                  FlowHandlerRegistry handlerRegistry) {
+        this.metricsService = metricsService;
+        this.hazelcastInstance = hazelcastInstance;
+        this.flowConfigs = flowConfigs;
+        this.handlerRegistry = handlerRegistry;
+        this.routerInstanceId = UUID.randomUUID().toString();
+        LOGGER.info("Router created with ID={}", this.routerInstanceId );
+    }
+
+    public void initRouters() {
+
+       LOGGER.info("[initRouters] Using routerInstanceId={}", this.routerInstanceId);
+
+       hazelcastInstance.getMap("router-leader-map")
+                    .addEntryListener(new LeaderMapListener(this), true);
+
+       tryBecomeLeaderIfStale(); // Reused for startup
+    }
+
+    public void tryBecomeLeaderIfStale() {
+        if (isLeader){
+            return; // No need to re-elect if we're already the leader
+        }
+
+        try {
+            IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
+            IMap<String, Long> heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
+
+            String currentLeader = leaderMap.get("active-router");
+            Long lastHeartbeat = heartbeatMap.get("heartbeat");
+
+            boolean heartbeatStale = (lastHeartbeat == null || System.currentTimeMillis() - lastHeartbeat > 5000);
+
+            if (heartbeatStale) {
+                String previous = leaderMap.put("active-router", routerInstanceId);
+
+                if (previous == null || previous.equals(currentLeader)) {
+                    LOGGER.info("This node is elected as the ACTIVE router (ID={})", routerInstanceId);
+                    isLeader = true;
+                    startHeartbeat();
+                    subscribeToTopics();
+                } else {
+                    LOGGER.info("Another node claimed leadership before us (ID={})", previous);
+                    unsubscribeFromTopics();
+                }
+            } else {
+                LOGGER.info("Leadership exists and heartbeat is alive (Leader={}, LastBeat={})",
+                        currentLeader, lastHeartbeat);
+                unsubscribeFromTopics();
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to check or claim leadership", e);
+        }
+    }
+
+    @PreDestroy
+    public void shutdown(){
+        unsubscribeFromTopics();
+        scheduler.shutdownNow();
+
+        IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
+        String currentLeader = leaderMap.get("active-router");
+        if (routerInstanceId.equals(currentLeader)) {
+            leaderMap.remove("active-router");
+            hazelcastInstance.getMap("router-heartbeat-map").remove("heartbeat");
+            LOGGER.info("Router {} removed itself from leader map during shutdown.", routerInstanceId);
+        }
+
+        isLeader = false;
+    }
+
+    public void setRouterInstanceId(String routerInstanceId) {
+        this.routerInstanceId = routerInstanceId;
+    }
+
+    private void startHeartbeat() {
+
+        RouterLeaderHeartbeat leaderHeartbeat = new RouterLeaderHeartbeat(hazelcastInstance, routerInstanceId,5);
+        leaderHeartbeat.schedule(scheduler);
+
+        // Re-election logic in case current leader dies
+        scheduler.scheduleAtFixedRate(this::tryBecomeLeaderIfStale, 5, 5, TimeUnit.SECONDS);
+
+        LOGGER.info("Heartbeat started for router ID={}", routerInstanceId);
+    }
+
+    private void subscribeToTopics() {
+        if (flowConfigs == null || flowConfigs.isEmpty()) {
+            LOGGER.warn("No Hazelcast flow configurations found.");
+            return;
+        }
+
+        flowConfigs.forEach(flowConfig -> {
+            String flowName = flowConfig.name();
+            roundRobinCounters.putIfAbsent(flowName, new AtomicInteger(0));
+
+            @SuppressWarnings("unchecked")
+            Optional<FlowHandler<Object, Object>> handler = Optional.of(
+                    (FlowHandler<Object, Object>) handlerRegistry.getHandler(flowName)
+            );
+
+            handler.ifPresentOrElse(value -> {
+                ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(flowConfig.requestTopic());
+                UUID registrationId = topic.addMessageListener(new RoutingListener(flowName, flowConfig, value));
+                listenerRegistrations.put(flowName, registrationId);
+                LOGGER.info("Listening on topic={} for flow={}", flowConfig.requestTopic(), flowName);
+            }, () -> LOGGER.warn("No FlowHandler registered for flow: {}", flowName));
+        });
+    }
+
+    private void unsubscribeFromTopics() {
+        listenerRegistrations.forEach((flowName, registrationId) -> {
+            String topicName = flowConfigs.stream()
+                    .filter(cfg -> cfg.name().equals(flowName))
+                    .findFirst()
+                    .map(FlowConfig::requestTopic)
+                    .orElse(null);
+
+            if (topicName != null) {
+                hazelcastInstance.getReliableTopic(topicName).removeMessageListener(registrationId);
+                LOGGER.info("Unsubscribed from topic={} for flow={}", topicName, flowName);
+            }
+        });
+        listenerRegistrations.clear();
+    }
+
+    private class RoutingListener<T> implements MessageListener<byte[]> {
+
+        private final String flowName;
+        private final FlowConfig config;
+        private final FlowHandler<T, ?> handler;
+
+        RoutingListener(String flowName, FlowConfig config, FlowHandler<T, ?> handler) {
+            this.flowName = flowName;
+            this.config = config;
+            this.handler = handler;
+        }
+
+        @Override
+        public void onMessage(Message<byte[]> message) {
+            try {
+                // Leadership validation
+                IMap<String, String> leaderMap = hazelcastInstance.getMap("router-leader-map");
+
+                String currentLeader = leaderMap.get("active-router");
+
+                LOGGER.info("[onMessage] Debug instance id={}, Router instance ID={}, Current Leader Id ={}, Message Source={}", debugInstanceId,
+                        routerInstanceId,
+                        currentLeader,
+                        message.getPublishingMember());
+
+                if (!routerInstanceId.equals(currentLeader)) {
+                    LOGGER.info("Ignoring message as this router is not the current leader (ID={})", routerInstanceId);
+                    return;
+                }
+
+                T request = handler.deserializeRequest(message.getMessageObject());
+                String correlationId = handler.extractCorrelationId(request);
+                String lockKey = "route-lock-" + correlationId;
+
+                IMap<String, String> routerMap = hazelcastInstance.getMap("router-claim-map");
+
+                String existing = routerMap.putIfAbsent(lockKey, "");
+                if (existing != null) {
+                    LOGGER.info("Skipped duplicate routing for correlationId={}", correlationId);
+                    metricsService.increaseCounter("hazelcast.message.received.duplicate", MetricTag.create("flowName", flowName));
+                    return;
+                }
+
+                int index = roundRobinCounters.get(flowName).getAndIncrement() % config.partitions();
+                String mapKey = config.mapBase() + index;
+
+                hazelcastInstance.getMap(mapKey).put(correlationId, request);
+                LOGGER.info("Routed correlationId='{}' to map '{}'", correlationId, mapKey);
+
+                metricsService.increaseCounter("hazelcast.message.received.valid", MetricTag.create("flowName", flowName));
+            } catch (Exception e) {
+                metricsService.increaseCounter(
+                        "hazelcast.message.received.error",
+                        MetricTag.create("flowName", flowName),
+                        MetricTag.create("exceptionClass", e.getClass().getCanonicalName())
+                );
+                LOGGER.error("Routing failure for flow '{}': {}", flowName, e.getMessage(), e);
+            }
+        }
+    }
+}
+
+package osplus.pkptuna.hazelcast.pubsub;
+
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.topic.ITopic;
+import osplus.apl.core.api.AplComponent;
+import osplus.apl.core.api.administration.metrics.MetricTag;
+import osplus.apl.core.api.administration.metrics.MetricsService;
+import osplus.apl.core.pubsub.api.SimplePublisherApi;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.hazelcast.protobuf.SimpleSerializer;
+
+import java.io.Serializable;
+import java.util.List;
+
+/**
+ * Ein zuverlässiger Publisher für Hazelcast Reliable Topics,
+ * der Nutzdaten serialisiert und als byte[] versendet.
+ *
+ * @param <V> der Typ der Nutzdaten (Serializable)
+ */
+@AplComponent
+public class ReliableTopicPublisher<V extends Serializable> implements SimplePublisherApi {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ReliableTopicPublisher.class);
+    private final MetricsService metricsService;
+
+    private final HazelcastInstance hazelcastInstance;
+    private final SimpleSerializer<V> serializer;
+
+    public ReliableTopicPublisher(MetricsService metricsService,
+                                  HazelcastInstance hazelcastInstance,
+                                  SimpleSerializer<V> serializer) {
+        this.metricsService = metricsService;
+        this.hazelcastInstance = hazelcastInstance;
+        this.serializer = serializer;
+    }
+
+    /**
+     * Sendet eine einzelne Nachricht an das angegebene Topic.
+     * Die Nachricht wird serialisiert und als byte[] veröffentlicht.
+     *
+     * @param topicName Name des Hazelcast-Topics
+     * @param traceCode Tracing-Code für Logging-Zwecke
+     * @param payload   die Nachricht (muss Serializable sein)
+     */
+    @Override
+    public void sendMessage(String topicName, String traceCode, Serializable payload) {
+        try {
+            V typedPayload = (V) payload;
+            byte[] bytes = serializer.serialize(typedPayload);
+            ITopic<byte[]> topic = hazelcastInstance.getReliableTopic(topicName);
+            topic.publish(bytes);
+            LOGGER.info("Published to topic [" + topicName + "] for trace " + traceCode);
+            metricsService.increaseCounter("hazelcast.message.send.success", MetricTag.create("topicName", topicName));
+        } catch (Exception e) {
+            metricsService.increaseCounter(
+                    "hazelcast.message.send.error",
+                    MetricTag.create("topicName", topicName), MetricTag.create("exceptionClass", e.getClass().getCanonicalName())
+            );
+            throw new RuntimeException("Failed to publish to topic " + topicName, e);
+        }
+    }
+
+    /**
+     * Sendet eine Liste von Nachrichten an das angegebene Topic.
+     * Intern wird jede Nachricht einzeln über {@code sendMessage} verarbeitet.
+     *
+     * @param topicName Name des Hazelcast-Topics
+     * @param traceCode Tracing-Code
+     * @param payloads  Liste von serialisierbaren Nachrichten
+     */
+    @Override
+    public <V extends Serializable> void sendMessages(String topicName, String traceCode, List<V> payloads) {
+        payloads.forEach(payload -> sendMessage(topicName, traceCode, payload));
+    }
+}
