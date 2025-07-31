@@ -1,145 +1,122 @@
-package osplus.pkp.datenbank.client;
+Sehr gerne, Vivek — freut mich, dass jetzt alles klar ist.
+Hier ist die vollständige **detaillierte Zusammenfassung auf Deutsch**, basierend auf allen Punkten, die wir gemeinsam geklärt haben.
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+---
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.PrintWriter;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Properties;
+## 🧾 CoBadge-Migration – Daten- & Clearing-Konzept (Detaillierte Zusammenfassung auf Deutsch)
 
-/**
- * Der {@code DbClient} ist ein einfaches Dienstprogramm zur Ausführung von SQL-Abfragen
- * gegen eine Oracle-Datenbank. Die Konfigurationsparameter und SQL-Befehle werden aus
- * Properties-Dateien geladen. Die Ergebnisse jeder Abfrage werden sowohl in der Konsole
- * als auch in einer CSV-Datei mit Zeitstempel ausgegeben.
- *
- * <p>Die folgenden Dateien werden erwartet:
- * <ul>
- *     <li><b>db.properties</b> – enthält JDBC-URL, Benutzername und optional das Passwort</li>
- *     <li><b>queries.properties</b> – enthält benannte SQL-Abfragen (z. B. query1, query2)</li>
- * </ul>
- *
- * <p>Die Ausgaben werden in einem Unterordner <code>output/</code> gespeichert.
- *
- * @author (Ihr Name)
- */
-public class DbClient {
+### 1) Ausgangssituation & Zielbild
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(DbClient.class);
+* **Datenbank**: Die neue CoBadge-Services-Lösung (auf Kubernetes) nutzt dieselbe **bestehende DB2-Datenbank** wie das alte CoBatch-System auf dem IBM Mainframe. Es findet **keine Duplikation** der Datenbank statt.
+* **Zugriffsmethode (Neu)**: Der Zugriff der neuen Spring-Boot-Anwendungen erfolgt über ein **SQLJ-Package**, das in Java eingebunden und mit DB2 verbunden wird.
+* **Clearing (Alt-System)**: Die bestehenden **DMC-Clearing-Batchjobs** im Altsystem bleiben weiterhin aktiv. Sie lesen wie bisher aus den vorhandenen Tabellen, solange die neuen Services die Daten korrekt befüllen.
+* **Historische Daten (540 Tage)**: Die Archivierung älterer Daten wird bereits durch bestehende DMC-Batchprozesse abgedeckt, die die Daten in History-Tabellen verschieben. Es ist keine Nachimplementierung erforderlich.
+* **IBO-Übernahme Clearing**: Ein separates Projekt zur Migration des Clearings an IBO ist in Planung, jedoch **explizit aus dem aktuellen Scope ausgeschlossen**.
 
-    private static final String DB_CONFIG_FILE = "db.properties";
-    private static final String QUERY_FILE = "queries.properties";
-    private static final String OUTPUT_DIR = "output";
+---
 
-    /**
-     * Einstiegspunkt des Programms. Lädt die Konfiguration, stellt die Datenbankverbindung her
-     * und führt alle definierten SQL-Abfragen aus.
-     *
-     * @param args nicht verwendet
-     */
-    public static void main(String[] args) {
-        Properties dbProps = loadProperties(DB_CONFIG_FILE);
-        Properties queries = loadProperties(QUERY_FILE);
+### 2) Betriebsmodell während der Übergangsphase
 
-        if (dbProps == null || queries == null) {
-            return;
-        }
+* **Paralleler Funktionsbetrieb mit einer gemeinsamen Datenbank**:
 
-        String jdbcUrl = dbProps.getProperty("db.url");
-        String user = dbProps.getProperty("db.user");
-        String password = dbProps.getProperty("db.password");
+  * Neue Funktionalitäten wie **Reklamationen** und **Kartenbestellungen** schreiben über SQLJ direkt in die bestehende DB2-Datenbank.
+  * Die bestehenden DMC-Clearingprozesse lesen aus denselben Tabellen.
+* **Quelle der Wahrheit (Single Source of Truth)**: DB2 bleibt zentrale Datenbasis während der gesamten Migration.
 
-        new File(OUTPUT_DIR).mkdirs();
+---
 
-        try (Connection conn = (password == null || password.isEmpty())
-                ? DriverManager.getConnection(jdbcUrl, user, (String) null)
-                : DriverManager.getConnection(jdbcUrl, user, password)) {
+### 3) Datenfluss – Beispiel Reklamationen
 
-            for (String key : queries.stringPropertyNames()) {
-                String sql = queries.getProperty(key);
-                LOGGER.info("Executing " + key + ": " + sql);
-                executeQueryAndSave(conn, key, sql);
-            }
-        } catch (SQLException e) {
-            LOGGER.error("Database connection failed: " + e.getMessage());
-        }
-    }
+1. Die neuen CoBadge-Services **persistieren Reklamationsdaten** direkt in DB2 über SQLJ.
+2. Die DMC-Batchjobs im Altsystem **lesen diese Daten** und führen die Verarbeitung durch.
+3. Die Archivierung älterer Reklamationen erfolgt über bestehende DMC-Prozesse.
 
-    /**
-     * Lädt eine Properties-Datei aus dem Ressourcenverzeichnis.
-     *
-     * @param fileName Name der Properties-Datei (z. B. "db.properties")
-     * @return das geladene {@code Properties}-Objekt oder {@code null} im Fehlerfall
-     */
-    private static Properties loadProperties(String fileName) {
-        Properties props = new Properties();
-        try (InputStream input = DbClient.class.getClassLoader().getResourceAsStream(fileName)) {
-            if (input == null) {
-                LOGGER.error("File not found: " + fileName);
-                return null;
-            }
-            props.load(input);
-        } catch (IOException e) {
-            LOGGER.error("Failed to load " + fileName + ": " + e.getMessage());
-            return null;
-        }
-        return props;
-    }
+> **Wichtig**: Die von den neuen Services geschriebenen Daten müssen **identisch strukturiert und semantisch gleich** wie im Altsystem sein, damit bestehende Prozesse ohne Änderungen weiterlaufen.
 
-    /**
-     * Führt eine einzelne SQL-Abfrage aus und speichert das Ergebnis in einer
-     * CSV-Datei mit Zeitstempel. Zusätzlich wird die Abfrage in der Konsole ausgegeben.
-     *
-     * @param conn      die geöffnete JDBC-Verbindung
-     * @param queryKey  Schlüsselbezeichnung der Abfrage (z. B. "query1")
-     * @param sql       der auszuführende SQL-Befehl
-     */
-    private static void executeQueryAndSave(Connection conn, String queryKey, String sql) {
-        String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS").format(new Date());
-        String fileName = OUTPUT_DIR + File.separator + queryKey + "_" + timestamp + ".csv";
+---
 
-        try (Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql);
-             PrintWriter writer = new PrintWriter(new FileWriter(fileName))) {
+### 4) Technische Aspekte & Absicherung
 
-            ResultSetMetaData meta = rs.getMetaData();
-            int columnCount = meta.getColumnCount();
+#### A. **SQLJ-Package & Bind-Vorgang**
 
-            // Kopfzeile schreiben
-            for (int i = 1; i <= columnCount; i++) {
-                writer.print(meta.getColumnName(i));
-                if (i < columnCount) {
-                    writer.print(",");
-                }
-            }
-            writer.println();
+* Das SQLJ-Package wird in der Spring-Boot-Anwendung **kompiliert und in den Build integriert**.
+* Vor der Ausführung in DB2 muss das Package über die `.ser`-Dateien mit dem Tool `db2sqljbind` in ein `.bnd` umgewandelt und dann mit `db2 bind` **in DB2 eingebunden** werden.
+* Bei jeder Änderung an SQLJ-Code (z. B. neue SQL-Statements) ist ein **erneuter Bind erforderlich**.
 
-            // Zeilen schreiben
-            while (rs.next()) {
-                for (int i = 1; i <= columnCount; i++) {
-                    writer.print(rs.getString(i));
-                    if (i < columnCount) {
-                        writer.print(",");
-                    }
-                }
-                writer.println();
-            }
+#### B. **Bind-Strategie & Stabilität**
 
-            LOGGER.info("Output written to " + fileName);
+* Das Package muss beim Rebind **denselben Namen und dieselbe Collection** behalten.
+* Andernfalls schlägt die Anwendung zur Laufzeit fehl (SQLCODE -805).
+* Der Bind-Vorgang legt auch die **Access Paths** (Zugriffspläne) fest. Änderungen in DB2 (z. B. neue Indizes, RUNSTATS) können zu einem Rebind führen, was das Verhalten beeinflusst.
 
-        } catch (SQLException | IOException e) {
-            LOGGER.error("Error executing query [" + queryKey + "]: " + e.getMessage());
-        }
-    }
-}
+#### C. **Isolation Level & Transaktionskontrolle**
+
+* Die beim Bind verwendete **Isolationsebene** (z. B. `CS`, `RS`, `RR`) muss zur Nutzung durch Java und parallele Batchjobs passen.
+* Zu aggressive Isolationen (z. B. `RR`) im Java-Kontext können **Sperrkonflikte mit Batchjobs** verursachen.
+* Transaktionen sollten **kurz und sauber abgeschlossen** werden (keine langlaufenden Updates).
+
+#### D. **Referentielle Integrität (RI-Constraints)**
+
+* Die bestehenden Foreign-Key-Beziehungen in DB2 müssen beim Schreiben über SQLJ **eingehalten werden**.
+* Schreibreihenfolge (z. B. Master-Datensatz vor Detaildatensatz) muss beachtet werden.
+
+---
+
+### 5) Teststrategie – Sicherstellung der Datenqualität
+
+Für das Akzeptanzkriterium *"Sicherstellen der Richtigkeit der Datenbankeinträge"* wird folgende Teststrategie empfohlen:
+
+| Testtyp                             | Beschreibung                                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Feldbasierte Vergleichstests**    | Einfügen von Testdaten via SQLJ und Vergleich mit durch das Altsystem erstellten Datensätzen                 |
+| **End-to-End Tests (mit Batch)**    | Erzeugen von Reklamationen durch neue Services und anschließend Ausführen der DMC-Batchjobs                  |
+| **Volumen- und Parallelitätstests** | Belastungstests zur Analyse von Sperren, Deadlocks und Performance während der Batchfenster                  |
+| **Tests der Historisierung**        | Verifikation, dass durch neue Services erstellte Alt-Daten durch DMC-Jobs korrekt archiviert werden          |
+| **Reconciliation (Abgleich)**       | Täglicher Abgleich zwischen geschriebenen und verarbeiteten Datensätzen (z. B. Zählprüfung, Statusvergleich) |
+
+---
+
+### 6) Monitoring & Betrieb
+
+* **DB2-Metriken**: Sperren, Log-Nutzung, SQL-Performance, Package-Kollisionen
+* **Service-Metriken**: Fehlercodes bei SQL-Operationen, Transaktionszeiten
+* **Batch-Monitoring**: Laufzeiten, Durchsatz, History-Wachstum
+* **Alarmierung**: bei Sperrkonflikten, fehlerhaften Bindings, Abweichungen im Reconciliation
+
+---
+
+### 7) Fallback-/Abschaltszenario
+
+* Sollte es zu Problemen mit den neuen Services kommen, kann das Schreiben in die DB2-Tabelle **deaktiviert werden** (z. B. über Feature-Flags).
+* Da DB2 gemeinsam genutzt wird, ist **kein Rollback von Datenmigration notwendig**.
+* Es wird empfohlen, zusätzlich **Applikationslogs** der SQLJ-Schreibvorgänge zu führen (zur Nachvollziehbarkeit).
+
+---
+
+### 8) Out-of-Scope (Dokumentation für Nachvollziehbarkeit)
+
+* Die geplante Ablösung der DMC-Clearingprozesse durch IBO ist **nicht Bestandteil dieses Projekts**.
+* **Keine Änderungen am DB2-Schema oder der Tabellenstruktur** sind vorgesehen.
+* Kein Mapping, keine Transformation der Datenformate oder Codes erforderlich.
+
+---
+
+### 9) Abbildung der Akzeptanzkriterien
+
+| Kriterium (Deutsch)                     | Umsetzung                                                                      |
+| --------------------------------------- | ------------------------------------------------------------------------------ |
+| **Befüllen der Alt-Datenbank**          | Direkter SQLJ-Zugriff auf bestehende DB2-Tabellen                              |
+| **Auslesen historischer Reklamationen** | Weiterhin durch Altsystem (inkl. History-Tabellen) gewährleistet               |
+| **Fallback/Abschalt-Szenario**          | Neue Services können deaktiviert werden, Altsystem läuft unabhängig weiter     |
+| **Sicherstellung der Richtigkeit**      | Durch strukturierte Tests und Abgleichprozesse                                 |
+| **Vorhalten von Alt-Daten (540 Tage)**  | Durch DMC-Jobs wie bisher abgedeckt                                            |
+| **Nachverarbeitung vs. Dokumentation**  | Technische Verarbeitung notwendig, daher volle DB2-Kompatibilität erforderlich |
+
+---
+
+Wenn du möchtest, kann ich:
+
+* Diese Zusammenfassung als Word- oder PDF-Entwurf für die FachSpez aufbereiten,
+* Oder ein separates technisches **Bind-Konzept inkl. Skriptbeispielen** für CI/CD liefern.
+
+Sag mir einfach, wie du weiter vorgehen möchtest.
