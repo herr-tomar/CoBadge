@@ -1,75 +1,830 @@
-Hintergrund
-Die zukünftigen Payment-Anwendungen im Globalkonzept der Container-Plattform müssen auf die DB2-Tabellen der POS- bzw. GA-Kopfstelle (mit statischem SQL) zugreifen.
-
-Aus Sicht der Entwicklung erfolgt die Implementierung unter Verwendung von SQLj und dem existierenden maven-Plugin (SQLJ-Maven-Plugin - DynS Entwicklerhandbuch - Wiki-System).
-
-Beistellungsanforderung
-Es ist ein Verfahren zu entwickeln, mit dem die Bind-Dateien an das entsprechende DB2 gebunden werden. Die Bereitstellung soll zu Rel. 25.0 erfolgen.
-
-Lösungsidee
-Es gibt potenziell zwei Optionen. Einerseits könnte sich das Verfahren an den Prozessen von OSPE (inkl. Code-Pipeline) orientieren.
-
-→ Potenziell großer Aufwand.
-
-Alternativ könnte MiWe die Beauftragung von UNX ohne Code-Pipeline durchführen. Ist das überhaupt erlaubt?→ Als Subtask vermutlich ja 
-
-Ablauf des Verfahrens ohne Code-Pipeline:
-Vorbedingung
-
-Vor dem Deployment in Produktion (bzw. ab Stage Abnahme) muss mit DBIQ ein Quality-Check erfolgt sein. Das muss im Build-Prozess integriert sein.
-Es ist weiterhin zwingend erforderlich, dass die*.jdbrm-Dateien, die durch Maven im Build erzeugt werden, eine spezifische Namenskonvention aufweisen, die bisher von keinen bestehenden Membern genutzt wird.
-(Das *.jdbrm ist ein zip-Archiv mit DBRM-Dateien und dbrm.binding.info)
-
-
-
-Build
-
-Beim Build durch jenkins ist die *.jdbrm-Datei in einem für UNX zugänglichem Verzeichnis zu speichern. Entweder direkt auf der MT00 oder an einem anderen Übergabepunkt, von dem UNX die Datei herunterladen kann.
-
-
-Deployment
-
-MiWe bekommt im Rahmen des Depoyments die Anforderung Vorarbeiten als Subtask durchzuführen (aka DB2-Bind)
-Hierzu erstellt MiWe einen UNX-Auftrag (Per REST-Service) mit den folgenden Informationen:
-Wo liegen die Dateien
-Wohin müssen die Dateien Deployed werden (Potenzielle Zielsysteme sind in ETAPS G030, G050, G012, G094 und in Produktion WL04, WL05,IM01).
-UNX verteilt (per File-Transfer) die Dateien auf die angegebenen Zielsysteme und führt dort das Binding (installieren) durch den Aufruf der entsprechenden Prozesse auf den Zielsystemen auf.
-In ETAPS betrifft das die DB2T,DB2R,DB2Q und in Produktion DB2C/DB2B und DL2A
-UNX meldet an MiWe das Ergebnis der Installation zurück.
-Das geschieht entweder als Aufruf des bestehenden REST-Service oder durch Versand einer Nachricht via MQ
-MiWe führt die Installation der Anwendungen mit dem etablierten Verfahren fort.
-
-
+Erstellt von Rogmann, Sascha, zuletzt aktualisiert vor 45 Minuten  Lesedauer: 1 Minute(n)
+Begrifflichkeiten
+Ablauf im Überblick
+System-Properties
+JDBRM
+Verzeichnisaufbau
+Dateitypen
+Verzeichnisse
+.java-Generate im SVN einchecken
+Neuanlage eines SQLJ-Packages
+Benennung eines SQLJ-Packages
+Konfiguration
+Maven-Beispiel
+Customize-Trace
+Prüfung auf Typ-Konvertierungen
+DAM-DAO-Generate
+DBRM-Bau in Build/pom.xml
+DBRM-Bau außerhalb einer Implementierungseinheit
+Konfiguration DBIQ
+DBIQ-Check zur Prüfung manuell starten
+541 via DB2R
+Dispositives DB2
+Encoding
+Umlaute in der Konsolenausgabe
+Lesen von globalen Variablen
+Bearbeitung von SQLJ-Dateien
+Mögliche Probleme / FAQ
+Prüfen eines lokalen Builds
+Translate
+Customize
+Bind
+JDBRM
+DBIQ
+Translate erzwingen
+Keine package-info-Dateien beim Translate
+Customize erzwingen
+DBIQ-Check erzwingen
+DBIQ-Check explizit für ein SQLJ-Modul ausführen
+Fehlermeldungen "-204 mit eigenem J-User"
+Fehlermeldungen "-805"
+Falsche Phase in copy-ser-files
+Falsche Ressourcen-Angabe
+Fehlermeldungen "-917"
+Mehrfache Ausführung von SQLJ-Customize oder DBIQ
+Großer Classpath
+JDBRM-ZIP-Name ("-805" mit korrektem Package aber im DB2 unbekanntem Contoken)
+Probleme im OSPE-Batch
+Probleme beim Translate
+Probleme beim Customize
+Abbruch des Customize mit "Array index out of range"
+Fehler "Data type mismatch"
+Fehler "Zum Java-Package ... mit den Klassen ... gibt es keine .ser-Dateien"
+Customize / Bind in WARTUNG_PROD (vorheriges Release)
+Nutzung für IDH
+Prüfwerkzeug
+Support
+SQLJ-Generierung
 Offene Punkte
-Wie kommen die Dateien auf den Host ()?
-Andreas Wagner und Matthias Kutz prüfen ob ein Download mit curl möglich ist.
-Nico Enking müsste prüfen, ob über Jenkins die Dateien auf der MT00 abgelegt werden können
-Jakobs, Marcel legt Dateien (jdbrm) auf dem webdav ab (im Zweifel per winscp)
-Wie wird die Rückmeldung an MiWe übertragen?
-Option REST-Service: Kutz, Matthias  erstellt eine Aufwandsschätzung - Haug, Nils verteilt die Schnittstellenspezifikation (REST-API für Subtask Status Rückmeldungen)
-Option MQ: Nils Haug, Matthias Kutz, Marcel Grosser und Stephan Söder Service-Now-Plattform
-Ist ein Remote-Binding möglich?
-Sascha Rogmann müsste klären, ob ein Binding auf der Stage1 auch remote (im Rahmen des Builds) möglich ist.
-Wie ist das Mapping der Gruppenbezeichnungen zwischen MiWe und UNX abzubilden?
-Zeitplan
-Die MKP-Anwendungen, die die Funktionalitäten benötigen, müssen zu Rel. 25.0 in Produktion gehen.
+Historie
+Changelog
+Diese Seite enthält Informationen zum SQLJ-Maven-Plugin.
 
-UNX/MiWe:
+Eine grundlegende Einführung ist im OSPE-Wiki:
 
-Das Verfahren zum 22.3. (FISP 25b) bereitzustellen ist sportlich.
+OSPE DB2 Translate, Customize, Bind - Das SQLJ-Maven-Plugin
+Für den Support zum SQLJ-Maven-Plugin ist das 
+
+DynS-Support-JIRA DYS
+zuständig.
 
 
+Begrifflichkeiten
+Bei der Verwendung von SQLJ (https://de.wikipedia.org/wiki/SQLJ) werden SQL-Anweisungen direkt in den Quellcode von Java-Klassen eingebettet, diese Dateien haben die Endung ".sqlj". Das Kompilieren ist daher nur bei Verwendung eines Präprozessors möglich, der aus diesen .sqlj-Dateien kompilierbare .java-Dateien erzeugt.
 
-Potenziell benötigte OEn und Aufwandsindikation
-5234 Deploment-Verfahren/MiWe (Entwicklung) - 20 PT
-5312 UNX (Entwicklung) - 40 PT
-5562 Datenmanagement (fachliche Unterstützung/Test) - 5PT
-5610 Jenkins (fachliche Unterstützung/Test) - 5PT
-5653 DynS (fachliche Unterstützung/Test) - 5PT
-Rücksprache am 27.09.2024
-Teilnehmer
-Matthias Kutz (5312)
-Nils Haug (5234)
-Andreas Wagner (5562)
-Mirko Reinken (4600)
-Timm Caporale (4654)
+Neben dem normalen Workflow beim Umwandeln von .java-Dateien nach .class-Dateien gibt es weitere drei Schritte.
+
+Translate: Umwandeln der .sqlj-Datei in eine .java-Datei. Die Details zu den SQL-Statements werden dabei in Dateien mit der Endung ".ser" übertragen.
+Customize: In den .ser-Dateien werden Customize-Angaben ergänzt, die benötigt werden, um einen Bind durchzuführen.
+Bind: Statisches Hinterlegen eines Statements im DB2, z.B. im DB2T zu S307 oder G037, passend zum Tabellenfüllstand des Instituts. Damit der Bind beim Stagewechsel auch in höheren Stages erfolgt, werden sogenannte JDBRM-Dateien erzeugt. Die (J)DBRM-Dateien werden vom UNX-Verfahren (nach Deployment per DEUS) in Code-Pipeline ausgewertet.
+Bei jeder Änderung an einer .sqlj-Datei muss ein Translate durchgeführt werden. Dies geschieht standardmäßig, wenn sich eine .sqlj-Datei geändert hat bzw. bei Änderung ihrer SHA-256-Prüfsumme. Es wird aber auch dann ein Translate durchgeführt, wenn es zwar keine Änderung an einer .sqlj-Datei gegeben hat aber noch keine Java- oder .ser-Dateien vorhanden sind. So wird sichergestellt, dass es immer auch eine generierte Java- bzw. .ser-Datei gibt nach einem Translate. Die .ser-Dateien werden beim Build aktualisiert, wenn es Änderungen an den SQL-Statements innerhalb der .sqlj-Datei gab.
+
+Beim Translate bekommt jedes SQL-Package ein Token. Die .ser-Dateien enthalten die Token, die in der Implementierungseinheit liegen und zur Laufzeit vom DB2-Treiber ausgewertet werden. Beim Customize werden die SQL-Statements in den .ser-Dateien mit den DB2-Tabellendefinitionen abgeglichen. Die (J)DBRM-Dateien enthalten die Token, die beim Deployment per UNX an DB2 übergeben werden, damit dazu ein Bind durchgeführt wird. Deswegen müssen die .ser-Dateien zu den (J)DBRM-Dateien passen.
+
+Werden die .ser-Dateien zusammen mit den JDBRM-Dateien im Repository eingecheckt, müssen Customize und Bind nicht bei jedem Build neu ausgeführt werden.
+
+
+
+GAV für osp240:
+
+
+
+<dependency>
+  <groupId>osplus.dyns.tools</groupId>
+  <artifactId>sqlj-maven-plugin</artifactId>
+  <version>251-SNAPSHOT</version>
+</dependency>
+Der Bind per SQLJ-Maven-Plugin wird an sich nicht benötigt: Wichtig sind die JDBRM-Dateien, damit der Bind beim Deployment per UNX/Code-Pipeline (also z.B. über DEUS) durchgeführt wird. Für Entwicklertests sind Remote-Binds per SQLJ-Maven-Plugin aus dem eigenen Workspace gegen 300er Institute zulässig. Gegen 400er Institute sind Remote-Binds – auch zum Test von Korrekturen – nicht zulässig. Das SQLJ-Maven-Plugin unterstützt Binds gegen die Stages C, A, 1, 3, 5 (Institut 313) und 9 (also insbesondere gegen Institut 541).
+
+DM-Team zu Remote-Binds
+
+Frage: Sind Remote-Binds gegen ein Institut wie 421 zulässig?
+Antwort: Die Antwort ist hier recht einfach, da es sich hierbei um ein Abnahme-Institut handelt. Dort gelten für bestimmte/die meisten Aktivitäten die gleichen Vorgaben wie für Produktion. In diesem Fall bedeutet dass, dass ein Remote-BIND vom Arbeitsplatz verboten ist und die offizielle Auslieferungsschiene (Deployment inkl. BIND) zu benutzen ist.
+
+Es wird hier somit unterschieden zwischen Test ("läuft meine Änderung so wie geplant, ich möchte einen lokalen Bind durchführen um das mal lokal zu testen", dafür ist Stage 5 (ABNAHME_EDIT) oder tiefer) und Abnahme ("verhält sich die regulär verteilte Anwendung so wie gewünscht?" in Stage 7). Ein bekanntes Problem hier ist manchmal, dass in 421 der "gute Testdatenbestand" ist, nicht aber in 313.
+
+Ablauf im Überblick
+Das folgende Diagramm (Dank an Sven Kühne!) zeigt den durchaus komplexen Ablauf beim lokalen Build, Bamboo-Build, Deployment per DEUS oder HoDOr und anschließendem Verteilen per Codepipeline und UNX.
+
+ 
+System-Properties
+Mit Hilfe von System-Properties können abhängig von der Entwicklungsphase die Generierungen temporär beeinflusst werden. Diese System-Properties können beispielsweise in einer eigenen External Run-Configuration angegeben werden.
+
+-DforceTranslate=true: Erzwingen eines Translate.
+
+-Dsqlj.translate.skip=true: Damit kann bei Bedarf das SQLJ-Translate übersprungen werden (die SQLJ-Dateien werden dann nicht ausgewertet).
+-DforceCustomize=true: Erzwingen eines Customize.
+-DisDontCustomize=true: Customize explizit nicht ausführen.
+-Dsqlj.bind.skip=false: Bind explizit ausführen.
+-Dsqlj.dbiq.2.skip=true: Lokales Deaktivieren des DBIQ (Hostjob zur Kontrolle der DB2 Statements), dies kann hilfreich sein, wenn aufgrund intensiver SQL-Änderungen viele Builds aufeinander folgen.
+-Dsqlj.dbiq.force=true: Explizites Erzwingen eines DBIQ, beispielsweise wenn es keine Änderungen an den SQL-Statements gab, aber der DBIQ-Bericht gewünscht wird (dieser liegt dann nach dem Build im target-Ordner des Build-Projektes)
+-DsqljDbiqStrict=true: Abbruch, falls ein DBIQ nicht mit RC 0 (OK) endet, per Default sind auch 33 (KI), 44 (KW) und 66 (KO) zulässig.
+JDBRM
+Per Bindvorgabe kann zu jedem SQLJ-Package angegben werden, ob es ein Instituts-, Gruppen oder globaler Bind ist sowie die Unterscheidung zwischen operativem und dispositiven DB2.  Auch viele weitere Speziallfälle (POS, ...) sind möglich (siehe MODUL-BINDKZ und seine Unterseiten). Die Bind-Vorgabe kann in der pom.xml des SQLJ-Packages oder in der package.properties-Datei im Basisverzeichnis des SQLJ-Moduls des jeweiligen Packages hinterlegt werden.
+
+Bei Vorgabe der Bind-Kennung per Element bindKennung in der pom.xml kann die package.properties-Datei im Basisverzeichnis entfallen und sollte gelöscht werden!
+
+Beispiel Bindvorgabe in sqljPackage Quelle erweitern
+Beispiel package.properties Quelle erweitern
+
+
+Die Bind-Vorgaben für DB2 werden in sogenannten DBRM-Dateien abgelegt, per Default wird ein Bind für eine operative Institutstabelle (Bind INSTITUT) durchgeführt. Der Bind-Typ INSTITUT ist der übliche Typ, für Gruppen-Tabellen kommt der Bind-Typ GRUPPE zum Einsatz. Mögliche Bind-Typen für Java-Anwendungen unter z/OS (also nicht OSPE!) sind im UNX-Wiki aufgelistet, siehe BIND-Kennungen für OSP-Standard für die häufigsten Bind-Angaben und die restlichen Unterseiten von MODUL-BINDKZ für die selteneren Binds.
+
+Die Buchstaben in SQLJ-Package Namen müssen immer groß geschrieben werden. Kleinbuchstaben sind nicht zulässig. Bei Verwendung von Kleinbuchstaben kann es vorkommen, dass ein lokaler SQLJ-Bind nicht funktioniert.
+
+Verzeichnisaufbau
+Beim Build per SQLJ kommt leider eine Vielzahl von Dateitypen und Verzeichnissen in verschiedenen Buildphasen zum Einsatz. Es gibt einen sqlj-Ordner, darin ist ein pkg-Ordner und darin liegt zu jedem SQLJ-Package ein Jmmnnnn-Ordner.
+
+Dateitypen
+.sqlj: Java-Source-Code mit eingebettetem SQL-Code, wird per SQLJ-Translate in eine .java-Datei umgewandelt.
+.SHA-256: SHA-256-Prüfsummen zum Erkennen geänderter .sqlj-Dateien.
+.java: Per SQLJ-Translate erzeugte Java-Klassen
+.ser: Per SQLJ-Translate erzeugte Dateien (im Java-Objekt-Serialisierungsformat), die im Rahmen eines Customize um Angaben zu den SQL-Statements und Bindvorgaben enthalten.
+.txt: Inhalt einer .ser-Datei in lesbarer Form ("Profile-Dump").
+serfiles.grp: serfiles.grp-Datei mit Angabe der Dateireihenfolge für den Bind (diese muss zum Customize passen!)
+package.properties: zur Angabe von Bindvorgaben (z.B. sql.bind.type=GRUPPE, Default ist INSTITUT).
+Jmmnnnnn: DBRM-Dateien mit Bindvorgaben für DB2 in einem DB2-internem Format (File-Eyecatcher X'C4C2D9D4' = 'DBRM' in EBCDIC).
+.jdbrm: ZIP-Archiv mit DBRM-Datei und dbrm.binding.info. Die dbrm.binding.info-Datei ist wichtig, falls ein Bind nicht gegen eine normale Institutstabelle erfolgen soll.
+Verzeichnisse
+Pro SQLJ-Projekt (typischerweise osplus.IEKUERZEL.service.sqlj.Jmmnnnnn) gibt es einige Verzeichnisse. In Spezialfällen können Verzeichnisvorgaben per pom.xml geändert werden.
+
+Hier werden die wesentlichen Verzeichnisse aus einem SQLJ-Projekt aufgelistet:
+
+src/main/sqlj: .sqlj-Dateien in Java-Package-Ordnern mitsamt .SHA-256-Prüfsummen. Die können im Eclipse z.B. per "Open With / Other" per Java-Editor editiert werden.
+src/main/sqlj-gen/ser:
+.ser-Dateien in Java-Package-Ordnern mitsamt .txt-Erklärdateien und Backup-Dateien
+services.grp-Datei im obersten Ordner, diese ist wichtig, damit beim lokalen Bind die gleiche Dateiauswahl und Dateireihenfolge wie beim Customize genutzt wird.
+.grp-Dateien zu den Java-Klassen in den Java-Package-Unterordnern wurden vom 210er Plugin erzeugt, diese werden nicht mehr benötigt.
+src/main/sqlj-gen/java: Enthält die beim Translate aus den .sqlj-Dateien generierten Java-Klassen.
+src/main/resources/dbrm-gen: (J)DBRM-Dateien
+package.properties: Optionale Bindvorgabe (per Property sql.bind.type)
+target: Dies ist der Build-Ordner, der im Rahmen eines Maven-Builds verwendet wird (also insbesondere nicht im Git liegt). Nach einem erfolgreichen Build liegt hier das JAR mit den generierten SQLJ-Klassen.
+Desweiteren gibt es im Rahmen eines Builds die Datei Build/target/Jmmeeeee.zip: Alle DBRM-Dateien werden vom sqlj-collect.dbrm-Mojo gesammelt in einem ZIP-Archiv zum Code-Pipeline-Element Jmmeeeee, dabei werden die einzelnen dbrm.binding.info-Dateien zu einer Datei zusammengeführt.
+
+Zur Steuerung, was in ein Source-ZIP generiert werden soll, siehe SQLJ Source jar Personalisieren.
+
+.java-Generate im SVN einchecken
+Optional besteht die Möglichkeit, die .java-Generate des SQLJ-Translate-Laufs im SVN einzuchecken. Dies ermöglicht es, dass beim Bamboo-Build kein erneutes Translate und Customize erfolgen muss. Zur Aktivierung wird in der Configuration von sqlj-translate und sqlj-customize ein Ordner im SVN anstatt Buildordner (typischerweise "target") angegeben, beispielsweise:
+
+
+
+<sqljGenSrcDir>src/main/java-gen</sqljGenSrcDir>
+Neuanlage eines SQLJ-Packages
+Zur Anlage eines weiteren SQLJ-Packages kann das SqljNeuanlage.jar genutzt werden. Es legt ein Maven-Modul zum gewünschten SQLJ-Package an und hinterlegt es in der sqlj/pom.xml.
+
+
+
+Im Fall einer manuellen Anlage sind folgende Schritte notwendig zur Ergänzung eines neuen SQLJ-Packages JAANNNNN.
+
+Anlage eines neuen Ordners pkg/JAANNNNN im SQLJ-Parentprojekt osplus.IE.sqlj.
+Im neuen SQLJ-Projekt JAANNNNN im Ordner pkg/JAANNNNN sind folgende Schritte notwendig.
+Anlage eines src/main/java-Ordners (dort könnten z.B. Configuration-Classes für Spring abgelegt werden)
+Anlage des Ordners src/main/resources/dbrm-gen für die DBRM-Dateien (darin sind die Bind-Vorgaben für UNX)
+Anlage eines Ordners src/main/ser für die .ser-Dateien
+Anlage eines Ordners src/main/sqlj für die .sqlj-Sourcen
+Anlage einer Datei package.properties (es kann sein, dass diese automatisch angelegt wird).
+Anlage einer pom.xml (siehe als das an diese Wikiseite angehängte Template)
+Ergänzen eines weiteren Moduls per <module>pkg/JAANNNNN</module> im modules-Element der pom.xml des SQLJ-Parentprojekts.
+Bei der Anlage eines SQLJ-Packages muss auf Eindeutigkeit des Packagenamens geachtet werden.
+
+Ob ein SQLJ-Package bereits existiert, kann über den Nexus ermittelt werden: https://nexus.intern/#browse/search=attributes.maven2.groupId%3Dosplus.ospe%20AND%20attributes.maven2.artifactId%3Dosplus.*JDC03100
+
+Anstatt JDC03100 ist der gewünschte Packagename anzugeben.
+
+Benennung eines SQLJ-Packages
+Der Name des SQLJ-Packages soll dem Schema JAANNNNN genügen, AA sind zwei Buchstaben (Produkt- bzw. Komponentenkürzel), NNNNN sind fünf Ziffern, typischerweise in Zehnerschritten fortlaufend passend zum Endevor-Namen (jetzt Code-Pipeline) der zugehörigen Implementierungseinheit. Wenn also der Endevorname (Name der IE in ISPW/Code-Pipeline) gleich JGK12000 ist, bieten sich die SQL-Packages JGK12010, JGK12020, ... an. Im Fall von mindestens zehn SQL-Packages in einer Implementierungseinheit ist eine Numerierung in Einerschritten besser: JGK12011, JGK12012, JGK12013, ... .
+
+Konfiguration
+Im Normalfall wurde die pom.xml im Rahmen der Maven-Migration erstellt oder ist – hoffentlich – im Default-Workspace enthalten. Wobei bei der automatisierten Maven-Migration auch ein paar Tücken im Detail waren, z.B. sqljSerNewDir-Angaben, die im Customize-Mojo notwendig sind, im sqlj-bind-Mojo aber nicht genutzt werden und dort entfernt werden können (IntelliJ färbt diese daher beim sqlj-bind-Mojo korrekt rot ein).
+
+In einem typischen Workspace gemäß WEBU sind die Einstellungen wie folgt: Im sqljSrcDir liegen die vom sqlj-preprocessor um Kommentare bereinigten SQLJ-Sourcen (in den Unterordnern). Daraus werden im Source-Ordner sqljGenSrcDir beim Translate die .java-Sourcen erstellt. Im Source-Ordner "ser" landen beim Translate die .ser-Dateien, die beim Customize in sqljSerNewDir angereichert wurden
+
+
+
+                            <sqljSrcDir>${project.build.directory}/srccpy</sqljSrcDir>
+                            <sqljGenSrcDir>${project.build.directory}/srcgen</sqljGenSrcDir>
+                            <sqljSerDir>ser</sqljSerDir>
+                            <sqljSerNewDir>${project.build.directory}/sernew</sqljSerNewDir>
+Dazu kann es ein oder mehrere Java-Packages geben:
+
+
+
+ 								<sqljPackages>
+									<sqljPackage>
+										<sqljPackage>${ospe.sqlj.package}</sqljPackage>
+										<javaPackages>
+											<javaPackage>osplus.josp.cache.impl</javaPackage>
+											<javaPackage>osplus.josp.messages.impl</javaPackage>
+											<javaPackage>osplus.josp.service.impl</javaPackage>
+										</javaPackages>
+										<sqljQualifier>${ospe.sqlj.qualifier}</sqljQualifier>
+									</sqljPackage>
+								</sqljPackages>  
+Maven-Beispiel
+Der folgende Block zeigt exemplarisch die Verwendung des SQLJ-Maven-Plugins in einer pom.xml. Normalerweise ist diese pom.xml aber bereits vorhanden oder wurde per Neuanlage-Tool erstellt. Das "Schöne" am folgenden Beispiel ist die Verwendung des configuration-Elements für drei Executions. Im Gegensatz zu den ursprünglich vom WEBU-Migrator erstellten pom.xml-Dateien sind die drei Executions in einem plugin-Aufruf.
+
+Das "sffaf"-Packagenamen im Beispiel ist der Name des Batchjobs SFFAF, der in ddp-ospe implementiert ist. Die Package-Namen können gemäß der eigenen Fachlichkeiten angepasst werden.
+
+ Quelle erweitern
+In der pom.xml des sqlj-Parent-Moduls, also die ServiceGruppe/sqlj/pom.xml, kann ein Plugin-Management für das sqlj-maven-plugin ergänzt werden. Dies kann notwendig sein, wenn der Build wegen fehlender service.impl-Klassen im SQLJ-Maven-Plugin fehlschlägt. Normalerweise ist diese Ergänzung hier aber nicht notwendig.
+
+Optionale Ergänzung in sqlj/pom.xml Quelle erweitern
+Dadurch können die .sqlj -Files beispielsweise Interfaces des service.impl -Artefakts implementieren.
+Dem translate-Goal des SQLJ-Maven-Plugins werden die Klassen des service.impl-Artefakts hierdurch bekannt gemacht.
+
+Customize-Trace
+Für Anfragen im Rahmen von DB2-Cases beim Hersteller kann per Configuration-Element sqljTraceFile ein Trace der Customize-Ausführung aktiviert werden. Per Default führt eine solche Prüfung zum SQL-Code Minus-581 und gewollten Abbruch im SQLJ-Maven-Plugin.
+
+Sollte es sich bei einer solchen Warnung um ein false-positive handeln, kann die Typ-Prüfung im configuration-Element des Customize-Mojos deaktiviert werden.
+
+
+
+						<configuration>
+							<endevorName>${ospe.sqlj.package}</endevorName>
+[...]
+							<sqljAcceptTypeMismatch>true</sqljAcceptTypeMismatch>
+
+
+Prüfung auf Typ-Konvertierungen
+Zukünftige DB2-Treiber können eine Typ-Konvertierungsprüfung durchführen. Dies führt zu Warnungen, falls ein int-Hostvariable in ein SMALLINT-Feld schreibt oder ein BigDecimal-Betragsfeld vom DB2-Treiber intern als int zum DB2 geschickt wird.
+
+DAM-DAO-Generate
+Zum Bind sowie zum DBRM-Erzeugen bei Verwendung von DAO-JARs, die per DAM-DAO-Generator erzeugt wurden, siehe Nutzen Sie den OSPE-Export zum Erzeugen der Java-Datenzugriffskomponenten#KonfigurationSQLJ-Parent.
+
+DBRM-Bau in Build/pom.xml
+In der Build/pom.xml ist üblicherweise das Sammeln der DBRM-Dateien mit den Bind-Informationen für DB2 enthalten.
+
+
+
+			<plugin>
+				<groupId>osplus.dyns.tools</groupId>
+				<artifactId>sqlj-maven-plugin</artifactId>
+				<inherited>false</inherited>
+				<executions>
+					<execution>
+						<id>collect-dbrm</id>
+						<goals>
+							<goal>sqlj-collect-dbrm</goal>
+						</goals>
+						<configuration>
+							<skip>${dist.skip}</skip>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin
+Für den Fall, dass die eigenen Pfade anders sind als die vom Plugin vorgegebenen Verzeichnisse, können diese innerhalb der pom.xml angepasst werden.
+
+
+
+	/** relativer Pfad zum common/dbrm-Ausgabeordner */
+	@Parameter(property = "relativeOutDir", defaultValue = "bkm/server/common/dbrm")
+	private String relativeOutDir;
+
+	/** relativer Pfad zum SQLJ-pkg-Ordner */
+	@Parameter(property="relativeSqljPath", defaultValue = "../ServiceGruppe/sqlj/pkg")
+	private String relativeSqljPath;
+
+	/** relativer Pfad zum dbrm-gen-Ordner */
+	@Parameter(property="relativeDbrmPath", defaultValue = "src/main/resources/dbrm-gen")
+	private String relativeDbrmPath;
+	
+	/** relativer Pfad zum .ser-Dateien-Ordner */
+	@Parameter(property="relativeSerDirPath", defaultValue = "src/main/sqlj-gen/ser")
+	private String relativeSerDirPath;
+
+	/** relativer Pfad zum dbrm-gen-Ordner der aus DAO-JARs extrahierten DBRM-Dateien */
+	@Parameter(property="relativeJarDbrmPath", defaultValue = "../ServiceGruppe/sqlj/target/dbrm-jar")
+	private String relativeJarDbrmPath;
+Wichtig ist hierbei, dass die konfigurierten Pfade zum DBRM- , DBRM-Jar- sowie dem ser-Verzeichnis innerhalb einer IE immer identisch bleiben und nicht abweichen voneinander in den SQLJ-Projekten und der Build/pom.xml.
+
+DBRM-Bau außerhalb einer Implementierungseinheit
+Solle das SQLJ-Maven-Plugin außerhalb eines DynS-/OSPE-Implementierungseinheit verwendet werden und das SQLJ-Projekt nicht in einem pkg/{PACKAGE}-Ordner liegen, so kann im sqlj-collect-dbrm per configuration-Angabe relativeSqljPath der Pfad des SQLJ-Moduls angegeben werden und per fixedSqljPackage der Name des SQLJ-Packages. Durch Angabe von fixedSqljPackage geht das SQLJ-Maven-Plugin davon aus, dass relativeSqljPath der Pfad des SQLJ-Moduls selbst ist.
+
+Beispiel: Das aktuelle Modul, wo das sqlj-collect-dbrm-Mojo ausgeführt wird, enthält unter src/main/resources/dbrm-gen die DBRM-Dateien für das Package JDC12340.
+
+
+
+							<relativeSqljPath>.</relativeSqljPath>
+							<relativeDbrmPath>src/main/resources/dbrm-gen</relativeDbrmPath>
+							<fixedSqljPackage>JDC12340</fixedSqljPackage>
+Konfiguration DBIQ
+Das DBIQ, der DB2-Qualitätscheck, prüft die SQLJ-Statements auf typische Fehler, beispielsweise fehlende QUERYNO-Angaben. Die Prüfung läuft auf dem Host, die Ablaufdauer hängt daher von der Host-Auslastung ab.
+
+Der DBIQ-Client öffnet beim lokalen Build eine file-URL zur Darstellung des Reports, beispielsweise file:///C:/Projekte/dynstest_dyns_ospe_server/Build/target/qadbrm-report.html. Die Anzeige von file-URLs wurde im Edge deaktiviert, ein Workaround ist das Kopieren der URL und Anzeige per Firefox (Stand: 22.06.2023), dieser darf lokale HTML-Dateien anzeigen.
+
+Per Configuration-Property dbiqReportBrowser des sqlj-collect-dbrm-Mojos in der Build/pom.xml kann der Browserstart bei Bedarf unterdrückt werden:
+
+
+
+<dbiqReportBrowser>false</dbiqReportBrowser>
+Per Configuration-Property sqlj_dbiq_2_skip des sqlj-collect-dbrm-Mojos oder per System-Property sqlj_dbiq_2_skip=false kann die DBIQ-Ausführung deaktiviert werden. Wichtig zu wissen jedoch ist, dass ab Stage 7 DBIQ im Backend im Rahmen eines DEUS-Deployments läuft.
+
+
+
+<sqlj_dbiq_2_skip>true</sqlj_dbiq_2_skip>
+DBIQ-Check zur Prüfung manuell starten
+Soll ein DBIQ-Check auch ohne SQLJ-Änderung gestartet werden, beispielsweise um zu prüfen, ob die Statements den aktuellen Regeln entsprechen, kann per Maven-Property sqlj.dbiq.force der DBIQ-Check im Rahmen eines Builds gestartet werden.
+
+Es reicht, den Maven-Parameter wie im folgenden Beispiel am Ende der Maven-Argumente zu setzen:
+
+
+
+-B package -Dsqlj.dbiq.force=true
+Bei gesetztem Parameter wird dies im Build wie folgt geloggt im Abschnitt sqlj-collect:
+
+
+
+13:35:47,385 [INFO] Parameter sqljDbiqForce: true
+13:35:47,385 [INFO] DBIQ-Aufruf wegen sqljDbiqForce
+
+
+541 via DB2R
+Für lokale Binds gegen 541 ist die DB-URL auf DB2R (4.236.5.11 = d100atst0db2db2r.zos.intern) zu ändern.
+
+
+
+<db.bind.url>jdbc:db2://4.236.5.11:5910/DB2R</db.bind.url>
+Dispositives DB2
+Es gibt OSPE-Batchjobs, die gegen das dispositive DB2 gehen. Soll der Aufruf gegen das dispositive DB2 gehen (also z.B. DB2T anstatt DB2Y in 307), so ist die DB2-URL in der pom.xml anzupassen:
+
+
+
+<bindKennung>IDVINR</bindKennung>
+<db.bind.url>jdbc:db2://4.236.5.11:5903/DB2Y</db.bind.url>
+Desweiteren muss im SQLJ-Package der Bindtyp geändert werden, anstatt STDINR (Default) lautet er IDVINR (siehe auch BIND-Kennungen für OSP-Standard).
+
+Encoding
+Im Mojo sqlj-preprocessor kann das Encoding per Angabe "encoding" gesetzt werden, Default im sqlj-preprocessor ist das Projektencoding.
+
+
+
+<encoding>UTF-8</encoding>
+Im Mojo sqlj-translate kann das Encoding per Angabe "outputEncoding" gesetzt werden (Default ist hier noch ISO-8859-1).
+
+
+
+<outputEncoding>UTF-8</outputEncoding>
+Wichtig ist, dass das Source-Encoding für den Compile dazu passt.
+
+
+
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+
+Umlaute in der Konsolenausgabe
+Werden die Umlaute von Logmeldungen im Buildlog nicht oder falsch dargestellt, so liegt dies an der Konfiguration des Builds. Im Fall von Eclipse unter Windows kann beispielsweise ein .cmd-Datei erstellt werden:
+
+
+
+rem @echo off
+chcp 1252
+set MAVEN_OPTS=-Djansi.passthrough=true
+c:\Werkbank\JW\maven-3.6.3\bin\mvn.cmd -Dstyle.color=never %*
+Wenn dann per "External Tools Configuration" dieses Skript als Location angegeben wird (und Maven die Option "-B" für Batch bekommt) sollte der Build mit Umlauten und ohne Leerzeilen in jeder zweiten Zeile angezeigt werden.
+
+Diese Lösung ist aber nur eine Zwischenlösung, denn anstatt der Microsoft Codepage 1252 wäre UTF-8 schöner.
+
+Lesen von globalen Variablen
+Beim Lesen von globalen Variablen ist für ein erfolgreiches Customize das Setzen eines Registers notwendig. Dazu ist die DB2-URL zu ändern bzw. anzugeben.
+
+
+
+<sqljPackage>
+    [...]
+    <db2Url> jdbc:db2://4.236.5.11:5931/DB2T:specialRegisters=CURRENT PATH='S307';</db2Url>
+</sqljPackage>
+Ursprünglich wurde der Onlinecheck beim Lesen globaler Variablen deaktiviert, besser ist aber das Setzen obiger Angabe.
+
+Bearbeitung von SQLJ-Dateien
+SQLJ-Dateien sind .java-Dateien mit eingebetteten SQL-Befehlen gemäß ISO/IEC 9075 (siehe https://de.wikipedia.org/wiki/SQLJ). Dies sind damit keine Java-Quelldateien, erst ein SQLJ-Translate (darum kümmert sich das SqljMavenPlugin) erzeugt daraus Java-Sourcen. Im Eclipse können die .sqlj-Dateien wahlweise per Texteditor oder Java-Editor (erreichbar per "Open With / Other..." und dannn "Java Editor" unter "internal editors") editiert werden.
+
+Wichtig zu wissen: Der SQLJ-Translate im DB2-Treiber ist recht alt und stammt aus der Vor-Generics-Zeit, anstatt "List<> listeXy" daher besser "List listeXy" verwenden.
+
+Mögliche Probleme / FAQ
+Siehe auch folgende WEBU-FAQs:
+
+Fehler: Fehlermeldung bei Datenbankzugriffen/ Batchtests: DB2 SQL Error: SQLCODE=-805, SQLSTATE=51002, SQLERRMC=DB2
+WLP Server für OSPE IE Konfigurieren (nach Maven Migration)
+Allgemeine Hinweise zu SQLJ (Endevor-Elementname, SQLJ-Package):
+
+https://wiki.intern/display/public/HBOSPE/DB2-Zugriff+mit+OSPE
+Prüfen eines lokalen Builds
+Dieser Abschnitt beschreibt, was bei einem lokalen Build nach Änderung einer SQLJ-Datei alles passiert.
+
+Translate
+Im Rahmen des Translate wird die geänderte SQLJ-Datei nach Java übersetzt und eine .ser-Datei dazu erstellt.
+
+
+
+09:40:32,274 [INFO] --- sqlj-maven-plugin:211-SNAPSHOT:sqlj-translate (sqljtranslate) @ osplus.dynstest.service.sqlj.JDC09010 ---
+09:40:32,278 [INFO] Maven-SQLJ-Plugin 211.0.23 (2021-07-06): Goal sqlj-translate
+09:40:32,278 [INFO] sqljSrcDir: C:\Projekte\dynstest_dyns_ospe_server\ServiceGruppe\sqlj\pkg\JDC09010\target\srccpy
+09:40:32,279 [INFO] sqljGenSrcDir: C:\Projekte\dynstest_dyns_ospe_server\ServiceGruppe\sqlj\pkg\JDC09010\target\srcgen
+09:40:32,279 [INFO] sqljSerDir: C:\Projekte\dynstest_dyns_ospe_server\ServiceGruppe\sqlj\pkg\JDC09010\ser
+09:40:32,279 [INFO] sqljSerNewDir: C:\Projekte\dynstest_dyns_ospe_server\ServiceGruppe\sqlj\pkg\JDC09010\target\sernew
+[...]
+[1 Dateien werden umgesetzt.]
+[Datei ConfigurationTestDas wird gelesen]
+[Datei ConfigurationTestDas wird umgesetzt]
+09:40:34,151 [INFO] SQLJ-Translate (ConfigurationTestDas.sqlj) lieferte RC 0
+[1 Dateien werden umgesetzt.]
+Der Ordner der Java-Generate wird im Buildpfad aufgenommen.
+
+
+
+09:40:43,380 [INFO] --- build-helper-maven-plugin:3.0.0:add-source (default) @ osplus.dynstest.service.sqlj.JDC09010 ---
+09:40:43,382 [INFO] Source directory: C:\Projekte\dynstest_dyns_ospe_server\ServiceGruppe\sqlj\pkg\JDC09010\target\generated-sources\srcgen added.
+Customize
+Im Rahmen des Customize sollte die Änderung erkannt werden (im Beispiel-Log wurden Leerzeichen vor "=" eingefügt).
+
+
+
+09:40:43,382 [INFO] --- sqlj-maven-plugin:211-SNAPSHOT:sqlj-customize (sqljcustomize) @ osplus.dynstest.service.sqlj.JDC09010 ---
+09:40:43,386 [INFO] Maven-SQLJ-Plugin 211.0.23 (2021-07-06): Goal sqlj-customize (applCompat V12R1M503)
+09:40:43,390 [INFO] *** SQLJ-Package: JDC09010
+09:40:43,391 [INFO] Java-Package: osplus.dynssee.ie.dynstest.dao.sqlj.impl
+09:40:43,391 [INFO] sqljSrcDir: C:\Projekte\dynstest_dyns_ospe_server\ServiceGruppe\sqlj\pkg\JDC09010\target\srccpy
+09:40:43,391 [INFO] sqljGenSrcDir: C:\Projekte\dynstest_dyns_ospe_server\ServiceGruppe\sqlj\pkg\JDC09010\target\srcgen
+09:40:43,391 [INFO] sqljSerDir: C:\Projekte\dynstest_dyns_ospe_server\ServiceGruppe\sqlj\pkg\JDC09010\ser
+09:40:43,391 [INFO] sqljSerNewDir: C:\Projekte\dynstest_dyns_ospe_server\ServiceGruppe\sqlj\pkg\JDC09010\target\sernew
+[...]
+09:40:43,398 [INFO] Gefundene SQLJ-Klassen in osplus.dynssee.ie.dynstest.dao.sqlj.impl: [ConfigurationTestDas, MeldungsDbDasImpl, PzmSessDasImpl, PzmSessHistDasImpl, PzmStrgAusnDasImpl, SqljPluginTests, SqljPluginTests2, TSvzEintragAnlegenDasImpl]
+09:40:43,402 [INFO] Untersuche Aenderungen an Klasse ConfigurationTestDas ...
+09:40:43,424 [INFO] serFileBisher: .ser-File(name:"ConfigurationTestDas_SJProfile0.ser", anzSqlStmts:1, anzCustomizations:1, eintraege:[Profile, SQL-STMT_1, Customization 1, Customization SQL-STMT 1.1])
+09:40:43,424 [INFO] serFileNeu: .ser-File(name:"ConfigurationTestDas_SJProfile0.ser", anzSqlStmts:1, anzCustomizations:0, eintraege:[Profile, SQL-STMT_1])
+09:40:43,424 [INFO] Aenderung in (ConfigurationTestDas): Eintrag (SQL-STMT_1) hat sich geaendert, "...			WHERE MODUL_NAME   =  ? 
+				ORDER BY..." wurde zu "...			WHERE MODUL_NAME =  ? 
+				ORDER BY
+	...".
+Bei erkannter Änderung erfolgt ein Customize. Der Customize sollte lokal erfolgen, damit die dabei erzeugten .ser-Dateien im SVN eingecheckt werden können. Damit ist ein Customize dann nur bei SQL-Änderungen erforderlich.
+
+
+
+09:40:43,483 [INFO] Geaenderte SQLJ-Klassen: [ConfigurationTestDas]
+[...]
+09:40:43,528 [INFO] executeSqljCustomize: SQLJ-Qualifier S307
+[...]
+09:40:46,001 [INFO] Ausgabe Customizer zu Package (JDC09010):
+[jcc][sqlj] 
+[jcc][sqlj] Begin Customization
+[jcc][sqlj] Set current application compatibility for online checking : V12R1M503
+[jcc][sqlj] Set qualifier for online checking to SCHEMA: S307
+[jcc][sqlj] Loading profile: osplus.dynssee.ie.dynstest.dao.sqlj.impl.ConfigurationTestDas_SJProfile0
+[jcc][sqlj] Customization complete for profile C:\Projekte\dynstest_dyns_ospe_server\ServiceGruppe\sqlj\pkg\JDC09010\target\sernew\osplus\dynssee\ie\dynstest\dao\sqlj\impl\ConfigurationTestDas_SJProfile0.ser
+[...]
+[jcc][sqlj] Generating DBRM Files in Directory: C:\Projekte\dynstest_dyns_ospe_server\ServiceGruppe\sqlj\pkg\JDC09010\src\main\resources\dbrm-gen
+[jcc][sqlj] Run binder separately.
+
+09:40:46,001 [INFO] Customize zu Package (JDC09010) endet mit RC 0
+Bind
+Nach dem Customize folgt ein Bind sofern dieser per pom.xml oder -Dsqlj.bind.skip=false  aktiviert wurde.
+
+
+
+09:40:50,332 [INFO] --- sqlj-maven-plugin:211-SNAPSHOT:sqlj-bind (sqljbind) @ osplus.dynstest.service.sqlj.JDC09010 ---
+09:40:50,344 [INFO] Maven-SQLJ-Plugin 211.0.23 (2021-07-06): Goal sqlj-bind
+09:40:50,345 [INFO] *** SQLJ-Package: JDC09010
+09:40:50,345 [INFO] sqljSerDir: C:\Projekte\dynstest_dyns_ospe_server\ServiceGruppe\sqlj\pkg\JDC09010\ser
+[...]
+09:40:50,351 [INFO] Bind JDC09010 gegen S307
+09:40:50,367 [INFO] Datei (C:\Projekte\dynstest_dyns_ospe_server\ServiceGruppe\sqlj\pkg\JDC09010\ser\serfiles.grp) wird genommen f�r korrekte .ser-Reihenfolge beim Bind.
+09:40:50,371 [INFO] .ser-Ordner: C:\Projekte\dynstest_dyns_ospe_server\ServiceGruppe\sqlj\pkg\JDC09010\ser\osplus\dynssee\ie\dynstest\dao\sqlj\impl
+09:40:50,379 [INFO] Profile in osplus.dynssee.ie.dynstest.dao.sqlj.impl.ConfigurationTestDas_SJProfile0: SQLJ-Package JDC09010 mit Token 7434353761642370 und Version 2021-07-07-09.40.43.555640
+[...]
+09:40:51,074 [INFO] Bind per binderMain liefert RC 0: 0
+JDBRM
+Zum Schluss des Builds werden die DBRM-Dateien gesammelt, damit diese nach Übertragung zum Host (per DEUS oder DynsHostDeployment) vom DB2 gebunden werden können.
+
+
+
+09:41:57,367 [INFO] --- sqlj-maven-plugin:211-SNAPSHOT:sqlj-collect-dbrm (collect-dbrm) @ osplus.dynstest.build ---
+09:41:57,371 [INFO] sqlj-collect-dbrm: outputDir=C:\Projekte\dynstest_dyns_ospe_server\Build\target\bkm\server\common\dbrm, relativeSqljPath=../ServiceGruppe/sqlj/pkg, relativeDbrmPath=src/main/resources/dbrm-gen, relativeOutDir=bkm/server/common/dbrm
+09:41:57,371 [INFO] Collecting Information for: JDC09010 (C:\Projekte\dynstest_dyns_ospe_server\Build\..\ServiceGruppe\sqlj\pkg\JDC09010)
+09:41:57,374 [INFO] DBRM JDC09010: Keine Bindvorgabe, Default ist INSTITUT bzw. STDINR (siehe auch https://wiki.intern/pages/releaseview.action?pageId=331089906).
+09:41:57,374 [INFO] Writing info file (C:\Projekte\dynstest_dyns_ospe_server\Build\target\bkm\server\common\dbrm\dbrm.binding.info)
+DBIQ
+Während des Sammelns der DBRM-Dateien erfolgt die Prüfung der beim Customize erzeugten DBRM-Dateien per DBIQ. Dieser Schritt wird ab 23.1 (genauer: 22.06.2023) standardmäßig aktiviert, kann aber per sqlj.dbiq.2.skip=false aktiviert werden. Zu OSPlus 23.1 wurde DBIQ im UNX/Code-Pipeline aktiviert. Damit SQLJ-Probleme wie fehlende QUERYNO-Angaben nicht erst in Stage 7 entdeckt werden, ist die DBIQ-Prüfung per Default im SQLJ-Maven-Plugin aktiviert.
+
+Eine Prüfung erfolgt nur für SQLJ-Module, für die in den letzten 24 Stunden ein Customize erfolgt ist. Ausnahme: Der DQIB-Check wird per sqlj.dbiq.force=true erzwungen.
+
+
+
+17:24:59,531 [INFO] DBIQ (DBRM-Check) für 1 Packages wird gestartet...
+17:24:59,531 [INFO] OSPlus-Release-Ermittlung anhand Projektversion 221-SNAPSHOT: osp221
+17:24:59,531 [INFO] Starte DBIQ-Check: ospeRelease:osp221, dbrmDir:W:\Projekte\bapdev-ospe_maven\Build\target\dbiq-check, reportDir:W:\Projekte\bapdev-ospe_maven\Build\target
+...
+17:25:01.668 INFO: osplus.enterprise.uss.dbiqchk.DBIQCheck: Führe Tests aus gegen: S541/G051/DB2R
+17:25:01.717 INFO: osplus.enterprise.uss.dbiqchk.util.JobConnector: Job gestartet:
+17:25:01.717 INFO: osplus.enterprise.uss.dbiqchk.util.JobConnector: === Q100804 / J0032458 ========================================================
+17:25:02.887 INFO: osplus.enterprise.uss.dbiqchk.util.JobConnector: Job im JES, warte auf Beendigung.
+17:25:02.889 INFO: osplus.enterprise.uss.dbiqchk.util.JobConnector: Job hat Status EXECUTION 
+17:25:03.963 INFO: osplus.enterprise.uss.dbiqchk.util.JobConnector: Job hat Status PRINT
+17:25:03.964 INFO: osplus.enterprise.uss.dbiqchk.DBIQCheck: === Q100804J / J0032458 / PRINT / CC 0004 ========================================================
+17:25:04.106 INFO: osplus.enterprise.uss.dbiqchk.DBIQCheck: Lese Ergebnisse aus (1/1)
+17:25:04.112 INFO: osplus.enterprise.uss.dbiqchk.util.JobConnector: Rendering html (1/1)
+17:25:04.193 INFO: osplus.enterprise.uss.dbiqchk.util.HTMLReportRenderer: Report-Datei auf dem Server ./prot/JDC03310.2022-11-29-17-25-04.193.zip
+17:25:06.864 INFO:osplus.enterprise.uss.dbiqchk.DBIQCaller: DBIQ-Resultat ist DBIQ_CHECK_RESULT_QA_OK
+Das vom DBIQ-Client benötigte OSPlus-Release wird anhand der Projektversion ermittelt. Per Configuration-Property ospeRelease im DBRM-Collect-Mojo kann optional die OSPlus-Version (z.B. "osp230") vorgegeben werden.
+
+Das Ergebnis des DBIQ-Check ist unter Build/target zu finden.
+
+Translate erzwingen
+Durch das Setzen der System-Property forceTranslate kann während eines Build-Lauf ein generelles Translate bei allen .sqlj-Dateien erzwungen werden:
+
+
+
+-DforceTranslate=true
+Keine package-info-Dateien beim Translate
+Zu jedem SQLJ-Package wird eine package-info.java-Datei erstellt, sofern diese nicht bereits vorhanden ist. Dies kann in der Konfiguration von sqlj-translate unterdrückt werden (beispielsweise falls alle SQLJ-Generate aller SQL-Packages in ein Java-Package landen sollen anstatt ein Java-Package pro SQL-Package).
+
+
+
+<isPackageInfoDisabled>true</isPackageInfoDisabled>
+Customize erzwingen
+Durch das Setzen der System-Property forceCustomize kann während eines Build-Lauf ein generelles Customize bei allen .ser-Dateien erzwungen werden:
+
+
+
+-DforceCustomize=true
+DBIQ-Check erzwingen
+DBIQ-Check wird für alle DBRM-Files ausgeführt, auch wenn kein Customize erfolgt ist.
+
+
+
+-Dsqlj.dbiq.force=true
+DBIQ-Check explizit für ein SQLJ-Modul ausführen
+Wollen Sie die per Customize erzeugten DRBM-Files eines SQLJ-Moduls manuell via DBIQ-Check überprüfen, so können Sie im zu prüfenden SQLJ-Modul folgenden Maven-Befehl ausführen:
+
+
+
+mvn osplus.dyns.tools:sqlj-maven-plugin:sqlj-dbiqcheck -DospeRelease=osp230 -DdbrmDir=./src/main/resources/dbrm-gen
+dbrmDir ist das Verzeiczhnis, in dem die zu prüfenden DBRM-Files enthalten sind.
+
+Der Report befindet sich anschließend im HTML-Format im Target-Verzeichnis des SQLJ-Moduls (qadbrm-report.html). Öffnen Sie diesen mit dem Browser.
+
+Fehlermeldungen "-204 mit eigenem J-User"
+Kommt es zu einem 204er Fehler, bei dem anstatt z.B. S307 der eigene J-User oder ein Q-User steht, deutet dies darauf hin, dass die .ser-Datei komplett fehlt oder kein Customize stattfand.
+
+Fehlermeldungen "-805"
+Zu unterscheiden sind dabei vier Fälle:
+
+Es erfolgte kein Customize.
+Unter commonLibraryRef hängt irgendwas quer (SYSLN200.5359534C564C3031 könnte darauf hin deuten).
+Es erfolgte kein Bind im gewünschten Institute (bzw. Gruppe) im DB2 (es fehlen dann die Contoken-Angaben im zugehörigen JAVAOSP- bzw. OSPE-Element im Code-Pipeline).
+Die vom Customize erstellten .ser-Dateien wurden nicht ins SVN eingecheckt, damit verschiedene Contoken in .ser-Datei und DBRM-Datei.
+Ein dynamisches SQL-Statement (z.B. Spring-Batch-Framework unter z/OS) wird in einem Plan ohne dynamische Berechtigung ausgeführt (SYSLN200.535953...).
+Der Fall "SYSLN200.5359534C564C3031" ist kompliziert, hier sind nicht alle Ursachen klar. Tritt dieser Fehler beim Lesen der INST_PARAMETER-Tabelle auf könnte ein redundanter DB2-Treiber in der eigenen pom.xml die Ursache sein. Im Zweifel einmal per WlpKonfigurationsCheck.jar unter Lokaler WLP prüfen, ob dieses Tool eine Ursache findet.
+
+Im Fall eines fehlenden Customize wurde der SQLJ-Code zwar nach Java übersetzt, aber es fehlte die Anreicherung um eine Profildatei (.ser-Datei) mit für den Bind notwendigen Angaben. Eine solche Fehlermeldung schaut dann wie folgt aus:
+
+
+
+JDC00040S001 - JGK31010/1-Datenbankfehler -805/51002 DB2T.S307.SYSLN200.5359534C564C3031;DISTSERV;04
+Charakteristisch ist die Angabe "SYSLN200.5359534C564C3031" (die Hexziffern stehen für "SYSLVL01"). Dieser Fall kann aber auch an Problemen in der commonLibraryRef eines WLPs unter MacOs auftauchen (Bericht von FP am 05.12.2022). Im Januar 2023 tauchte im Rahmen von Datasource-Anpassungen die "SYSLN200.5359534C564C3031" auch in IAPU-Notebook-WLP auf.
+
+Im letzten Fall wird zur Laufzeit ein Contoken gemeldet, das nicht mit dem Contoken übereinstimmt, dass im JAVAOSP- oder OSPE-Code-Pipeline-Element aufgeführt ist.
+
+Falsche Phase in copy-ser-files
+Falls in einem SQLJ-Build die .ser-Dateien im JAR-Generat fehlen, so kann dies daran liegen, dass die copy-ser-files-Execution vor dem sqlj-customize-Mojo lief. Wenn das sqlj-customize-Mojo in der Phase compile läuft, sollte auch copy-ser-files in der Phase compile laufen (nicht in der Phase resources, das wäre vor dem Customize, wenn es noch gar keine .ser-Dateien gibt).
+
+Falsche Ressourcen-Angabe
+In den pom.xml der sqlj-Package-Projekte wurde unten vom Migrator in den Ressourcen target/sernew eingebunden:
+
+
+
+<directory>${project.build.directory}/sernew</directory>
+Empfehlung ist, die .ser-Dateien im Repository einzuckechen, also nicht die flüchtigen target-Generate zu verwenden:
+
+
+
+<directory>ser</directory>
+Wobei eine Implementierungseinheit auf eigenen Wunsch aber auch generell Customize und Bind im Bamboo-Build durchführen kann. Manche Projekte mit größeren Packages machen dies explizit, um Konflikte beim Einchecken bzw. Synchronisieren zu vermeiden.
+
+Fehlermeldungen "-917"
+Ursache für einen SQL-Code "-917" mit Meldung "BIND PACKAGE FAILED" könnte ein fehlerhafter oder nicht ermittelter DB2-Funktionslevel (APPLCOMPAT) sein. Das SQLJ-Maven-Plugin ermittelt die seitens DM-Team zum jeweiligen OSPlus-Release gewünschte APPLCOMPAT-Angabe intern per DB2P-Abfrage, siehe Logzeile "Ermittle ApplCompat" im Build-Log.
+
+Mehrfache Ausführung von SQLJ-Customize oder DBIQ
+In manchen Buildplänen kommt es zu einer mehrfachen Ausführung von sqlj-translate/customize oder sqlj-collect (und damit auch dem DBIQ-Aufruf), diese mehrfachen Ausführungen sind nicht notwendig und verlängern den Build. Eine mögliche Ursache hier kann das Goal "jar" anstatt "jar-no-fork" im maven-source-plugin sein.
+
+Großer Classpath
+Beim SQLJ-Translate wird derzeitig ein eigener java-Prozess gestartet, dessen Kommandozeilenargumente und damit dessen Classpath dürfen 32KB nicht überschreiten. Im Fehlerfall kommt es zu folgender Meldung:
+
+
+
+Cannot run program "java": CreateProcess error=206, Der Dateiname oder die Erweiterung ist zu lang
+Das Mojo sqlj-translate wurde daher um einen Parameter sqljClasspathExcludeRegexp ergänzt. Dieser Parameter enthält regulärer Ausdrücke, um bekannte nicht beim SQLJ-Translate benötigte JARs herauszufiltern. Dieser Parameter kann bei Bedarf angepasst werden.
+
+
+
+	/** Liste von regulären Ausdrücken zum zum Wegfiltern von Elementen im Classpath */
+	@Parameter()
+	private String[] sqljClasspathExcludeRegexp = {
+		".*[/\\\\]com[/\\\\]fasterxml[/\\\\].*",
+		".*[/\\\\]com[/\\\\]sun[/\\\\].*",
+		".*[/\\\\]org[/\\\\]apache[/\\\\]cxf[/\\\\].*",
+		".*[/\\\\]org[/\\\\]apache[/\\\\]maven[/\\\\].*",
+		".*[/\\\\]org[/\\\\]apache[/\\\\]struts[/\\\\].*",
+		".*[/\\\\]org[/\\\\]codehaus[/\\\\].*",
+		".*[/\\\\]org[/\\\\]drools[/\\\\].*",
+		".*[/\\\\]org[/\\\\]eclipse[/\\\\].*",
+		".*[/\\\\]org[/\\\\]opensaml[/\\\\].*",
+		".*[/\\\\]org[/\\\\]springframework[/\\\\].*",
+		".*[/\\\\]osplus[/\\\\]dyns[/\\\\].*[.]bs[.]api-.*",
+		".*[/\\\\]osplus[/\\\\]dyns[/\\\\].*[.]cs-.*",
+		".*[/\\\\]osplus[/\\\\]dyns[/\\\\].*[.]fs-.*",
+		".*[/\\\\]osplus[/\\\\]ospe[/\\\\].*[.]bs[.]api-.*"
+	};
+
+
+JDBRM-ZIP-Name ("-805" mit korrektem Package aber im DB2 unbekanntem Contoken)
+Einige Migratorversionen haben den JDBRM-Namen falsch in den Dateien Build/pom.xml sowie src/main/resources/bkm_common.xml hinterlegt. Der finalName der Execution bkm-dbrm in Build/pom.xml muss auf den Namen des Endevor-Elements (jetzt Code-Pipeline) lauten, nicht auf das SQLJ-Package. Ebenso muss der Name des ZIP-Archivs in src/main/resources/bkm_common.xml den Endevornamen enthalten, nicht den Packagenamen.
+
+Auszug Build/pom.xml Quelle erweitern
+Auszug src/main/resources/bkm_common.xml Quelle erweitern
+Probleme im OSPE-Batch
+Siehe JW-15863 - OSPE Maven-Migration: Batchgruppe findet SQLJ nicht Erledigt .
+
+Probleme beim Translate
+Der eigentliche Translate wird von IBM-Klassen im SQLJ.zip (Packages sqlj.*) ausgeführt. Die Entwicklung dieser Klassen endete vermutlich so um JDK 1.5. Java 7-Features wie beispielsweise der Diamond-Operator sind dem Translate daher nicht bekannt!
+
+Trotz der umfangreichen Logik in sqlj.javac kommt der SQLJ-Parser mit bestimmten Kommentaren nicht klar, deswegen gab's in den Ant-Skripten und gibt's im Maven-Plugin einen Kommentar-Preprozessor. Per Default werden SQL-Kommentare, Zeilenkommentare in SQL-Statements sowie Blockkommentare entfernt. Per Konfigurationsangabe von sqljPreprocessComments, sqljPreprocessBlockComments und sqljPreprocessJavaComments in der sqlj-preprocessor-Execution kann dies geändert werden.
+
+Probleme beim Customize
+Abbruch des Customize mit "Array index out of range"
+Es kann beim Customize zu einem Abbruch mit der folgenden Fehlermeldung kommen:
+
+12:42:16,372 [ERROR] Failed to execute goal osplus.dyns.tools:sqlj-maven-plugin:220-SNAPSHOT:sqlj-customize (sqljcustomize) on project osplus.*.*.Jmmnnnn: Beim Aufruf des Customizer trat ein schwerer Fehler auf: Array index out of range: 6 -> [Help 1]
+
+Wenn in einem Insert-Statement zu einer Hostvariable der zugehörige Feldname fehlt, stürzt der von SQLJ verwendete DB2-Treiber in diesem Fall per AIOOBE ab. Per "mvn -X" kann der vollständige Stacktrace angezeigt werden.
+
+
+
+Caused by: java.lang.ArrayIndexOutOfBoundsException: Array index out of range: 6
+    at com.ibm.db2.jcc.sqlj.Binder.b (Binder.java:2390)
+    at com.ibm.db2.jcc.sqlj.Binder.a (Binder.java:2152)
+    at com.ibm.db2.jcc.sqlj.Binder.a (Binder.java:756)
+    at com.ibm.db2.jcc.sqlj.Binder.bindMain (Binder.java:502)
+    at com.ibm.db2.jcc.sqlj.Customizer.customizeMain (Customizer.java:1077)
+    at osplus.dyns.tools.sqljmaven.SqljCustomizeMojo.executeSqljCustomize (SqljCustomizeMojo.java:801)
+Eine andere Ursache können Kommentare im SQL-Statement sein, z.B. nach SELECT oder CASE, diese können das SQLJ-Translate im Gegensatz zu Cobol leider durcheinander bringen. SQL-Kommentare können daher bei Bedarf generell per Preprozessor (siehe oben) entfernt werden.
+
+Fehler "Data type mismatch"
+Im Fall einer impliziten Konvertierung von Datentypen, z.B. BigDecimal nach int, kommt es zu folgendem Fehler beim Customize:
+
+
+
+Error Code    : -581
+SQLSTATE      : 01000
+Message       : Data type mismatch warning. Please check your SQLJ query below
+[...]
+Warning : param 1:  java.math.BigDecimal( NUMERIC( 2 )) interpreted as  DB2_SQLTYPE_NINTEGER(497)
+Hintergrund ist, dass der DB2-Treiber beim Translate/Customize in manchen Situationen im Gegensatz zu Cobol nicht weiß, welches Format eine BigDecimal-Hostvariable hat. Er geht dann vom Datentyp int aus, was bei Aufsetzpunkt-Indizes ok ist aber bei Betragsfeldern zu unangenehmen Fehlern führen könnte. Hier ist daher das individuelle SQL-Statement zu prüfen.
+
+Sofern die Konvertierung von BigDecimal nach int im genannten Statement nicht fehlerhaft ist, kann diese per Customize-Konfiguration <sqljAcceptTypeMismatch>true</sqljAcceptTypeMismatch> in eine Warnung umgewandelt werden.
+
+Fehler "Zum Java-Package ... mit den Klassen ... gibt es keine .ser-Dateien"
+Entweder gab es ein Problem beim vorherigen Translate (dies wäre als Fehlermeldung im Log vor dem Customize-Aufruf zu sehen) oder es wurde ein Translate auf eine SQLJ-Klasse ohne SQLJ-Statement ausgeführt. SQLJ-Klassen ohne SQLJ-Statements, also sozusagen leere Klassen, werden derzeitig nicht unterstützt.
+
+Customize / Bind in WARTUNG_PROD (vorheriges Release)
+Der lokale Bind bei SQLJ-Änderungen kann bei Bedarf unterdrück werden, der Bind wird dann erst beim Deployment per DEUS / UNX durchgeführt.
+
+
+
+<sqlj_bind_skip>true</sqlj_bind_skip>
+Diese Angabe wird im configuration-Element des sqlj-bind-Mojos hinterlegt.
+
+Nutzung für IDH
+Beim IDH kommt SQLJ in dynamischer Form zum Einsatz, also ohne Customize/Bind. Bei Nutzung des SQLJ-Maven-Plugins können dazu die sqlj-customize- und sqlj-bind-Execution in der pom.xml des Packages auskommentiert werden. In der sqlj-translate-Execution müsste dann sqljSerNewDir auf ser anstatt ${project.build.directory}/sernew gesetzt werden. Dadurch landen ser-Dateien des Translate direkt im ser-Ordner landen. Siehe auch OSPESUPPOR-3764 - IDH-Datenbankzugriffe nach Maven-Migration nicht möglich Erledigt .
+
+Prüfwerkzeug
+Mit Hilfe der Swing-Oberfläche SqljCheckGui.jar können lokale und entfernte IE-ZIPs (WebApp.zip als auch Common.zip) in Bezug auf SQLJ-Inhalte geprüft werden.
+
+Als URL kann entweder eine ZIP-Datei im lokalen Filesystem oder eine Artifact-URL im Bamboo verwendet werden, z.B. https://build.intern/artifact/OCPOSPE-TRUNKPRODUCTIONSPEC/JOB1/build-12/BKs-Server/bkm_ospe_ocp_services_server_WebApp.zip oder "W:\Projekte\dynstest_dyns_ospe_server\ServiceGruppe\sqlj\pkg\JDC09010\target\osplus.dynstest.service.sqlj.JDC09010-211-SNAPSHOT.jar".
+
+IAPU-User und IAPU-Passwort  ("HTTP-Passwort") werden benötigt zum Zugriff auf Artifacts im Bamboo 6. RACF-User und RACF-Passwort werden benötigt zum Prüfen der Binds im DB2T. Das RACF-Passwort kann weggelassen werden, es wird nur zur Prüfung der Binds benötigt.
+
+
+
+Die SqljCheckGui vergleicht ab Version 0.6.1 (2022-05-30) Java-Datentyp und DB2-Datentyp und gibt Warnungen bei bekannten Problemfällen (double->DECIMAL sowie BigDecimal→INTEGER) aus. Bei ausführlicher Anzeige werden auch die Konvertierungen angezeigt:
+
+
+
+      Stmt 0, Hostvar 19: class java.math.BigDecimal -> DB2-Typ 485/DECIMAL-mit-Nullindikator (prec=15, scale=2)
+      Stmt 0, Hostvar 20: class java.lang.String -> DB2-Typ 453/CHAR-mit-Nullindikator (len=12)
+
+
+Support
+Sollten Punkte auf dieser Wiki-Seite unklar oder verbesserungswürdig sein oder falls Fehler im SQLJ-Maven-Plugin selbst vorliegen bitte einen JIRA-Vorgang im
+
+DynS-Support-JIRA DYS
+einstellen.
+SQLJ-Generierung
+Das Erstellen von SQLJ-Dateien kann aufwändig sein. Für bestimmte Fälle gibt es Werkzeuge, die hier unterstützen könnten.
+
+DAM-DAO-Generator: Übertragen von SQL-Statements in Cobol-DAMs nach Java, siehe So migrieren Sie ein Datenzugriffsmodul mit dem DAM-DAO-Generator.
+SQLJ-Generator: Kernbank-Werzeug zur Generierung von SQLJ-Statements inklusive DAO zu einer CREATE TABLE-Anweisung oder Copystrecke, siehe Tool - Sqlj Generator.
+Offene Punkte
+Dieser Abschnitt enthält eine Liste von Themen, deren Umsetzung nicht verkehrt wäre.
+
+Ausgabe einer Warnung (oder einen übersteuerbaren Abbruch), falls ein .sqlj-Source mit UTF-8-Encoding vorliegt, aber der Default ISO-8859-1 noch zieht.
+Prüfung des Loggings per SQLJ
+
+
+SLF4J(W): No SLF4J providers were found.
+SLF4J(W): Defaulting to no-operation (NOP) logger implementation
+SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
+
+
+Historie
+Die Urfassung des SQLJ-Maven-Plugins wurde 2019 entwickelt für SQLJ-Aufrufe in Java-Batch unter z/OS. Im Rahmen der OSPE-Maven-Migration übernahm das WEBU-Team das Plugin. Anfang Februar wanderte es dann wieder zur DynS. Die aktuelle Fassung unter osplus.dyns.tools unterstützt die vom Migrator erstellten POMs für osplus.web.tools. Einziger Unterschied in der Verwendung ist eine andere Group-Id:
+
+
+
+                <groupId>osplus.dyns.tools</groupId>
+                <artifactId>sqlj-maven-plugin</artifactId>
+                <version>251-SNAPSHOT</version>
+Changelog
+2025-08-01 (251.0.10): Binding-PATH nun auch beim Customize ergänzt (wegen UDFs).
+2025-07-16 (251.0.9): Binding-PATH beim Bind ergänzt zur Unterstützung von UDFs (User-Defined-Functions).
+2025-05-19 (251.0.8): Fehlerbehandlung beim SQLJ-Maven-Pluginlauf mit doppelte DBIQ-Ausführung (dazu zählen auch die Versionen 251.0.4 bis 251.0.7).
+2025-05-05 (251.0.3): Ausgabe von Goal und Phase im Log
+2025-04-11 (251.0.2): Optionale Unterstützung des SQLJ-Maven-Plugins außerhalb von DynS-/OSPE-Implementierungseinheiten (DBRM-Sammlung zu SQLJ-Mavenmodul mit anderer Namenskonvention).
+2025-03-18 (251.0.1): Initialversion 25.1.
+2025-03-18 (250.0.5): Unterstützung der Bindkennungen für IM24 und SWIFT.
+2025-01-28 (250.0.4): Neue Optionen newLineLf und shortComments für sqlj-collect-Mojo
+2025-01-24 (250.0.3): Etwas mehr Logging im sqlj-collect-Mojo bei den DBRMs.
+2024-11-27 (250.0.2): Unterstützung 250-S6-SNAPSHOT.
+2024-11-13 (250.0.1): Unterstützung der BIND-Kennungen für BIL.
+2024-11-13 (241.0.6): Unterstützung der BIND-Kennungen für BIL.
+2024-06-18 (241.0.5): Vergleich .ser-Profile und DBRM-Datei nur bei vorhandener DBRM-Datei.
+2024-06-06 (241.0.4): Vom DM-Team vorgegebene Bind-Optionen werden nun dynamisch aus der Tabelle G000.FI_DEPL_BIND_OPTIONS ermittelt.
+2024-05-23 (241.0.3): DBIQ darf zu 24.1 auch lokal nicht übersteuert werden gemäß DB/DC-Vorgabe. Zu osp250 wird diese Vorgabe nochmal geprüft.
+2024-05-22 (241.0.2): DBIQ darf im Bamboo nicht mehr übersteuert werden gemäß DB/DC-Vorgabe. Umstellung des SQLJ-Maven-Plugins auf Java 17.
+2024-04-25 (241.0.1): Gemäß UNX-Vorgabe unterstützt das Plugin nun die Schreibweise bind=sqljPackage anstatt sqljPackage=bind in den dbrm.binding.infos.
+2024-03-18 (240.0.13): Unterstützung mehrerer Bindkennungen zu einem SQLJ-Package per kommagetrennter Liste im Element bindKennung in der pom.xml.
+2024-03-14 (240.0.12): Etwas mehr Logausgaben im Umfeld Bindkennung und JDBRM beim Customize.
+2023-12-07 (240.0.11): Protokollierung, ob DBIQ-Parameter sqlj.dbiq.force gesetzt wird.
+2023-11-14 (240.0.8): DBIQ-Client-Dependency-Version von 211 auf 213 angehoben wegen Aktualisierung der SSH-Keys in der MT91 (Version 240.0.7 lief nur unter Java 11).
+2023-11-10 (240.0.6): Eigentlich nicht benötigtes kleines Update wegen sqljDbiqForce.
+2023-10-27 (240.0.5): package-info.java-Generierung ist nun per Schalter isPackageInfoDisabled fallweise unterdrückbar.
+2023-10-24 (240.0.3): Info-Log zum Encoding beim Translate (Flag compiler-encoding-flag wird bei Nicht-Default-Encoding nun gesetzt)
+2023-10-13 (240.0.2): Option ACTION(ADD) beim Bind ergänzt.
+2023-08-30 (240.0.1): Bereitstellung für OSPlus 24.0
+2023-08-23 (SqljNeuanlage.jar, Version 1.1.1): maven.deploy.skip-Angabe aus SQLJ-POM-Template entfernt,
+2023-08-04: Das Tool SqljNeuanlageGui.jar unterstützt nun auch die intiale Anlage eines SQLJ-Parent-Moduls.
+2023-07-18 (231.0.10): Überarbeitung der Anzeige des DBIQ-Reports im Browser.
+2023-07-14 (231.0.8): Abbruch eines Buildlaufs, wenn DBIQ Fehler feststellt. Dies kann bei Bedarf übersteuert werden, siehe oben.
+2023-06-22 (231.0.6): Aktivierung von DBIQ per Default, die DBIQ-Prüfung wird seit November 2022 einmalig für alles Packages am Ende des Buildlaufes durchgeführt. Ab OSPlus 23.1 wird DBIQ im UNX/Endevor aktiviert, damit SQLJ-Probleme wie fehlende QUERYNO-Angaben nicht erst in Stage 7 entdeckt werden, wurde die DBIQ-Prüfung per Default nun im SQLJ-Maven-Plugin aktiviert.
+2023-06-22 (231.0.5): Binds per SQLJ-Maven-Plugin sind laut DBDC-Vorgaben nur in den Stages C, A, 1, 3, 5 sowie 9 zulässig. Für die anderen Stages ist ein Deployment per DEUS oder HoDOr erforderlich.
+2023-03-14 (231.0.2): Neuanlage von SQLJ-Maven-Modulen per SqljNeuanlage.jar (Anhang dieser Wiki-Seite).
+2023-03-14 (231.0.1): Bei Vorkommen von Kleinbuchstaben im SQLJ-Package-Namen wird nun ein Fehler geworfen mit dem Hinweis, dass Buchstaben im SQLJ-Package-Namen immer groß zu schreiben sind
+2023-01-26 (230.0.6): Das Preprocessor-Mojo gibt nun eine Statistik zur Anzahl Dateien aus (wichtig zu wissen, falls gar keine Datei bearbeitet wurde).
+2022-11-29 (230.0.5): Der DBIQ-Check ist in das DBRM-Collect-Mojo umgezogen.
+2022-11-08 (230.0.4): Neue Option sqljAcceptTypeMismatch um implizite BigDecimal-nach-int-Konvertierungen zu erlauben.
+2022-09-23 (230.0.3): Bugfix im SqljJarBindMojo: Im Falle von sqlj.bind.skip=true wurde bisher nur das DBRM aus dem 1. DAO-Jar extrahiert.
+2022-09-15 (230.0.2): Das Passwort des technischen Users wurde auf Passphrase umgestellt.
+2022-08-23 (230.0.1): Die Erstellung und Nutzung der serDirPath.txt wurde entfernt. Das CollectDBRM-Mojo verwendet für den Versionsvergleich nun den relativen Pfad zu den ser-Dateien
+2022-07-13 (221.0.12): OSPlus-Version beim DBIQ-Aufruf anhand der Projektversion ermitteln (sofern es keine Vorgabe gibt).
+2022-07-06 (221.011): Überarbeitung der Verwendung von Checksummen-Dateien (sowohl beim Preprocessor als auch beim Translate).
+2022-06-29 (221.0.8): Alte 201-SNAPSHOT-Dependency aktualisiert.
+2022-06-17 (221.0.7): Optionales Schreiben einer SQLJ-Trace-Datei beim Customize (für den DB2-Herstellersupport)
+2022-06-15 (221.0.6): Schreiben der aktualisierten SHA-256-Prüfsumme nach erfolgreichem SQLJ-Translate.
+2022-06-13 (221.0.5): Löschen alter MD5-Prüfsummen-Dateien beim Generieren einer SHA-256 Prüfsumme.
+2022-06-09 (221.0.4): Verzicht auf Translate und Customize unter Bamboo bei Nicht-SQLJ-Änderungen (setzt Änderungen an der pom.xml voraus, siehe oben).
+2022-06-02 (221.0.3): Update auf DB2-Treiberversion 4.29.29 (diese enthält einen Fix für executeBatch in SQLJ).
+2022-05-23 (221.0.2): SQLJ-Translate wenn noch keine generierte Java- bzw. .ser-Dateien vorhanden sind (dies kann auch nach einem clean der Fall sein).
+2022-04-05 (221.0.1): Ausführen eines SQLJ-Translates nur noch nach Änderung einer .sqlj-Datei, Erzwingen eines Translates auch ohne Änderung einer .sqlj-Datei, Umstellung des Hash-Algorithmus für die Prüfsumme von MD5 auf SHA-256
+2022-02-14 (220.0.10): BuildContext-Abhängigkeit wieder ergänzt.
+2022-02-14 (220.0.9): Fehlermeldung bei falschem relativeSqljPath-Ordner im sqlj-collect-dbrm, Abhängigkeit zum BuildContext entfernt.
+2022-02-04 (220.0.8): Wechsel auf DB2-Treiberversion 4.29.24.
+2022-01-22 (220.0.7): Ausgabe der DB2-Treiberversion, direkte Dependency zu commons-io entfernt.
+2021-12-16 (220.0.6): sqlj-jar-bind: Extrahieren der DBRM-Files auch wenn sqlj.bind.skip=true
+2021-11-08 (220.0.5): Verzicht auf Erstellen von .backup-Dateien, da SVN- oder Git-Repostory für die Historie zuständig sind.
+2021-11-03 (220.0.4): scope-Angaben in pom.xml (in 220.0.3 eingeführt) zurück genommen (OSPESUPPOR-4087).
+2021-11-03 (220.0.3): APPLCOMPAT V12R1M508 für OSPlus 22.0 (gemäß DB/DC-Beschluss #1452).
+2021-09-08 (220.0.2): Option -hostLangJAVA direkt hinter -genDBRM geschoben.
+2021-09-01 (220.0.1): APPLCOMPAT V12R1M506 für OSPlus 22.0.
+2021-07-21 (211.0.24): Ausgabe der Anzahl Statements pro Package (wegen DBDC-QC #1382).
+2021-07-06 (211.0.23): Direkter Aufruf SQLJ-Translate per Java, also ohne Start eines eigenen Prozesses, zur Vermeidung von langen Classpath-Problemen.
+2021-07-01 (211.0.21): Ausgabe der Bind-Konfiguration.
+2021-06-17 (211.0.20): Angabe von Java-Packages mit Wildcard, z.B. "osplus.dynssee.ie.epo.dao.sqlj.impl.*", Bind-Optionen um EXPLAIN(YES) ergänzt, Sortierung der .sqlj-Dateien auch unter Windows.
+2021-06-10 (211.0.19): Warnhinweis, falls ein DBRM nicht vorhanden ist beim dbrm-collect (bei IDH mit dynamischem SQLJ ist dies erwünscht).
+2021-06-10 (211.0.18): MojoFailedException bei fehlendem SQLJ-Qualifier in der Bind-Konfiguration.
+2021-05-19 (211.0.17): Erzwingen eines Customize auch ohne Änderung, falls es noch keine serfiles.grp-Datei gibt.
+2021-05-17 (211.0.16): Blockkommentare per Default entfernen, da es Nutzer gibt, die ganze #sql-Bereiche damit auskommentieren (in 211.0.15 war ein Buildfehler).
+2021-05-07 (211.0.14): Update auf DBIQ-Client 211, RCs 33 (KI, QA_FAILED_BUT_INACTIVE), 44 (KW, QA_FAILED_BUT_WHITELIST) und 66 (KO, QA_FAILED) führen per Default nicht mehr zum Abbruch.
+2021-04-29 (211.0.13): Optionales Erzwingen eines lokalen DBIQ-Checks per -DsqljDbiqForce=true.
+2021-04-28 (211.0.12): Meldung bei fehlender .ser-Datei erweitert (noch zu ergänzen ist eine Warnmeldung, falls keine SQL-Statements enthalten sind).
+2021-04-19 (211.0.11): Per Default wird ein Bind nun direkt per DB2-Methode ausgeführt, nicht in einem eigenen Prozess mit eigener JVM. Dadurch muss insbesondere beim Bind kein eigener Classpath ermittelt werden.
+2021-04-19 (211.0.10): Beim Entfernen von SQL-Kommentaren \u-Escapes korrekt behandeln.
+2021-04-14 (211.0.9): Beim Entfernen von SQL-Kommentaren innerhalb eines SQLJ-Blocks auch Java-Kommentare entfernen.
+2021-04-13 (211.0.8): DBIQ-Aufruf ohne eigenen Classpath
+2021-04-09 (211.0.6): Filtern des Translate-Classpaths (mit Parameter zum Übersteuern) zur Vermeidung des 32KB-Classpath-Problems.
+2021-04-08 (211.0.5): Erstellen genau einer serfiles.grp-Datei pro SQLJ-Package (auf oberster Ebene anstatt im Package), damit beim Customize und Bind die Reihenfolge der .ser-Files identisch ist.
+2021-04-06 (211.0.4): Korrektur der .ser-Erstellung bei SQLJ-Packages mit mehreren Java-Packages (alle .ser-Files eines SQLJ-Packages bekommen nun dasselbe Consistency-Token).
+2021-03-30 (211.0.3): Im sqlj-collect-dbrm ist die package.properties-Datei nun optional, Default ist dann INSTITUT bzw. STDINR.
+2021-03-29 (211.0.1): Customize und DBRM-Erstellung neu durchführen, falls keine JDBRM-Datei vorliegt.
+2021-03-04 (210.0.3): Der SQL-Kommentar-Preprozessor wurde überarbeitet. Die Verzeichnisangaben im sqlj-collect-dbrm-Mojo wurden parametrisiert.
+2021-03-05 (210.0.4): Zulassen aller Bindtypen (z.B. STDINR, STDGRP, IDVINR).
+2021-03-09 (210.0.6): Neues Mojo sqlj-jar-bind für fertig generierte DAM-/DAO-JARs.
+2021-03-12 (210.0.8): Customize-Schalter sqljOnlinecheckSkip für IE bad-ospe, da der Onlinecheck mit den dortigen globalen DB2-Variablen nicht funktioniert.
