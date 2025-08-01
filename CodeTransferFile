@@ -1,122 +1,75 @@
-Sehr gerne, Vivek — freut mich, dass jetzt alles klar ist.
-Hier ist die vollständige **detaillierte Zusammenfassung auf Deutsch**, basierend auf allen Punkten, die wir gemeinsam geklärt haben.
+Hintergrund
+Die zukünftigen Payment-Anwendungen im Globalkonzept der Container-Plattform müssen auf die DB2-Tabellen der POS- bzw. GA-Kopfstelle (mit statischem SQL) zugreifen.
 
----
+Aus Sicht der Entwicklung erfolgt die Implementierung unter Verwendung von SQLj und dem existierenden maven-Plugin (SQLJ-Maven-Plugin - DynS Entwicklerhandbuch - Wiki-System).
 
-## 🧾 CoBadge-Migration – Daten- & Clearing-Konzept (Detaillierte Zusammenfassung auf Deutsch)
+Beistellungsanforderung
+Es ist ein Verfahren zu entwickeln, mit dem die Bind-Dateien an das entsprechende DB2 gebunden werden. Die Bereitstellung soll zu Rel. 25.0 erfolgen.
 
-### 1) Ausgangssituation & Zielbild
+Lösungsidee
+Es gibt potenziell zwei Optionen. Einerseits könnte sich das Verfahren an den Prozessen von OSPE (inkl. Code-Pipeline) orientieren.
 
-* **Datenbank**: Die neue CoBadge-Services-Lösung (auf Kubernetes) nutzt dieselbe **bestehende DB2-Datenbank** wie das alte CoBatch-System auf dem IBM Mainframe. Es findet **keine Duplikation** der Datenbank statt.
-* **Zugriffsmethode (Neu)**: Der Zugriff der neuen Spring-Boot-Anwendungen erfolgt über ein **SQLJ-Package**, das in Java eingebunden und mit DB2 verbunden wird.
-* **Clearing (Alt-System)**: Die bestehenden **DMC-Clearing-Batchjobs** im Altsystem bleiben weiterhin aktiv. Sie lesen wie bisher aus den vorhandenen Tabellen, solange die neuen Services die Daten korrekt befüllen.
-* **Historische Daten (540 Tage)**: Die Archivierung älterer Daten wird bereits durch bestehende DMC-Batchprozesse abgedeckt, die die Daten in History-Tabellen verschieben. Es ist keine Nachimplementierung erforderlich.
-* **IBO-Übernahme Clearing**: Ein separates Projekt zur Migration des Clearings an IBO ist in Planung, jedoch **explizit aus dem aktuellen Scope ausgeschlossen**.
+→ Potenziell großer Aufwand.
 
----
+Alternativ könnte MiWe die Beauftragung von UNX ohne Code-Pipeline durchführen. Ist das überhaupt erlaubt?→ Als Subtask vermutlich ja 
 
-### 2) Betriebsmodell während der Übergangsphase
+Ablauf des Verfahrens ohne Code-Pipeline:
+Vorbedingung
 
-* **Paralleler Funktionsbetrieb mit einer gemeinsamen Datenbank**:
+Vor dem Deployment in Produktion (bzw. ab Stage Abnahme) muss mit DBIQ ein Quality-Check erfolgt sein. Das muss im Build-Prozess integriert sein.
+Es ist weiterhin zwingend erforderlich, dass die*.jdbrm-Dateien, die durch Maven im Build erzeugt werden, eine spezifische Namenskonvention aufweisen, die bisher von keinen bestehenden Membern genutzt wird.
+(Das *.jdbrm ist ein zip-Archiv mit DBRM-Dateien und dbrm.binding.info)
 
-  * Neue Funktionalitäten wie **Reklamationen** und **Kartenbestellungen** schreiben über SQLJ direkt in die bestehende DB2-Datenbank.
-  * Die bestehenden DMC-Clearingprozesse lesen aus denselben Tabellen.
-* **Quelle der Wahrheit (Single Source of Truth)**: DB2 bleibt zentrale Datenbasis während der gesamten Migration.
 
----
 
-### 3) Datenfluss – Beispiel Reklamationen
+Build
 
-1. Die neuen CoBadge-Services **persistieren Reklamationsdaten** direkt in DB2 über SQLJ.
-2. Die DMC-Batchjobs im Altsystem **lesen diese Daten** und führen die Verarbeitung durch.
-3. Die Archivierung älterer Reklamationen erfolgt über bestehende DMC-Prozesse.
+Beim Build durch jenkins ist die *.jdbrm-Datei in einem für UNX zugänglichem Verzeichnis zu speichern. Entweder direkt auf der MT00 oder an einem anderen Übergabepunkt, von dem UNX die Datei herunterladen kann.
 
-> **Wichtig**: Die von den neuen Services geschriebenen Daten müssen **identisch strukturiert und semantisch gleich** wie im Altsystem sein, damit bestehende Prozesse ohne Änderungen weiterlaufen.
 
----
+Deployment
 
-### 4) Technische Aspekte & Absicherung
+MiWe bekommt im Rahmen des Depoyments die Anforderung Vorarbeiten als Subtask durchzuführen (aka DB2-Bind)
+Hierzu erstellt MiWe einen UNX-Auftrag (Per REST-Service) mit den folgenden Informationen:
+Wo liegen die Dateien
+Wohin müssen die Dateien Deployed werden (Potenzielle Zielsysteme sind in ETAPS G030, G050, G012, G094 und in Produktion WL04, WL05,IM01).
+UNX verteilt (per File-Transfer) die Dateien auf die angegebenen Zielsysteme und führt dort das Binding (installieren) durch den Aufruf der entsprechenden Prozesse auf den Zielsystemen auf.
+In ETAPS betrifft das die DB2T,DB2R,DB2Q und in Produktion DB2C/DB2B und DL2A
+UNX meldet an MiWe das Ergebnis der Installation zurück.
+Das geschieht entweder als Aufruf des bestehenden REST-Service oder durch Versand einer Nachricht via MQ
+MiWe führt die Installation der Anwendungen mit dem etablierten Verfahren fort.
 
-#### A. **SQLJ-Package & Bind-Vorgang**
 
-* Das SQLJ-Package wird in der Spring-Boot-Anwendung **kompiliert und in den Build integriert**.
-* Vor der Ausführung in DB2 muss das Package über die `.ser`-Dateien mit dem Tool `db2sqljbind` in ein `.bnd` umgewandelt und dann mit `db2 bind` **in DB2 eingebunden** werden.
-* Bei jeder Änderung an SQLJ-Code (z. B. neue SQL-Statements) ist ein **erneuter Bind erforderlich**.
+Offene Punkte
+Wie kommen die Dateien auf den Host ()?
+Andreas Wagner und Matthias Kutz prüfen ob ein Download mit curl möglich ist.
+Nico Enking müsste prüfen, ob über Jenkins die Dateien auf der MT00 abgelegt werden können
+Jakobs, Marcel legt Dateien (jdbrm) auf dem webdav ab (im Zweifel per winscp)
+Wie wird die Rückmeldung an MiWe übertragen?
+Option REST-Service: Kutz, Matthias  erstellt eine Aufwandsschätzung - Haug, Nils verteilt die Schnittstellenspezifikation (REST-API für Subtask Status Rückmeldungen)
+Option MQ: Nils Haug, Matthias Kutz, Marcel Grosser und Stephan Söder Service-Now-Plattform
+Ist ein Remote-Binding möglich?
+Sascha Rogmann müsste klären, ob ein Binding auf der Stage1 auch remote (im Rahmen des Builds) möglich ist.
+Wie ist das Mapping der Gruppenbezeichnungen zwischen MiWe und UNX abzubilden?
+Zeitplan
+Die MKP-Anwendungen, die die Funktionalitäten benötigen, müssen zu Rel. 25.0 in Produktion gehen.
 
-#### B. **Bind-Strategie & Stabilität**
+UNX/MiWe:
 
-* Das Package muss beim Rebind **denselben Namen und dieselbe Collection** behalten.
-* Andernfalls schlägt die Anwendung zur Laufzeit fehl (SQLCODE -805).
-* Der Bind-Vorgang legt auch die **Access Paths** (Zugriffspläne) fest. Änderungen in DB2 (z. B. neue Indizes, RUNSTATS) können zu einem Rebind führen, was das Verhalten beeinflusst.
+Das Verfahren zum 22.3. (FISP 25b) bereitzustellen ist sportlich.
 
-#### C. **Isolation Level & Transaktionskontrolle**
 
-* Die beim Bind verwendete **Isolationsebene** (z. B. `CS`, `RS`, `RR`) muss zur Nutzung durch Java und parallele Batchjobs passen.
-* Zu aggressive Isolationen (z. B. `RR`) im Java-Kontext können **Sperrkonflikte mit Batchjobs** verursachen.
-* Transaktionen sollten **kurz und sauber abgeschlossen** werden (keine langlaufenden Updates).
 
-#### D. **Referentielle Integrität (RI-Constraints)**
-
-* Die bestehenden Foreign-Key-Beziehungen in DB2 müssen beim Schreiben über SQLJ **eingehalten werden**.
-* Schreibreihenfolge (z. B. Master-Datensatz vor Detaildatensatz) muss beachtet werden.
-
----
-
-### 5) Teststrategie – Sicherstellung der Datenqualität
-
-Für das Akzeptanzkriterium *"Sicherstellen der Richtigkeit der Datenbankeinträge"* wird folgende Teststrategie empfohlen:
-
-| Testtyp                             | Beschreibung                                                                                                 |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| **Feldbasierte Vergleichstests**    | Einfügen von Testdaten via SQLJ und Vergleich mit durch das Altsystem erstellten Datensätzen                 |
-| **End-to-End Tests (mit Batch)**    | Erzeugen von Reklamationen durch neue Services und anschließend Ausführen der DMC-Batchjobs                  |
-| **Volumen- und Parallelitätstests** | Belastungstests zur Analyse von Sperren, Deadlocks und Performance während der Batchfenster                  |
-| **Tests der Historisierung**        | Verifikation, dass durch neue Services erstellte Alt-Daten durch DMC-Jobs korrekt archiviert werden          |
-| **Reconciliation (Abgleich)**       | Täglicher Abgleich zwischen geschriebenen und verarbeiteten Datensätzen (z. B. Zählprüfung, Statusvergleich) |
-
----
-
-### 6) Monitoring & Betrieb
-
-* **DB2-Metriken**: Sperren, Log-Nutzung, SQL-Performance, Package-Kollisionen
-* **Service-Metriken**: Fehlercodes bei SQL-Operationen, Transaktionszeiten
-* **Batch-Monitoring**: Laufzeiten, Durchsatz, History-Wachstum
-* **Alarmierung**: bei Sperrkonflikten, fehlerhaften Bindings, Abweichungen im Reconciliation
-
----
-
-### 7) Fallback-/Abschaltszenario
-
-* Sollte es zu Problemen mit den neuen Services kommen, kann das Schreiben in die DB2-Tabelle **deaktiviert werden** (z. B. über Feature-Flags).
-* Da DB2 gemeinsam genutzt wird, ist **kein Rollback von Datenmigration notwendig**.
-* Es wird empfohlen, zusätzlich **Applikationslogs** der SQLJ-Schreibvorgänge zu führen (zur Nachvollziehbarkeit).
-
----
-
-### 8) Out-of-Scope (Dokumentation für Nachvollziehbarkeit)
-
-* Die geplante Ablösung der DMC-Clearingprozesse durch IBO ist **nicht Bestandteil dieses Projekts**.
-* **Keine Änderungen am DB2-Schema oder der Tabellenstruktur** sind vorgesehen.
-* Kein Mapping, keine Transformation der Datenformate oder Codes erforderlich.
-
----
-
-### 9) Abbildung der Akzeptanzkriterien
-
-| Kriterium (Deutsch)                     | Umsetzung                                                                      |
-| --------------------------------------- | ------------------------------------------------------------------------------ |
-| **Befüllen der Alt-Datenbank**          | Direkter SQLJ-Zugriff auf bestehende DB2-Tabellen                              |
-| **Auslesen historischer Reklamationen** | Weiterhin durch Altsystem (inkl. History-Tabellen) gewährleistet               |
-| **Fallback/Abschalt-Szenario**          | Neue Services können deaktiviert werden, Altsystem läuft unabhängig weiter     |
-| **Sicherstellung der Richtigkeit**      | Durch strukturierte Tests und Abgleichprozesse                                 |
-| **Vorhalten von Alt-Daten (540 Tage)**  | Durch DMC-Jobs wie bisher abgedeckt                                            |
-| **Nachverarbeitung vs. Dokumentation**  | Technische Verarbeitung notwendig, daher volle DB2-Kompatibilität erforderlich |
-
----
-
-Wenn du möchtest, kann ich:
-
-* Diese Zusammenfassung als Word- oder PDF-Entwurf für die FachSpez aufbereiten,
-* Oder ein separates technisches **Bind-Konzept inkl. Skriptbeispielen** für CI/CD liefern.
-
-Sag mir einfach, wie du weiter vorgehen möchtest.
+Potenziell benötigte OEn und Aufwandsindikation
+5234 Deploment-Verfahren/MiWe (Entwicklung) - 20 PT
+5312 UNX (Entwicklung) - 40 PT
+5562 Datenmanagement (fachliche Unterstützung/Test) - 5PT
+5610 Jenkins (fachliche Unterstützung/Test) - 5PT
+5653 DynS (fachliche Unterstützung/Test) - 5PT
+Rücksprache am 27.09.2024
+Teilnehmer
+Matthias Kutz (5312)
+Nils Haug (5234)
+Andreas Wagner (5562)
+Mirko Reinken (4600)
+Timm Caporale (4654)
