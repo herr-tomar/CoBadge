@@ -1,359 +1,58 @@
-package osplus.pkp.dto.util;
-
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkp.dto.model.ProtoFieldModel;
-import osplus.pkp.dto.model.ProtoMessageModel;
-
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.util.ArrayList;
-import java.util.List;
-
-public class ProtoParserUtil {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(ProtoParserUtil.class);
-
-    public static List<ProtoMessageModel> parseAll(File protoDir) {
-        List<ProtoMessageModel> messages = new ArrayList<>();
-        File[] protoFiles = protoDir.listFiles((dir, name) -> name.endsWith(".proto"));
-        if (protoFiles == null) {
-            return messages;
-        }
-
-        for (File protoFile : protoFiles) {
-            messages.addAll(parse(protoFile));
-        }
-        return messages;
-    }
-
-    public static List<ProtoMessageModel> parse(File protoFile) {
-        List<ProtoMessageModel> messageModels = new ArrayList<>();
-
-        try (BufferedReader reader = new BufferedReader(new FileReader(protoFile))) {
-            String packageName = null;
-            ProtoMessageModel currentMessage = null;
-
-            String line = reader.readLine();
-            while (line != null) {
-                line = line.trim();
-
-                if (line.startsWith("package ")) {
-                    String[] parts = line.split("\\s+");
-                    if (parts.length >= 2) {
-                        packageName = parts[1].replace(";", "").trim();
-                    }
-                } else if (line.startsWith("message ")) {
-                    String messageName = line.split("\\s+")[1].replace("{", "").trim();
-                    currentMessage = new ProtoMessageModel(messageName);
-                    currentMessage.setProtoPackageName(packageName);
-                    currentMessage.setPackageName(packageName);
-                } else if (line.startsWith("}")) {
-                    if (currentMessage != null) {
-                        messageModels.add(currentMessage);
-                        currentMessage = null;
-                    }
-                } else if (currentMessage != null && !line.isEmpty() && line.contains(";")) {
-                    boolean repeated = line.startsWith("repeated ");
-                    String cleanedLine = line.replaceAll("^(optional|required|repeated)\\s+", "");
-                    String[] parts = cleanedLine.split("\\s+");
-
-                    if (parts.length >= 2) {
-                        String type = parts[0];
-                        String name = parts[1];
-                        if (name.contains("=")) {
-                            name = name.substring(0, name.indexOf("=")).trim();
-                        }
-                        name = name.replace(";", "").trim();
-                        currentMessage.addField(new ProtoFieldModel(type, name, repeated));
-                    }
-                }
-
-                line = reader.readLine();  // PMD-compliant: assignment outside condition
-            }
-        } catch (Exception e) {
-            LOGGER.error("Failed to parse proto file: " + protoFile.getName(), e);
-        }
-
-        return messageModels;
-    }
-}
-
-------
-
-package osplus.pkp.dto.util;
-
-import freemarker.template.Template;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.Writer;
-import java.util.Map;
-
-public class TemplateWriterUtil {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(TemplateWriterUtil.class);
-
-    public static void writeTemplate(Template template, Map<String, Object> dataModel, File outputFile) {
-        try (Writer writer = new BufferedWriter(new FileWriter(outputFile))) {
-            template.process(dataModel, writer);
-        } catch (Exception e) {
-            LOGGER.error("Failed to write file: " + outputFile.getName());
-            e.printStackTrace();
-        }
-    }
-}
-
-------------------------
-
-package osplus.pkp.dto.plugin;
-
-import freemarker.template.Configuration;
-import freemarker.template.Template;
-import freemarker.template.TemplateExceptionHandler;
-import freemarker.template.Version;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkp.dto.model.ProtoFieldModel;
-import osplus.pkp.dto.model.ProtoMessageModel;
-import osplus.pkp.dto.util.ProtoParserUtil;
-import osplus.pkp.dto.util.TemplateWriterUtil;
-
-import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-public class RestDtoGeneratorPlugin {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(RestDtoGeneratorPlugin.class);
-
-    public static void main(String[] args) {
-        if (args.length < 2) {
-            LOGGER.error("Usage: RestDtoGeneratorPlugin <protoInputDir> <restDtoOutputDir>");
-            System.exit(1);
-        }
-
-        File protoDir = new File(args[0]);
-        File outputDir = new File(args[1]);
-
-        if (!protoDir.exists() || !protoDir.isDirectory()) {
-            LOGGER.error("Invalid proto input directory: " + protoDir.getAbsolutePath());
-            System.exit(2);
-        }
-
-        outputDir.mkdirs();
-
-        try {
-            // FreeMarker configuration
-            Configuration cfg = new Configuration(new Version("2.3.32"));
-            cfg.setClassForTemplateLoading(RestDtoGeneratorPlugin.class, "/templates");
-            cfg.setDefaultEncoding("UTF-8");
-            cfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
-
-            // Load templates
-            Template dtoTemplate = cfg.getTemplate("rest-dto.ftl");
-            Template mapperTemplate = cfg.getTemplate("rest-mapper.ftl");
-
-            List<ProtoMessageModel> messageModels = ProtoParserUtil.parseAll(protoDir);
-
-            for (ProtoMessageModel model : messageModels) {
-                // Determine package structure
-                String protoPackage = model.getPackageName();
-                String restPackage = insertRestInPackage(protoPackage);
-                String mapperPackage = restPackage + ".mapper";
-
-                // Generate DTO
-                String dtoPath = restPackage.replace('.', '/');
-                File dtoDir = new File(outputDir, dtoPath);
-                dtoDir.mkdirs();
-
-                Map<String, Object> dtoData = new HashMap<>();
-                dtoData.put("packageName", insertRestInPackage(model.getPackageName()));
-                dtoData.put("className", model.getClassName());
-                dtoData.put("fields", model.getFields());
-
-                File dtoFile = new File(dtoDir, model.getClassName() + ".java");
-                TemplateWriterUtil.writeTemplate(dtoTemplate, dtoData, dtoFile);
-
-
-                // Generate Mapper Interface
-
-                Set<String> fullMapperClassSet = new HashSet<>();
-                Set<String> simpleMapperClassSet = new HashSet<>();
-
-                for (ProtoFieldModel field : model.getFields()) {
-                    if (field.isCustomType()) {
-                        fullMapperClassSet.add(insertRestInPackage(model.getPackageName()) + ".mapper." + field.getProtoType() + "Mapper");
-                        simpleMapperClassSet.add(field.getProtoType() + "Mapper");
-                    }
-                }
-
-                // Convert to list to preserve order in template
-                List<String> fullMapperClassNames = new ArrayList<>(fullMapperClassSet);
-                List<String> simpleMapperClassNames = new ArrayList<>(simpleMapperClassSet);
-
-                Map<String, Object> mapperData = new HashMap<>();
-                mapperData.put("mapperPackage", insertRestInPackage(model.getPackageName()) + ".mapper");
-                mapperData.put("protoDtoPackage", model.getPackageName());
-                mapperData.put("protoDtoClassName", model.getClassName());
-                mapperData.put("restDtoPackage", insertRestInPackage(model.getPackageName()));
-                mapperData.put("restDtoClassName", model.getClassName());
-                mapperData.put("mapperInterfaceName", model.getClassName() + "Mapper");
-
-                mapperData.put("customMapperImports", fullMapperClassNames);     // for imports
-                mapperData.put("customMapperSimpleNames", simpleMapperClassNames); // for uses={}
-
-                List<Map<String, String>> repeatedFieldMappings = new ArrayList<>();
-
-                for (ProtoFieldModel field : model.getFields()) {
-                    if (field.isRepeated()) {
-                        Map<String, String> mapping = new HashMap<>();
-                        mapping.put("source", field.getName() + "List"); // e.g. eventsList
-                        mapping.put("target", field.getName());          // e.g. events
-                        repeatedFieldMappings.add(mapping);
-                    }
-                }
-                mapperData.put("repeatedFieldMappings", repeatedFieldMappings);
-
-
-                File mapperDir = new File(outputDir, mapperPackage.replace('.', '/'));
-                mapperDir.mkdirs();
-
-                File mapperFile = new File(mapperDir, model.getClassName() + "Mapper.java");
-                TemplateWriterUtil.writeTemplate(mapperTemplate, mapperData, mapperFile);
-            }
-
-            LOGGER.info("REST DTO and Mapper interface generation completed successfully.");
-
-        } catch (Exception e) {
-            LOGGER.error(e.getMessage());
-            System.exit(3);
-        }
-    }
-
-    private static String insertRestInPackage(String originalPackage) {
-        String[] parts = originalPackage.split("\\.");
-        if (parts.length >= 2 && !parts[2].equals("rest")) {
-            List<String> result = new ArrayList<>(Arrays.asList(parts));
-            result.add(2, "rest"); // Insert after base domain (e.g., osplus.pkptuna)
-            return String.join(".", result);
-        }
-        return originalPackage;
-    }
-}
-
-----------------
-
-package osplus.pkp.dto.model;
-
-public class ProtoFieldModel {
-
-    private final String protoType;
-    private final String name;
-    private final boolean repeated;
-
-    public ProtoFieldModel(String protoType, String name, boolean repeated) {
-        this.protoType = protoType;
-        this.name = name;
-        this.repeated = repeated;
-    }
-
-    public String getProtoType() {
-        return protoType;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public boolean isRepeated() {
-        return repeated;
-    }
-
-    public String getJavaType() {
-        String javaType = switch (protoType) {
-            case "string" -> "String";
-            case "bool" -> "Boolean";
-            case "int32", "sint32", "uint32", "fixed32" -> "Integer";
-            case "int64", "sint64", "uint64", "fixed64" -> "Long";
-            case "float" -> "Float";
-            case "double" -> "Double";
-            case "bytes" -> "byte[]";
-            case "google.protobuf.Timestamp" -> "java.time.Instant";
-            default -> protoType.endsWith("Dto") ? protoType : "Object";
-        };
-
-        return repeated ? "List<" + javaType + ">" : javaType;
-    }
-
-    public boolean isCustomType() {
-        return !protoType.matches("string|bool|int32|sint32|uint32|fixed32|int64|sint64|uint64|fixed64|float|double|bytes|google.protobuf.Timestamp");
-    }
-
-    public String getSimpleJavaType() {
-        String type = protoType;
-        if (protoType.endsWith("Dto")) {
-            type = protoType;
-        }
-        return type.replaceAll(".*\\.", ""); // Strip package if any
-    }
-}
-
--------------------
-
-package osplus.pkp.dto.model;
-
-import java.util.ArrayList;
-import java.util.List;
-
-public class ProtoMessageModel {
-    private String className;
-    private String packageName;
-    private String protoPackageName;
-    private final List<ProtoFieldModel> fields = new ArrayList<>();
-
-    public ProtoMessageModel(String className) {
-        this.className = className;
-    }
-
-    public String getClassName() {
-        return className;
-    }
-
-    public void setClassName(String className) {
-        this.className = className;
-    }
-
-    public String getPackageName() {
-        return packageName;
-    }
-
-    public void setPackageName(String packageName) {
-        this.packageName = packageName;
-    }
-
-    public String getProtoPackageName() {
-        return protoPackageName;
-    }
-
-    public void setProtoPackageName(String protoPackageName) {
-        this.protoPackageName = protoPackageName;
-    }
-
-    public List<ProtoFieldModel> getFields() {
-        return fields;
-    }
-
-    public void addField(ProtoFieldModel field) {
-        this.fields.add(field);
-    }
-}
+Natürlich, Vivek. Hier sind die beiden Anforderungen als separate JIRA-Tickets, professionell formuliert auf Deutsch.
+
+---
+
+### 🧾 **Ticket 1: Circuit Breaker Integration**
+
+#### **Titel:**
+
+Integration des Circuit Breaker-Status in Business-Services mit Hazelcast-Weitergabe
+
+#### **Beschreibung:**
+
+Zur Verbesserung der Resilienz und Steuerbarkeit sollen alle Business-Services im Tuna-Projekt mit einem Circuit Breaker ausgestattet werden. Der aktuelle Zustand (z. B. `OPEN`, `CLOSED`) soll bei Zustandsänderungen in einer gemeinsamen Hazelcast-Map gespeichert werden, damit der Orchestrierungsdienst im REST-Frontend fundierte Entscheidungen treffen kann, ob eine Anfrage weitergeleitet werden soll oder nicht.
+
+#### **Anforderungen:**
+
+* Jeder Business-Service muss einen eigenen Circuit Breaker erhalten.
+* Bei Zustandsänderungen (z. B. `CLOSED → OPEN`, `OPEN → CLOSED`) muss ein Eintrag in einer Hazelcast-Map mit einem dienstspezifischen Schlüssel (z. B. `circuit:zahlungsservice`) aktualisiert werden.
+* Der Map-Eintrag muss den neuen Zustand und einen Zeitstempel enthalten.
+* Der REST-Orchestrierungsdienst muss vor dem Senden an das Topic diesen Eintrag prüfen. Wenn der Zustand `OPEN` ist und innerhalb eines definierten Zeitfensters liegt (z. B. 30 Sekunden), darf keine Nachricht gesendet werden und es soll eine Fehlerantwort erfolgen.
+
+#### **Akzeptanzkriterien:**
+
+* [ ] Jeder Service aktualisiert bei Zustandsänderungen seine Circuit Breaker-Information in der Hazelcast-Map.
+* [ ] Der REST-Dienst überprüft diese Information korrekt und unterdrückt gegebenenfalls den Versand.
+* [ ] Der Mechanismus funktioniert unabhängig von der Hazelcast-Serverkonfiguration (nur Client-Zugriff).
+* [ ] Alle Änderungen sind dokumentiert und getestet.
+
+---
+
+### 🧾 **Ticket 2: Einheitliches Fehler-Handling und Antwortverhalten**
+
+#### **Titel:**
+
+Einheitliche Fehlerbehandlung und garantierte Antwortverarbeitung im Tuna-Nachrichtenfluss
+
+#### **Beschreibung:**
+
+Im aktuellen Stand liefern Business-Services im Tuna-Projekt bei Fehlern oder Ausnahmen oft leere Antworten zurück, ohne die Felder `statusCode` und `errorMessage` zu befüllen. Darüber hinaus wird im Fehlerfall keine Antwort auf das Response-Topic gesendet, was dazu führt, dass der REST-Dienst auf einen Timeout wartet.
+
+#### **Anforderungen:**
+
+* Business-spezifische Response-Handler müssen bei Ausnahmen eine vollständige Fehlerantwort mit `statusCode` und `errorMessage` zurückgeben.
+* Die generische Consumer-Komponente darf keine eigene Fehlerbehandlung mehr enthalten. Fehler müssen vollständig im Business-Handler abgefangen und verarbeitet werden.
+* Jeder Aufruf muss eine Antwort liefern – unabhängig davon, ob er erfolgreich war oder zu einer Ausnahme geführt hat.
+* Eine Hilfsklasse (z. B. `ErrorUtils`) kann zur zentralen Auswertung von Exceptions verwendet werden.
+* Es dürfen keine leeren oder fehlenden Antworten mehr veröffentlicht werden.
+
+#### **Akzeptanzkriterien:**
+
+* [ ] Alle Business-Handler fangen Ausnahmen ab und generieren normierte Fehlerantworten.
+* [ ] Die Consumer-Logik bleibt generisch und enthält keine try/catch-Blöcke mehr.
+* [ ] Eine Antwort wird immer auf das Response-Topic gesendet.
+* [ ] Das Verhalten ist getestet und nachvollziehbar dokumentiert.
+
+---
+
+Wenn du möchtest, kann ich dir auch JIRA-kompatible Markdown- oder Confluence-Formate liefern.
