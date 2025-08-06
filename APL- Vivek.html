@@ -1,17 +1,15 @@
-Direkte, synchrone Autorisierung (ohne Hazelcast / Message Broker)
+Keine Lastpufferung – Spikes führen zu Timeouts/Abbrüchen.
 
-    Keine Lastpufferung – Lastspitzen können zu Timeouts oder abgelehnten Anfragen führen.
+Eingeschränkte Skalierung – Nur gesamtes Service skalierbar.
 
-    Begrenzte Skalierung – Skalierung nur durch das gesamte Autorisierungsservice, keine unabhängige Skalierung einzelner Teile.
+Fehleranfällig – Ausfall führt zu Transaktionsfehlern; Retry beim Client.
 
-    Fehleranfällig bei Ausfällen – Abbruch während des Aufrufs führt meist zum Transaktionsfehler; Retry-Logik muss clientseitig erfolgen.
+Aufwändige Parallelisierung – Nur mit interner Orchestrierung/DB.
 
-    Aufwändige Parallelisierung – Parallele Prüfungen nur mit interner Orchestrierung und gemeinsamer DB/Cache möglich.
+Abhängigkeit von Downstream – Langsame Systeme blockieren Ablauf.
 
-    Direkte Abhängigkeit von Downstream – Langsame externe Systeme verzögern oder blockieren den gesamten Ablauf.
+Wartungsrisiko – Deployments können Live-Traffic stören.
 
-    Wartungsaufwand – Änderungen erfordern koordinierte Deployments; Risiko von Live-Traffic-Unterbrechungen.
+Komplexe Geo-Resilienz – Multi-DC nur mit hohem Aufwand.
 
-    Komplexe Geo-Resilienz – Multi-DC-Betrieb erfordert aufwändige Synchronisation und Lastverteilung.
-
-    Monitoring im kritischen Pfad – Überwachung muss im synchronen Ablauf erfolgen und kann Latenz erhöhen.
+Monitoring bremst – Überwachung erhöht Latenz.
