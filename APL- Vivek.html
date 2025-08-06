@@ -1,58 +1,45 @@
-Natürlich, Vivek. Hier sind die beiden Anforderungen als separate JIRA-Tickets, professionell formuliert auf Deutsch.
+Here’s how you can present it in **German**, with **architecture-specific labels** instead of “business value” or “engineering value,” so it feels professional in a technical slide.
 
 ---
 
-### 🧾 **Ticket 1: Circuit Breaker Integration**
+## **Folienschema**
 
-#### **Titel:**
+**Linke Spalte – Domänenspezifische Architekturvorteile**
+*(Zahlungsverkehr / Facharchitektur)*
 
-Integration des Circuit Breaker-Status in Business-Services mit Hazelcast-Weitergabe
+**Facharchitektur-Vorteile im Zahlungsverkehr**
 
-#### **Beschreibung:**
-
-Zur Verbesserung der Resilienz und Steuerbarkeit sollen alle Business-Services im Tuna-Projekt mit einem Circuit Breaker ausgestattet werden. Der aktuelle Zustand (z. B. `OPEN`, `CLOSED`) soll bei Zustandsänderungen in einer gemeinsamen Hazelcast-Map gespeichert werden, damit der Orchestrierungsdienst im REST-Frontend fundierte Entscheidungen treffen kann, ob eine Anfrage weitergeleitet werden soll oder nicht.
-
-#### **Anforderungen:**
-
-* Jeder Business-Service muss einen eigenen Circuit Breaker erhalten.
-* Bei Zustandsänderungen (z. B. `CLOSED → OPEN`, `OPEN → CLOSED`) muss ein Eintrag in einer Hazelcast-Map mit einem dienstspezifischen Schlüssel (z. B. `circuit:zahlungsservice`) aktualisiert werden.
-* Der Map-Eintrag muss den neuen Zustand und einen Zeitstempel enthalten.
-* Der REST-Orchestrierungsdienst muss vor dem Senden an das Topic diesen Eintrag prüfen. Wenn der Zustand `OPEN` ist und innerhalb eines definierten Zeitfensters liegt (z. B. 30 Sekunden), darf keine Nachricht gesendet werden und es soll eine Fehlerantwort erfolgen.
-
-#### **Akzeptanzkriterien:**
-
-* [ ] Jeder Service aktualisiert bei Zustandsänderungen seine Circuit Breaker-Information in der Hazelcast-Map.
-* [ ] Der REST-Dienst überprüft diese Information korrekt und unterdrückt gegebenenfalls den Versand.
-* [ ] Der Mechanismus funktioniert unabhängig von der Hazelcast-Serverkonfiguration (nur Client-Zugriff).
-* [ ] Alle Änderungen sind dokumentiert und getestet.
+* **Echtzeit-Zahlungsabwicklung** – End-to-End-Latenz im Millisekundenbereich, ideal für Instant Payments & PSD2-Konformität.
+* **Hohe Verfügbarkeit** – Hazelcast-Cluster-Replikation verhindert Ausfälle und stellt Zahlungs-Kontinuität sicher.
+* **Skalierbarer Durchsatz** – Elastische Skalierung bewältigt Lastspitzen im Transaktionsvolumen (z. B. Black Friday, Gehaltstage).
+* **Isolierte Service-Kanäle** – Dienstspezifische Topics, Maps und Queues verhindern Cross-Payment-Kontamination.
+* **Eingebaute Resilienz** – Fehlertolerantes Design mit „Competing Consumers“ und Möglichkeiten zur Nachrichtenwiederholung.
+* **Regulatorisch vorbereitet** – Architektur unterstützt Auditierbarkeit, Rückverfolgbarkeit und Einhaltung von Daten-Residenz-Vorgaben.
 
 ---
 
-### 🧾 **Ticket 2: Einheitliches Fehler-Handling und Antwortverhalten**
+**Rechte Spalte – Technische Architekturvorteile**
+*(System- und Integrationsarchitektur)*
 
-#### **Titel:**
+**Technische Architektur-Vorteile**
 
-Einheitliche Fehlerbehandlung und garantierte Antwortverarbeitung im Tuna-Nachrichtenfluss
-
-#### **Beschreibung:**
-
-Im aktuellen Stand liefern Business-Services im Tuna-Projekt bei Fehlern oder Ausnahmen oft leere Antworten zurück, ohne die Felder `statusCode` und `errorMessage` zu befüllen. Darüber hinaus wird im Fehlerfall keine Antwort auf das Response-Topic gesendet, was dazu führt, dass der REST-Dienst auf einen Timeout wartet.
-
-#### **Anforderungen:**
-
-* Business-spezifische Response-Handler müssen bei Ausnahmen eine vollständige Fehlerantwort mit `statusCode` und `errorMessage` zurückgeben.
-* Die generische Consumer-Komponente darf keine eigene Fehlerbehandlung mehr enthalten. Fehler müssen vollständig im Business-Handler abgefangen und verarbeitet werden.
-* Jeder Aufruf muss eine Antwort liefern – unabhängig davon, ob er erfolgreich war oder zu einer Ausnahme geführt hat.
-* Eine Hilfsklasse (z. B. `ErrorUtils`) kann zur zentralen Auswertung von Exceptions verwendet werden.
-* Es dürfen keine leeren oder fehlenden Antworten mehr veröffentlicht werden.
-
-#### **Akzeptanzkriterien:**
-
-* [ ] Alle Business-Handler fangen Ausnahmen ab und generieren normierte Fehlerantworten.
-* [ ] Die Consumer-Logik bleibt generisch und enthält keine try/catch-Blöcke mehr.
-* [ ] Eine Antwort wird immer auf das Response-Topic gesendet.
-* [ ] Das Verhalten ist getestet und nachvollziehbar dokumentiert.
+* **Cloud-Native & Skalierbar** – Zustandslose Services + In-Memory-Grid für elastische Skalierung.
+* **Resilient by Design** – Cluster-Replikation, „Competing Consumers“, keine Single-Point-of-Failure.
+* **Niedrige Latenz** – Hazelcast IMap mit Mikrosekunden-Lese-/Schreibzugriff.
+* **Dienstspezifische Konfiguration** – Einfaches Onboarding neuer Services ohne Codeänderung.
+* **Standardisierte Muster** – Publish–Subscribe, Message Channel Adapter, Competing Consumers, CQRS.
+* **Hohe Business-Agilität** – Schnelle Integration neuer Services und Echtzeit-Verarbeitung.
 
 ---
 
-Wenn du möchtest, kann ich dir auch JIRA-kompatible Markdown- oder Confluence-Formate liefern.
+### **Gestaltungsempfehlung für die Folie**
+
+* **Linke Spalte:** Grüner Header „Facharchitektur-Vorteile im Zahlungsverkehr“ mit einem Zahlungs- oder Euro-Symbol.
+* **Rechte Spalte:** Blauer Header „Technische Architektur-Vorteile“ mit einem Zahnrad- oder Cloud-Icon.
+* Gleiche Bullet-Point-Anzahl auf beiden Seiten für optische Balance.
+* Klare Trennlinie oder dezente Farbfläche zwischen den Spalten.
+
+---
+
+Wenn du willst, kann ich dir jetzt auch die **komplette 2-Spalten-Version in PowerPoint-Layout** als Textblock vorbereiten, sodass du sie nur noch in eine Folie einfügen musst.
+Möchtest du, dass ich das gleich mache?
