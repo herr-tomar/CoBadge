@@ -1,15 +1,17 @@
-Vorteile für Autorisierung (Hazelcast-Architektur)
+Direkte, synchrone Autorisierung (ohne Hazelcast / Message Broker)
 
-    Lastpufferung – IMap fängt Lastspitzen ab, keine verlorenen Anfragen.
+    Keine Lastpufferung – Lastspitzen können zu Timeouts oder abgelehnten Anfragen führen.
 
-    Parallele Prüfungen – Fraud, Limit, AML parallel mit gemeinsamem In-Memory-Status.
+    Begrenzte Skalierung – Skalierung nur durch das gesamte Autorisierungsservice, keine unabhängige Skalierung einzelner Teile.
 
-    Schnelles Failover – Ausfall → anderer Consumer übernimmt in Millisekunden.
+    Fehleranfällig bei Ausfällen – Abbruch während des Aufrufs führt meist zum Transaktionsfehler; Retry-Logik muss clientseitig erfolgen.
 
-    Zero Downtime – Updates ohne Unterbrechung der Autorisierung.
+    Aufwändige Parallelisierung – Parallele Prüfungen nur mit interner Orchestrierung und gemeinsamer DB/Cache möglich.
 
-    Geo-Resilienz – Aktive Knoten in mehreren Rechenzentren.
+    Direkte Abhängigkeit von Downstream – Langsame externe Systeme verzögern oder blockieren den gesamten Ablauf.
 
-    Monitoring ohne Impact – Live-Auswertung ohne Pfadverzögerung.
+    Wartungsaufwand – Änderungen erfordern koordinierte Deployments; Risiko von Live-Traffic-Unterbrechungen.
 
-    Clusterweiter Circuit Breaker – Einheitliche Reaktion auf fehlerhafte externe Dienste.
+    Komplexe Geo-Resilienz – Multi-DC-Betrieb erfordert aufwändige Synchronisation und Lastverteilung.
+
+    Monitoring im kritischen Pfad – Überwachung muss im synchronen Ablauf erfolgen und kann Latenz erhöhen.
