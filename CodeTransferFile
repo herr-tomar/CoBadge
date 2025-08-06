@@ -1,122 +1,414 @@
-Weitere Dokumente
-Ausgangssituation Multikanalplattform (MKP) und DB2 (Relationales Datenbanksystem von IBM)
-Erklärung sqlj-maven-plugin
-Nutzung sqlj-maven-plugin
-Vorgehen
-Schritt 1 - Workspace einrichten
-BUILD Modul
-Lokalisierung des Build Moduls
-Build - pom.xml
-DAO Modul
-Lokalisierung des DAO Moduls
-Schritt 2 - Lokaler Test
-Schritt 3 - Binding Überprüfen
-Tar im Jenkins bereitstellen (Optional)
-Bindings lokal überprüfen
-Weitere Dokumente
-Weitere Wiki-Einträge
-Ausgangssituation Multikanalplattform (MKP) und DB2 (Relationales Datenbanksystem von IBM)
-Auf DB2 unter z/OS darf nur mittels statischem SQL zugegriffen werden. Um mittelt statischem SQL aus der MKP auf die DB2 (JAVA) zuzugreifen, setzen wir deshalb das plugin sqlj-maven-Plugin ein. Die Konfiguration dieses Plugins für eine erfolgreiche Verbindung der MKP mit der DB2 wird in diesem Artikel behandelt. 
+Business Service
 
-Erklärung sqlj-maven-plugin
-Das "sqlj-maven-plugin" ist ein Maven-Plugin, das für die Verarbeitung von SQLJ-Dateien verwendet wird. SQLJ-Dateien sind Java-Dateien, die SQL-Anweisungen enthalten. Das Plugin wird verwendet, um DBRM-Dateien zu sammeln, die von SQLJ-Dateien erzeugt werden. Weitere Informationen hierzu in dem oben genannten Link (Weitere Dokumente #4)
+package osplus.pkptuna.dispute.service.impl;
 
-Nutzung sqlj-maven-plugin
-In den folgenden Schritten wird erklärt, wie das sqlj-maven-plugin in einem MKP-Projekt (Multikanalplattform) verwendet werden kann.
+import org.springframework.http.HttpHeaders;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.dispute.config.DisputeServiceProperties;
+import osplus.pkptuna.dispute.lookup.model.DisputeFolderEntryDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
+import osplus.pkptuna.dispute.lookup.model.FullDisputeLookupResponseDto;
+import osplus.pkptuna.dispute.service.DisputeService;
+import osplus.pkptuna.protobuf.util.ProtobufJsonUtil;
 
-Vorgehen
-Schritt 1 - Workspace einrichten
-Um SQLJ im Standard Workspace der MKP zu verwenden benötigen wir zusätzlich ein BUILD und ein DAO Modul, diese Module sind unter dem Parent (oberste Ebene des Projektes) anzulegen.
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.List;
+import java.util.stream.Collectors;
 
-BUILD Modul
-Lokalisierung des Build Moduls
-Projektbezeichnung (Parent)
-Build
-/src
-/main
-/resources
-bkm_dbrm.xml (Informationen weiter unten)
-/target (wird beim ausführen von Maven Install generiert)
-pom.xml (Informationen weiter unten)
-BUILD Modul Struktur (Screenshot)
-Build - pom.xml
-Hier sind im unteren Beispiel die entsprechenden Pfade und Bezeichner anzupassen.
+/**
+ * Implementierung des {@link DisputeService} zur Abfrage von Dispute-Ordnern
+ * über eine externe Issuer-API mithilfe von WebClient (Spring WebFlux).
+ */
+public class DisputeServiceImpl implements DisputeService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeServiceImpl.class);
+    private final WebClient webClient;
+    private final String username;
+    private final String password;
+    private final String disputePath;
+
+    /**
+     * Konstruktor für {@code DisputeServiceImpl}.
+     *
+     * @param webClient WebClient zur Erstellung des REST-Clients
+     * @param props            Konfigurationseigenschaften für Authentifizierung und Endpunkte
+     */
+    public DisputeServiceImpl(final WebClient webClient, final DisputeServiceProperties props) {
+        this.username = props.auth().username();
+        this.password = props.auth().password();
+        this.disputePath = props.paths().lookupDisputes();
+        this.webClient = webClient;
+    }
+
+    /**
+     * {@inheritDoc}
+     * Führt eine Abfrage eines Dispute-Ordners anhand der übergebenen Issuer-ID und Kartenreferenz durch.
+     */
+    @Override
+    public DisputeLookupResponseDto lookupDisputeFolder(String issuerId, String cardReference) {
+        try {
+            String basicAuth = Base64.getEncoder().encodeToString(
+                    (username + ":" + password).getBytes(StandardCharsets.UTF_8)
+            );
+
+            String json = webClient.get()
+                    .uri(uriBuilder -> {
+                        URI builder = uriBuilder
+                                .path(disputePath)
+                                .build(issuerId, cardReference);
+                        return builder;
+                    })
+                    .header("WL-Correlation-ID", "pkptuna-" + System.currentTimeMillis())
+                    .header("WL-Origin", "pkptuna-service")
+                    .header(HttpHeaders.AUTHORIZATION, "Basic " + basicAuth)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+
+            FullDisputeLookupResponseDto.Builder fullBuilder = FullDisputeLookupResponseDto.newBuilder();
+            ProtobufJsonUtil.parseJsonToProto(json, fullBuilder);
+
+            List<DisputeFolderEntryDto> folderEntries = fullBuilder.getDataList().stream()
+                    .map(data -> DisputeFolderEntryDto.newBuilder()
+                            .setDisputeFolderReference(data.getDisputeFolderIdentifier().getDisputeFolderReference())
+                            .setStatusCode(data.getStatusCode())
+                            .build())
+                    .collect(Collectors.toList());
+
+            return DisputeLookupResponseDto.newBuilder()
+                    .setDisputeFolderExists(!folderEntries.isEmpty())
+                    .addAllDisputeFolders(folderEntries)
+                    .build();
+
+        } catch (WebClientResponseException e) {
+            LOGGER.warn("External API returned error: {}", e.getStatusCode());
+        } catch (Exception e) {
+            LOGGER.error("Exception during dispute lookup", e);
+        }
+
+        return DisputeLookupResponseDto.newBuilder()
+                .setDisputeFolderExists(false)
+                .build();
+    }
+}
+
+--------------------------
+
+Hazelcast Consumer
+
+package osplus.pkptuna.hazelcast.pubsub;
+
+import com.hazelcast.core.EntryEvent;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.map.listener.EntryAddedListener;
+import com.hazelcast.map.listener.EntryUpdatedListener;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
+import osplus.apl.core.api.AplComponent;
+import osplus.apl.core.api.administration.metrics.MetricTag;
+import osplus.apl.core.api.administration.metrics.MetricsService;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.config.MetricsConstants;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+
+@AplComponent
+public class GenericHazelcastConsumer {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastConsumer.class);
+    private final String instanceId = UUID.randomUUID().toString();
+
+    private final MetricsService metricsService;
+    private final HazelcastInstance hazelcastInstance;
+    private final List<FlowConfig> flowConfigs;
+    private final FlowHandlerRegistry handlerRegistry;
+
+    private final ConcurrentMap<String, String> listenerRegistrationMap = new ConcurrentHashMap<>();
+
+    public GenericHazelcastConsumer(
+            MetricsService metricsService,
+            HazelcastInstance hazelcastInstance,
+            List<FlowConfig> flowConfigs,
+            FlowHandlerRegistry handlerRegistry
+    ) {
+        this.metricsService = metricsService;
+        this.hazelcastInstance = hazelcastInstance;
+        this.flowConfigs = flowConfigs;
+        this.handlerRegistry = handlerRegistry;
+    }
+
+    @PostConstruct
+    public void registerMapListeners() {
+        for (FlowConfig config : flowConfigs) {
+            String flowName = config.name();
+            int partitions = config.partitions();
+            String baseMap = config.mapBase();
+            String responseTopic = config.responseTopic();
+
+            for (int i = 0; i < partitions; i++) {
+                String mapName = baseMap + i;
+                IMap<String, Object> map = hazelcastInstance.getMap(mapName);
+
+                var listener = new MapEntryListener(flowName, mapName, responseTopic);
+                String registrationId = map.addEntryListener(listener, true).toString();
+                listenerRegistrationMap.put(mapName, registrationId);
+
+                LOGGER.info("Registered EntryListener on IMap '{}'", mapName);
+                metricsService.increaseCounter(MetricsConstants.COUNTER_ENTRY_LISTENER_REGISTER_SUCCESS, MetricTag.create(MetricsConstants.TAG_MAP_NAME, mapName));
+            }
+        }
+    }
+
+    @PreDestroy
+    public void cleanupListeners() {
+        for (var entry : listenerRegistrationMap.entrySet()) {
+            String mapName = entry.getKey();
+            String id = entry.getValue();
+            try {
+                hazelcastInstance.getMap(mapName).removeEntryListener(UUID.fromString(id));
+                LOGGER.info("Removed EntryListener from IMap '{}'", mapName);
+                metricsService.increaseCounter(MetricsConstants.COUNTER_ENTRY_LISTENER_REMOVE_SUCCESS, MetricTag.create(MetricsConstants.TAG_MAP_NAME, mapName));
+            } catch (Exception e) {
+                LOGGER.warn("Failed to remove listener from '{}'", mapName, e);
+                metricsService.increaseCounter(
+                        MetricsConstants.COUNTER_ENTRY_LISTENER_REMOVE_ERROR,
+                        MetricTag.create(MetricsConstants.TAG_MAP_NAME, mapName),
+                        MetricTag.create(MetricsConstants.TAG_EXCEPTION_CLASS, e.getClass().getSimpleName())
+                );
+            }
+        }
+    }
+
+    private class MapEntryListener implements EntryAddedListener<String, Object>, EntryUpdatedListener<String, Object> {
+        private final String flowName;
+        private final String mapName;
+        private final String responseTopic;
+
+        public MapEntryListener(String flowName, String mapName, String responseTopic) {
+            this.flowName = flowName;
+            this.mapName = mapName;
+            this.responseTopic = responseTopic;
+        }
+
+        @Override
+        public void entryAdded(EntryEvent<String, Object> event) {
+            metricsService.timer(
+                    () -> processEntry(event.getKey(), event.getValue()),
+                    MetricsConstants.TIMER_FLOW_DURATION,
+                    MetricTag.create(MetricsConstants.TAG_FLOW_NAME, flowName)
+            );
+        }
+
+        @Override
+        public void entryUpdated(EntryEvent<String, Object> event) {
+            LOGGER.debug("Ignoring entryUpdated event for key {}", event.getKey());
+        }
+
+        private void processEntry(String correlationId, Object request) {
+            IMap<String, String> claimMap = hazelcastInstance.getMap("router-claim-map");
+            String claimKey = "route-lock-" + correlationId;
+
+            String current = claimMap.get(claimKey);
+            if (current == null || !current.isEmpty()) {
+                LOGGER.info("Skipping processing of correlationId={} as it is not claimable", correlationId);
+                return;
+            }
+
+            boolean claimed = claimMap.replace(claimKey, "", instanceId);
+            if (!claimed) {
+                LOGGER.info("Could not claim message for correlationId={} (already claimed)", correlationId);
+                return;
+            }
+
+            try {
+                FlowHandler<Object, Object> handler = handlerRegistry.getHandler(flowName);
+                if (handler == null) {
+                    LOGGER.warn("No FlowHandler for '{}' registered. Message will be skipped.", flowName);
+                    metricsService.increaseCounter(MetricsConstants.COUNTER_MESSAGE_CONSUME_INVALID_FLOW,
+                            MetricTag.create(MetricsConstants.TAG_FLOW_NAME, flowName));
+                    return;
+                }
+
+                Object response = handler.handleRequest(request);
+                Object wrapped = handler.wrapResponse(correlationId, response);
+                handler.sendResponse(hazelcastInstance, responseTopic, wrapped);
+
+                hazelcastInstance.getMap(mapName).remove(correlationId);
+                claimMap.remove(claimKey);
+
+                LOGGER.info("Processed and removed message with correlationId={} from map={}", correlationId, mapName);
+                metricsService.increaseCounter(MetricsConstants.COUNTER_MESSAGE_CONSUME_SUCCESS,
+                        MetricTag.create(MetricsConstants.TAG_FLOW_NAME, flowName));
+            } catch (Exception ex) {
+                LOGGER.error("Error processing correlationId={}: {}", correlationId, ex.getMessage(), ex);
+                claimMap.replace(claimKey, instanceId, "");
+                metricsService.increaseCounter(
+                        MetricsConstants.COUNTER_MESSAGE_CONSUME_ERROR,
+                        MetricTag.create(MetricsConstants.TAG_FLOW_NAME, flowName),
+                        MetricTag.create(MetricsConstants.TAG_EXCEPTION_CLASS, ex.getClass().getSimpleName()));
+            }
+        }
+    }
+}
+
+----------------------
+
+Flowhandler module
+
+package osplus.pkptuna.flows.handlers;
+
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.hazelcast.core.HazelcastInstance;
+import jakarta.annotation.PostConstruct;
+import osplus.apl.core.api.AplComponent;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseWrapperDto;
+import osplus.pkptuna.dispute.service.DisputeService;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
+import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
+
+import java.io.IOException;
+
+/**
+ * FlowHandler zur Verarbeitung von Lookup-Anfragen zu Streitfällen.
+ * Dieser Handler übernimmt die Deserialisierung, verarbeitet die Anfrage mit Hilfe des Services,
+ * verpackt die Antwort und publiziert sie auf einem Hazelcast Topic.
+ */
+@AplComponent("dispute-lookup")
+public class DisputeLookupFlowHandler implements FlowHandler<DisputeLookupRequestWrapperDto, DisputeLookupResponseDto> {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeLookupFlowHandler.class);
+    public static final String DISPUTE_LOOKUP = "dispute-lookup";
+    public static final String DISPUTES_LOOKUP = "DISPUTES_LOOKUP";
+
+    private final DisputeService disputeService;
+    private final ReliableTopicPublisher reliableTopicPublisher;
+    private final ProtobufDeserializer<DisputeLookupRequestWrapperDto> deserializer;
+
+    public DisputeLookupFlowHandler(DisputeService disputeService,
+                                    ReliableTopicPublisher reliableTopicPublisher,
+                                    ProtobufDeserializer<DisputeLookupRequestWrapperDto> deserializer) {
+        this.disputeService = disputeService;
+        this.reliableTopicPublisher = reliableTopicPublisher;
+        this.deserializer = deserializer;
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Deserialisiert das Eingangsbytearray in ein Protobuf-Wrapping DTO.
+     */
+    @Override
+    public DisputeLookupRequestWrapperDto deserializeRequest(byte[] data) throws InvalidProtocolBufferException {
+        try {
+            return deserializer.deserialize(data);
+        } catch (IOException e) {
+            LOGGER.error("Failed to deserialize request", e);
+            return DisputeLookupRequestWrapperDto.newBuilder().build();
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Extrahiert die Korrelations-ID aus dem Request.
+     */
+    @Override
+    public String extractCorrelationId(DisputeLookupRequestWrapperDto request) {
+        return request.getCorrelationId();
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Verarbeitet die Anfrage durch Aufruf des zugehörigen Services.
+     */
+    @Override
+    public DisputeLookupResponseDto handleRequest(DisputeLookupRequestWrapperDto request) {
+        DisputeLookupRequestDto dto = request.getPayload();
+        return disputeService.lookupDisputeFolder(dto.getIssuerId(), dto.getCardReference());
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Verpackt das Ergebnis zusammen mit der Korrelations-ID in ein Wrapper-Objekt.
+     */
+    @Override
+    public Object wrapResponse(String correlationId, DisputeLookupResponseDto result) {
+        return DisputeLookupResponseWrapperDto.newBuilder()
+                .setCorrelationId(correlationId)
+                .setResponse(result)
+                .build();
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Sendet die Antwort an das angegebene Hazelcast Topic.
+     */
+    @Override
+    public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Object response) {
+        DisputeLookupResponseWrapperDto dto = (DisputeLookupResponseWrapperDto) response;
+        reliableTopicPublisher.sendMessage(topicName, DISPUTES_LOOKUP, dto);
+    }
+
+    @Override
+    /**
+     * {@inheritDoc}
+     * <p>
+     *  Gibt den Namen des Flows zurück (z.B. für Registrierung oder Logging).
+     */
+    public String getFlowName() {
+        return DISPUTE_LOOKUP;
+    }
+
+    @PostConstruct
+    void init() {
+        LOGGER.info("DisputeLookupFlowHandler loaded and initialised.");
+    }
+}
+
+----
 
 
-Build - pom.xml Quelle erweitern
-WICHTIG
+Also Nutzer von CoBadge-Services möchte ich im Falle eines technisch fehlgeschlagenen Aufrufs eine definierte Fehlermeldung erhalten, damit ich auf eine nicht erfolgreiche Verarbeitung meines Aufrufes reagieren kann.
 
-In der Parent pom.xml muss zwingend bei der Moduleinbindung das DAO-Modul als erstes eingebunden sein, da es von den weiteren eingebundenen Modulen genutzt wird und dies sonst ggf. zu Fehlern führt.
+Einheitliche Fehlerbehandlung und garantierte Antwortverarbeitung im Tuna-Nachrichtenfluss
 
-Parent pom.xml Quelle erweitern
+Beschreibung:
 
+Im aktuellen Stand liefern Business-Services im Tuna/Puma-Projekt bei Fehlern oder Ausnahmen oft leere Antworten zurück, ohne die Felder `statusCode` und `errorMessage` zu befüllen. Darüber hinaus wird im Fehlerfall keine Antwort auf das Response-Topic gesendet, was dazu führt, dass der REST-Dienst auf einen Timeout wartet.
 
+Anforderungen:
 
+Business-spezifische Response-Handler müssen bei Ausnahmen eine vollständige Fehlerantwort mit `statusCode` und `errorMessage` zurückgeben.
+Weitere PKP/FI-Vorgaben sind zu prüfen und einzuhalten.
+Die generische Consumer-Komponente darf keine eigene Fehlerbehandlung mehr enthalten. Fehler müssen vollständig im Business-Handler abgefangen und verarbeitet werden.
+Jeder Aufruf muss eine Antwort liefern – unabhängig davon, ob er erfolgreich war oder zu einer Ausnahme geführt hat.
+Eine Hilfsklasse (z. B. `ErrorUtils`) kann zur zentralen Auswertung von Exceptions verwendet werden.
+Es dürfen keine leeren oder fehlenden Antworten mehr veröffentlicht werden.
+Akzeptanzkriterien:
 
-Build/Resource/bkm_bdrm.xml
-
-Um ein tar-File zu erzeugen muss unter dem obenstehenden Pfad folgendes .xml-file angelegt werden. Durch dieses .xml-File wird das Dateiformat festgelegt (tar)
-
-Build - bkm_bdrm.xml Quelle erweitern
-DAO Modul
-Wichtige Informationen
-
-Es gelten folgende Vorschriften für die Benennung der Module/Packages: 
-
-Module/Jar-Info: J<Komponentenkürzel aus Rochade><3-stellige Nummer>0M
-Packages/jdbrm.tar/Po-Files: J<Komponentenkürzel aus Rochade><3-stellige Nummer><0-9>M
-SQLJ-Package Beispiel : JKA2011M
-Lokalisierung des DAO Moduls
- Projektbezeichnung
-/dao
-/pkg
-/SQLJ-Package z.B. JXX0000M (Muss ebenfalls angelegt werden, weitere Informationen zum Inhalt weiter unten)
-/src
-/main
-/java
-/dao
-/sqlj
-ggf. Java Dateien
-/resources
-/dbrm-gen (Enthält generierte Datenbank Dateien)
-/ser (Das Verzeichnis muss manuell hinzugefügt werden, die Inhalte werden durch das Plugin generiert.)
-/sqlj 
-/osplus
-/Projektbezeichnung
-/dao
-/sqlj (Enthält die SQLJ-Datenbankoperationen)
-DAO Modul Struktur (Screenshot)
-Wie in OSPE auch muss auch auf der MKP eine pom.xml für das DAO-Modul angelegt werden. Dieses File dient dazu die SQLJ-Packages zu Klammern.
-
-Die Package Bezeichnungen, je nach Anzahl, müssen in der pom.xml entsprechend angepasst werden.
-
-DAO - pom.xml Quelle erweitern
-Generierung des Inhalts des SQLJ Packages
-
-Hier für erzeugen wir eine pom.xml innerhalb des SQLJ-Packages welches wir angelegt haben und befüllen es mit folgendem Code.
-
-SQLJ-Package pom.xml Quelle erweitern
-
-
-Schritt 2 - Lokaler Test
-Um das SQL-Binding lokal zu testen ist es erforderlich das Profil rebind auszuwählen vor dem Maven-Install, da sonst kein lokales Binding stattfindet. Dieses Profil ist zwingend hierfür erforderlich, da auf dem Jenkins kein Binding stattfinden darf. Das Profil PROD ist zu ignorieren, da dieses Profil den Default-Wert für den Jenkins darstellt.
-
-Das SQLJ-Binding muss lokal immer nach der Änderung eines SQLJs ausgeführt werden ansonsten ist es optional.
-
-Profil anschalten (Screenshot)
-
-
-Schritt 3 - Binding Überprüfen
-Tar im Jenkins bereitstellen (Optional)
-Um eine .tar-Datei durch Jenkins als eigenes Artefakt bereitzustellen muss die JenkinsConfig.json  im Parent um eine weitere Zeile Code erweitert werden.
-
-JenkinsConfig.json Quelle erweitern
-Jetzt kann im Jenkins das .tar-File unter Last Successful Artefacts  gefunden werden. 
-
-Jenkins TAR (Screenshot)
-Bindings lokal überprüfen
-Um zu überprüfen ob das Binding erfolgreich durchgeführt werden würde, kann nach dem Maven Install ein Blick in das generierte .tar-File geworfen werden. Hierzu kann sich das die Datei jdbrm.tar unter build/target/ angeschaut werden (einfach als Plain Text öffnen, siehe Screenshot weiter unten). Hier sehen wir nun die Bindung der Kennungen mit den Packages.
-
-jdbrm.tar anzeigen (Screenshot)
-
-
+Alle Business-Handler fangen Ausnahmen ab und generieren normierte Fehlerantworten.
+Die Consumer-Logik bleibt generisch und enthält keine try/catch-Blöcke mehr.
+Eine Antwort wird immer auf das Response-Topic gesendet.
+Das Verhalten ist getestet und nachvollziehbar dokumentiert.
