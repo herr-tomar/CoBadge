@@ -1,45 +1,15 @@
-Here’s how you can present it in **German**, with **architecture-specific labels** instead of “business value” or “engineering value,” so it feels professional in a technical slide.
+Vorteile für Autorisierung (Hazelcast-Architektur)
 
----
+    Lastpufferung – IMap fängt Lastspitzen ab, keine verlorenen Anfragen.
 
-## **Folienschema**
+    Parallele Prüfungen – Fraud, Limit, AML parallel mit gemeinsamem In-Memory-Status.
 
-**Linke Spalte – Domänenspezifische Architekturvorteile**
-*(Zahlungsverkehr / Facharchitektur)*
+    Schnelles Failover – Ausfall → anderer Consumer übernimmt in Millisekunden.
 
-**Facharchitektur-Vorteile im Zahlungsverkehr**
+    Zero Downtime – Updates ohne Unterbrechung der Autorisierung.
 
-* **Echtzeit-Zahlungsabwicklung** – End-to-End-Latenz im Millisekundenbereich, ideal für Instant Payments & PSD2-Konformität.
-* **Hohe Verfügbarkeit** – Hazelcast-Cluster-Replikation verhindert Ausfälle und stellt Zahlungs-Kontinuität sicher.
-* **Skalierbarer Durchsatz** – Elastische Skalierung bewältigt Lastspitzen im Transaktionsvolumen (z. B. Black Friday, Gehaltstage).
-* **Isolierte Service-Kanäle** – Dienstspezifische Topics, Maps und Queues verhindern Cross-Payment-Kontamination.
-* **Eingebaute Resilienz** – Fehlertolerantes Design mit „Competing Consumers“ und Möglichkeiten zur Nachrichtenwiederholung.
-* **Regulatorisch vorbereitet** – Architektur unterstützt Auditierbarkeit, Rückverfolgbarkeit und Einhaltung von Daten-Residenz-Vorgaben.
+    Geo-Resilienz – Aktive Knoten in mehreren Rechenzentren.
 
----
+    Monitoring ohne Impact – Live-Auswertung ohne Pfadverzögerung.
 
-**Rechte Spalte – Technische Architekturvorteile**
-*(System- und Integrationsarchitektur)*
-
-**Technische Architektur-Vorteile**
-
-* **Cloud-Native & Skalierbar** – Zustandslose Services + In-Memory-Grid für elastische Skalierung.
-* **Resilient by Design** – Cluster-Replikation, „Competing Consumers“, keine Single-Point-of-Failure.
-* **Niedrige Latenz** – Hazelcast IMap mit Mikrosekunden-Lese-/Schreibzugriff.
-* **Dienstspezifische Konfiguration** – Einfaches Onboarding neuer Services ohne Codeänderung.
-* **Standardisierte Muster** – Publish–Subscribe, Message Channel Adapter, Competing Consumers, CQRS.
-* **Hohe Business-Agilität** – Schnelle Integration neuer Services und Echtzeit-Verarbeitung.
-
----
-
-### **Gestaltungsempfehlung für die Folie**
-
-* **Linke Spalte:** Grüner Header „Facharchitektur-Vorteile im Zahlungsverkehr“ mit einem Zahlungs- oder Euro-Symbol.
-* **Rechte Spalte:** Blauer Header „Technische Architektur-Vorteile“ mit einem Zahnrad- oder Cloud-Icon.
-* Gleiche Bullet-Point-Anzahl auf beiden Seiten für optische Balance.
-* Klare Trennlinie oder dezente Farbfläche zwischen den Spalten.
-
----
-
-Wenn du willst, kann ich dir jetzt auch die **komplette 2-Spalten-Version in PowerPoint-Layout** als Textblock vorbereiten, sodass du sie nur noch in eine Folie einfügen musst.
-Möchtest du, dass ich das gleich mache?
+    Clusterweiter Circuit Breaker – Einheitliche Reaktion auf fehlerhafte externe Dienste.
