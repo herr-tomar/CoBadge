@@ -1,229 +1,51 @@
-package osplus.pkptuna.hazelcast.pubsub;
+package osplus.pkptuna.flows.handlers;
 
-import com.hazelcast.core.EntryEvent;
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.map.IMap;
-import com.hazelcast.map.listener.EntryAddedListener;
-import com.hazelcast.map.listener.EntryUpdatedListener;
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
-import osplus.apl.core.api.AplComponent;
-import osplus.apl.core.api.administration.metrics.MetricTag;
-import osplus.apl.core.api.administration.metrics.MetricsService;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkptuna.hazelcast.config.FlowConfig;
-import osplus.pkptuna.hazelcast.config.MetricsConstants;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
-
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-
-@AplComponent
-public class GenericHazelcastConsumer<Req, Res> {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastConsumer.class);
-    private final String instanceId = UUID.randomUUID().toString();
-
-    private final MetricsService metricsService;
-    private final HazelcastInstance hazelcastInstance;
-    private final List<FlowConfig> flowConfigs;
-    private final FlowHandlerRegistry handlerRegistry;
-
-    private final ConcurrentMap<String, String> listenerRegistrationMap = new ConcurrentHashMap<>();
-
-    public GenericHazelcastConsumer(
-            MetricsService metricsService,
-            HazelcastInstance hazelcastInstance,
-            List<FlowConfig> flowConfigs,
-            FlowHandlerRegistry handlerRegistry
-    ) {
-        this.metricsService = metricsService;
-        this.hazelcastInstance = hazelcastInstance;
-        this.flowConfigs = flowConfigs;
-        this.handlerRegistry = handlerRegistry;
-    }
-
-    @PostConstruct
-    public void registerMapListeners() {
-        for (FlowConfig config : flowConfigs) {
-            String flowName = config.name();
-            int partitions = config.partitions();
-            String baseMap = config.mapBase();
-            String responseTopic = config.responseTopic();
-
-            for (int i = 0; i < partitions; i++) {
-                String mapName = baseMap + i;
-                IMap<String, Object> map = hazelcastInstance.getMap(mapName);
-
-                var listener = new MapEntryListener(flowName, mapName, responseTopic);
-                String registrationId = map.addEntryListener(listener, true).toString();
-                listenerRegistrationMap.put(mapName, registrationId);
-
-                LOGGER.info("Registered EntryListener on IMap '{}'", mapName);
-                metricsService.increaseCounter(MetricsConstants.COUNTER_ENTRY_LISTENER_REGISTER_SUCCESS, MetricTag.create(MetricsConstants.TAG_MAP_NAME, mapName));
-            }
-        }
-    }
-
-    @PreDestroy
-    public void cleanupListeners() {
-        for (var entry : listenerRegistrationMap.entrySet()) {
-            String mapName = entry.getKey();
-            String id = entry.getValue();
-            try {
-                hazelcastInstance.getMap(mapName).removeEntryListener(UUID.fromString(id));
-                LOGGER.info("Removed EntryListener from IMap '{}'", mapName);
-                metricsService.increaseCounter(MetricsConstants.COUNTER_ENTRY_LISTENER_REMOVE_SUCCESS, MetricTag.create(MetricsConstants.TAG_MAP_NAME, mapName));
-            } catch (Exception e) {
-                LOGGER.warn("Failed to remove listener from '{}'", mapName, e);
-                metricsService.increaseCounter(
-                        MetricsConstants.COUNTER_ENTRY_LISTENER_REMOVE_ERROR,
-                        MetricTag.create(MetricsConstants.TAG_MAP_NAME, mapName),
-                        MetricTag.create(MetricsConstants.TAG_EXCEPTION_CLASS, e.getClass().getSimpleName())
-                );
-            }
-        }
-    }
-
-    private class MapEntryListener<Req, Res> implements EntryAddedListener<String, Object>, EntryUpdatedListener<String, Object> {
-        private final String flowName;
-        private final String mapName;
-        private final String responseTopic;
-
-        public MapEntryListener(String flowName, String mapName, String responseTopic) {
-            this.flowName = flowName;
-            this.mapName = mapName;
-            this.responseTopic = responseTopic;
-        }
-
-        @Override
-        public void entryAdded(EntryEvent<String, Object> event) {
-            metricsService.timer(
-                    () -> processEntry(event.getKey(), event.getValue()),
-                    MetricsConstants.TIMER_FLOW_DURATION,
-                    MetricTag.create(MetricsConstants.TAG_FLOW_NAME, flowName)
-            );
-        }
-
-        @Override
-        public void entryUpdated(EntryEvent<String, Object> event) {
-            LOGGER.debug("Ignoring entryUpdated event for key {}", event.getKey());
-        }
-
-        private void processEntry(String correlationId, Object request) {
-            // TODO "request" parameter should have generic type of handlerRegistry.getHandler(flowName) ReqWrapper
-            IMap<String, String> claimMap = hazelcastInstance.getMap("router-claim-map");
-            String claimKey = "route-lock-" + correlationId;
-
-            String current = claimMap.get(claimKey);
-            if (current == null || !current.isEmpty()) {
-                LOGGER.info("Skipping processing of correlationId={} as it is not claimable", correlationId);
-                return;
-            }
-
-            boolean claimed = claimMap.replace(claimKey, "", instanceId);
-            if (!claimed) {
-                LOGGER.info("Could not claim message for correlationId={} (already claimed)", correlationId);
-                return;
-            }
-
-            try {
-                FlowHandler<Req, Res> handler = (FlowHandler<Req, Res>) handlerRegistry.getHandler(flowName);
-                if (handler == null) {
-                    LOGGER.warn("No FlowHandler for '{}' registered. Message will be skipped.", flowName);
-                    metricsService.increaseCounter(MetricsConstants.COUNTER_MESSAGE_CONSUME_INVALID_FLOW,
-                            MetricTag.create(MetricsConstants.TAG_FLOW_NAME, flowName));
-                    return;
-                }
-
-                Res response = handler.handleRequest(request);
-                Res wrapped = handler.wrapResponse(correlationId, response);
-                handler.sendResponse(hazelcastInstance, responseTopic, wrapped);
-
-                hazelcastInstance.getMap(mapName).remove(correlationId);
-                claimMap.remove(claimKey);
-
-                LOGGER.info("Processed and removed message with correlationId={} from map={}", correlationId, mapName);
-                metricsService.increaseCounter(MetricsConstants.COUNTER_MESSAGE_CONSUME_SUCCESS,
-                        MetricTag.create(MetricsConstants.TAG_FLOW_NAME, flowName));
-            } catch (Exception ex) {
-                LOGGER.error("Error processing correlationId={}: {}", correlationId, ex.getMessage(), ex);
-                claimMap.replace(claimKey, instanceId, "");
-                metricsService.increaseCounter(
-                        MetricsConstants.COUNTER_MESSAGE_CONSUME_ERROR,
-                        MetricTag.create(MetricsConstants.TAG_FLOW_NAME, flowName),
-                        MetricTag.create(MetricsConstants.TAG_EXCEPTION_CLASS, ex.getClass().getSimpleName()));
-            }
-        }
-    }
-}
-
-
-----------------
-
-
-package osplus.pkptuna.hazelcast.flows;
-
+import com.google.protobuf.GeneratedMessage;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.hazelcast.core.HazelcastInstance;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
+import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
 
-/**
- * Diese Schnittstelle definiert den vollständigen Verarbeitungszyklus eines
- * Nachrichtenflusses (Flow) in einem verteilten System mit Hazelcast.
- */
-public interface FlowHandler<Req,Res> {
+import java.io.IOException;
 
-    /**
-     * Deserialisiert die empfangenen Daten in ein Anfrageobjekt.
-     *
-     * @param data das empfangene Byte-Array
-     * @return deserialisierte Anfrage
-     * @throws InvalidProtocolBufferException bei Deserialisierungsfehlern
-     */
-    Req deserializeRequest(byte[] data) throws InvalidProtocolBufferException;
+public abstract class GenericFlowHandler<Req extends GeneratedMessage,Res extends GeneratedMessage> implements FlowHandler<Req, Res> {
 
-    /**
-     * Extrahiert die eindeutige Korrelations-ID aus einer Anfrage.
-     *
-     * @param request das Anfrageobjekt
-     * @return Korrelations-ID als String
-     */
-    String extractCorrelationId(Req request);
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericFlowHandler.class);
+    private final String flowName;
+    private final String traceCode;
+    private final ReliableTopicPublisher<Res> reliableTopicPublisher;
+    private final ProtobufDeserializer<Req> deserializer;
 
-    /**
-     * Führt die fachliche Verarbeitung einer Anfrage durch.
-     *
-     * @param request die eingehende Anfrage
-     * @return Ergebnis der Verarbeitung
-     */
-    Res handleRequest(Req request);
+    public GenericFlowHandler(String flowName, String traceCode, ReliableTopicPublisher<Res> reliableTopicPublisher, ProtobufDeserializer<Req> deserializer) {
+        this.flowName = flowName;
+        this.traceCode = traceCode;
+        this.reliableTopicPublisher = reliableTopicPublisher;
+        this.deserializer = deserializer;
+    }
 
-    /**
-     * Verpackt das Antwortobjekt gemeinsam mit der Korrelations-ID.
-     *
-     * @param correlationId eindeutige ID der Anfrage
-     * @param result        das Antwortobjekt
-     * @return eingepackte Antwort (z.B. DTO oder MessageEnvelope)
-     */
-    Object wrapResponse(String correlationId, Res result);
+    @Override
+    public Req deserializeRequest(byte[] data) throws InvalidProtocolBufferException {
+        try {
+            return deserializer.deserialize(data);
+        } catch (IOException e) {
+            LOGGER.error("Failed to deserialize request", e);
+            return null; // TODO error handling
+            //  return Req.newBuilder().build();
+        }
+    }
 
-    /**
-     * Sendet die verarbeitete Antwort über Hazelcast Reliable Topic.
-     *
-     * @param hazelcastInstance Hazelcast-Instanz
-     * @param topicName         Zieltopic
-     * @param response          die gesendete Antwort
-     */
-    void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Res response);
+    @Override
+    public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Res response) {
+        reliableTopicPublisher.sendMessage(topicName, traceCode, response);
+    }
 
-    /**
-     * Gibt den Namen des Flows zurück (z.B. für Registrierung oder Logging).
-     *
-     * @return Flow-Name
-     */
-    String getFlowName();
+    // TODO add more generic implementations of interface methods
+
+    @Override
+    public String getFlowName() {
+        return flowName;
+    }
 }
