@@ -1,187 +1,54 @@
-package osplus.pkptuna.flows.handlers;
+package osplus.pkptuna.hazelcast.flows;
 
-import jakarta.annotation.PostConstruct;
 import osplus.apl.core.api.AplComponent;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkptuna.dispute.model.DisputeDetailRequestDto;
-import osplus.pkptuna.dispute.model.DisputeDetailRequestWrapperDto;
-import osplus.pkptuna.dispute.model.DisputeDetailResponseWrapperDto;
-import osplus.pkptuna.dispute.model.DisputeResponseDto;
-import osplus.pkptuna.dispute.service.DisputeDetailService;
-import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
-import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
 
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * FlowHandler zur Verarbeitung von Detailanfragen zu Streitfällen.
- * Dieser Handler übernimmt die Deserialisierung, verarbeitet die Anfrage mit Hilfe des Services,
- * verpackt die Antwort und publiziert sie auf einem Hazelcast Topic.
+ * Registry zur Verwaltung von {@link FlowHandler}-Instanzen nach Flow-Name.
+ * Ermöglicht das Registrieren und Abrufen typisierter Handler zur Laufzeit.
+ *
+ * @param <T> Typ der Anfrage
+ * @param <R> Typ der Antwort
  */
-@AplComponent("dispute-detail")
-public class DisputeDetailFlowHandler extends GenericFlowHandler<DisputeDetailRequestWrapperDto, DisputeResponseDto, DisputeDetailResponseWrapperDto> {
+@AplComponent
+public class FlowHandlerRegistry<T, R> {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeDetailFlowHandler.class);
-    public static final String FLOW_NAME = "dispute-detail";
-    public static final String TRACE_CODE = "DISPUTE_DETAIL_LOOKUP";
-    private final DisputeDetailService disputeDetailService;
+    private final Map<String, FlowHandler<T, R>> handlerMap = new HashMap<>();
 
-    public DisputeDetailFlowHandler(
-            ReliableTopicPublisher<DisputeDetailResponseWrapperDto> reliableTopicPublisher,
-            ProtobufDeserializer<DisputeDetailRequestWrapperDto> deserializer,
-            DisputeDetailService disputeDetailService
-    ) {
-        super(FLOW_NAME, TRACE_CODE, reliableTopicPublisher, deserializer);
-        this.disputeDetailService = disputeDetailService;
+    /**
+     * Registriert einen {@link FlowHandler} unter einem eindeutigen Namen.
+     *
+     * @param flowName eindeutiger Name des Flows
+     * @param handler  die zugehörige Handler-Instanz
+     */
+    public void register(String flowName, FlowHandler<T, R> handler) {
+        handlerMap.put(flowName, handler);
     }
 
     /**
-     * {@inheritDoc}
-     * <p>
-     * Extrahiert die Korrelations-ID aus dem Request.
+     * Gibt den registrierten Handler für den angegebenen Flow zurück.
+     *
+     * @param flowName der gesuchte Flow-Name
+     * @return zugehöriger Handler
+     * @throws IllegalArgumentException wenn kein Handler vorhanden ist
      */
-    @Override
-    public String extractCorrelationId(DisputeDetailRequestWrapperDto request) {
-        return request.getCorrelationId();
-    }
-
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Verarbeitet die Anfrage durch Aufruf des zugehörigen Services.
-     */
-    @Override
-    public DisputeResponseDto handleRequest(DisputeDetailRequestWrapperDto request) {
-        DisputeDetailRequestDto dto = request.getPayload();
-        List<String> embeds = dto.getMetadata().getEmbedList();
-        return disputeDetailService.getDisputeFolderDetails(dto.getIssuerId(), dto.getDisputeFolderReference(), embeds);
-    }
-
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Verpackt das Ergebnis zusammen mit der Korrelations-ID in ein Wrapper-Objekt.
-     */
-    @Override
-    public DisputeDetailResponseWrapperDto wrapResponse(String correlationId, DisputeResponseDto result) {
-        return DisputeDetailResponseWrapperDto.newBuilder()
-                .setCorrelationId(correlationId)
-                .setResponse(result)
-                .build();
-    }
-
-    @PostConstruct
-    void init() {
-        LOGGER.info("DisputeDetailFlowHandler loaded and initialised.");
-    }
-}
-
------
-
-package osplus.pkptuna.flows.handlers;
-
-import com.google.protobuf.GeneratedMessage;
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.hazelcast.core.HazelcastInstance;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
-import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
-
-import java.io.IOException;
-
-public abstract class GenericFlowHandler<Req extends GeneratedMessage, Res extends GeneratedMessage, ResWrapper extends GeneratedMessage>
-        implements FlowHandler<Req, Res, ResWrapper> {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(GenericFlowHandler.class);
-    private final String flowName;
-    private final String traceCode;
-    private final ReliableTopicPublisher<ResWrapper> reliableTopicPublisher;
-    private final ProtobufDeserializer<Req> deserializer;
-
-    public GenericFlowHandler(String flowName, String traceCode, ReliableTopicPublisher<ResWrapper> reliableTopicPublisher, ProtobufDeserializer<Req> deserializer) {
-        this.flowName = flowName;
-        this.traceCode = traceCode;
-        this.reliableTopicPublisher = reliableTopicPublisher;
-        this.deserializer = deserializer;
-    }
-
-    @Override
-    public Req deserializeRequest(byte[] data) throws InvalidProtocolBufferException {
-        try {
-            return deserializer.deserialize(data);
-        } catch (IOException e) {
-            LOGGER.error("Failed to deserialize request", e);
-            return null; // TODO error handling
-            //  return Req.newBuilder().build();
+    public FlowHandler<T, R> getHandler(String flowName) {
+        FlowHandler<T, R> handler = handlerMap.get(flowName);
+        if (handler == null) {
+            throw new IllegalArgumentException("No FlowHandler registered for flow: " + flowName);
         }
+        return handler;
     }
 
-    @Override
-    public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Res response) {
-        reliableTopicPublisher.sendMessage(topicName, traceCode, response);
-    }
-
-    // TODO add more generic implementations of interface methods
-
-    @Override
-    public String getFlowName() {
-        return flowName;
-    }
-}
----
-
-package osplus.pkptuna.flows.handlers;
-
-import com.google.protobuf.GeneratedMessage;
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.hazelcast.core.HazelcastInstance;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
-import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
-
-import java.io.IOException;
-
-public abstract class GenericFlowHandler<Req extends GeneratedMessage, Res extends GeneratedMessage, ResWrapper extends GeneratedMessage>
-        implements FlowHandler<Req, Res, ResWrapper> {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(GenericFlowHandler.class);
-    private final String flowName;
-    private final String traceCode;
-    private final ReliableTopicPublisher<ResWrapper> reliableTopicPublisher;
-    private final ProtobufDeserializer<Req> deserializer;
-
-    public GenericFlowHandler(String flowName, String traceCode, ReliableTopicPublisher<ResWrapper> reliableTopicPublisher, ProtobufDeserializer<Req> deserializer) {
-        this.flowName = flowName;
-        this.traceCode = traceCode;
-        this.reliableTopicPublisher = reliableTopicPublisher;
-        this.deserializer = deserializer;
-    }
-
-    @Override
-    public Req deserializeRequest(byte[] data) throws InvalidProtocolBufferException {
-        try {
-            return deserializer.deserialize(data);
-        } catch (IOException e) {
-            LOGGER.error("Failed to deserialize request", e);
-            return null; // TODO error handling
-            //  return Req.newBuilder().build();
-        }
-    }
-
-    @Override
-    public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Res response) {
-        reliableTopicPublisher.sendMessage(topicName, traceCode, response);
-    }
-
-    // TODO add more generic implementations of interface methods
-
-    @Override
-    public String getFlowName() {
-        return flowName;
+    /**
+     * Prüft, ob ein Handler für den gegebenen Flow registriert ist.
+     *
+     * @param flowName Flow-Name
+     * @return {@code true}, wenn ein Handler vorhanden ist
+     */
+    public boolean contains(String flowName) {
+        return handlerMap.containsKey(flowName);
     }
 }
