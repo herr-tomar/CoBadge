@@ -103,7 +103,7 @@ public class GenericHazelcastConsumer<Req, Res> {
         @Override
         public void entryAdded(EntryEvent<String, Object> event) {
             metricsService.timer(
-                    () -> processEntry(event.getKey(), event.getValue().toString()),
+                    () -> processEntry(event.getKey(), event.getValue()),
                     MetricsConstants.TIMER_FLOW_DURATION,
                     MetricTag.create(MetricsConstants.TAG_FLOW_NAME, flowName)
             );
@@ -114,7 +114,7 @@ public class GenericHazelcastConsumer<Req, Res> {
             LOGGER.debug("Ignoring entryUpdated event for key {}", event.getKey());
         }
 
-        private void processEntry(String correlationId, String request) {
+        private void processEntry(String correlationId, Object request) {
             // TODO "request" parameter should have generic type of handlerRegistry.getHandler(flowName) ReqWrapper
             IMap<String, String> claimMap = hazelcastInstance.getMap("router-claim-map");
             String claimKey = "route-lock-" + correlationId;
@@ -132,7 +132,7 @@ public class GenericHazelcastConsumer<Req, Res> {
             }
 
             try {
-                FlowHandler<String, FlowHandler<Req, Res>> handler = handlerRegistry.getHandler(flowName);
+                FlowHandler<Req, Res> handler = (FlowHandler<Req, Res>) handlerRegistry.getHandler(flowName);
                 if (handler == null) {
                     LOGGER.warn("No FlowHandler for '{}' registered. Message will be skipped.", flowName);
                     metricsService.increaseCounter(MetricsConstants.COUNTER_MESSAGE_CONSUME_INVALID_FLOW,
@@ -141,7 +141,7 @@ public class GenericHazelcastConsumer<Req, Res> {
                 }
 
                 Res response = handler.handleRequest(request);
-                Object wrapped = handler.wrapResponse(correlationId, response);
+                Res wrapped = handler.wrapResponse(correlationId, response);
                 handler.sendResponse(hazelcastInstance, responseTopic, wrapped);
 
                 hazelcastInstance.getMap(mapName).remove(correlationId);
