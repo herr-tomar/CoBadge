@@ -1,5 +1,86 @@
 package osplus.pkptuna.flows.handlers;
 
+import jakarta.annotation.PostConstruct;
+import osplus.apl.core.api.AplComponent;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.dispute.model.DisputeDetailRequestDto;
+import osplus.pkptuna.dispute.model.DisputeDetailRequestWrapperDto;
+import osplus.pkptuna.dispute.model.DisputeDetailResponseWrapperDto;
+import osplus.pkptuna.dispute.model.DisputeResponseDto;
+import osplus.pkptuna.dispute.service.DisputeDetailService;
+import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
+import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
+
+import java.util.List;
+
+/**
+ * FlowHandler zur Verarbeitung von Detailanfragen zu Streitfällen.
+ * Dieser Handler übernimmt die Deserialisierung, verarbeitet die Anfrage mit Hilfe des Services,
+ * verpackt die Antwort und publiziert sie auf einem Hazelcast Topic.
+ */
+@AplComponent("dispute-detail")
+public class DisputeDetailFlowHandler extends GenericFlowHandler<DisputeDetailRequestWrapperDto, DisputeResponseDto, DisputeDetailResponseWrapperDto> {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeDetailFlowHandler.class);
+    public static final String FLOW_NAME = "dispute-detail";
+    public static final String TRACE_CODE = "DISPUTE_DETAIL_LOOKUP";
+    private final DisputeDetailService disputeDetailService;
+
+    public DisputeDetailFlowHandler(
+            ReliableTopicPublisher<DisputeDetailResponseWrapperDto> reliableTopicPublisher,
+            ProtobufDeserializer<DisputeDetailRequestWrapperDto> deserializer,
+            DisputeDetailService disputeDetailService
+    ) {
+        super(FLOW_NAME, TRACE_CODE, reliableTopicPublisher, deserializer);
+        this.disputeDetailService = disputeDetailService;
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Extrahiert die Korrelations-ID aus dem Request.
+     */
+    @Override
+    public String extractCorrelationId(DisputeDetailRequestWrapperDto request) {
+        return request.getCorrelationId();
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Verarbeitet die Anfrage durch Aufruf des zugehörigen Services.
+     */
+    @Override
+    public DisputeResponseDto handleRequest(DisputeDetailRequestWrapperDto request) {
+        DisputeDetailRequestDto dto = request.getPayload();
+        List<String> embeds = dto.getMetadata().getEmbedList();
+        return disputeDetailService.getDisputeFolderDetails(dto.getIssuerId(), dto.getDisputeFolderReference(), embeds);
+    }
+
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Verpackt das Ergebnis zusammen mit der Korrelations-ID in ein Wrapper-Objekt.
+     */
+    @Override
+    public DisputeDetailResponseWrapperDto wrapResponse(String correlationId, DisputeResponseDto result) {
+        return DisputeDetailResponseWrapperDto.newBuilder()
+                .setCorrelationId(correlationId)
+                .setResponse(result)
+                .build();
+    }
+
+    @PostConstruct
+    void init() {
+        LOGGER.info("DisputeDetailFlowHandler loaded and initialised.");
+    }
+}
+
+-----
+
+package osplus.pkptuna.flows.handlers;
+
 import com.google.protobuf.GeneratedMessage;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.hazelcast.core.HazelcastInstance;
@@ -11,15 +92,70 @@ import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
 
 import java.io.IOException;
 
-public abstract class GenericFlowHandler<Req extends GeneratedMessage,Res extends GeneratedMessage> implements FlowHandler<Req, Res> {
+public abstract class GenericFlowHandler<Req extends GeneratedMessage, Res extends GeneratedMessage, ResWrapper extends GeneratedMessage>
+        implements FlowHandler<Req, Res, ResWrapper> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GenericFlowHandler.class);
     private final String flowName;
     private final String traceCode;
-    private final ReliableTopicPublisher<Res> reliableTopicPublisher;
+    private final ReliableTopicPublisher<ResWrapper> reliableTopicPublisher;
     private final ProtobufDeserializer<Req> deserializer;
 
-    public GenericFlowHandler(String flowName, String traceCode, ReliableTopicPublisher<Res> reliableTopicPublisher, ProtobufDeserializer<Req> deserializer) {
+    public GenericFlowHandler(String flowName, String traceCode, ReliableTopicPublisher<ResWrapper> reliableTopicPublisher, ProtobufDeserializer<Req> deserializer) {
+        this.flowName = flowName;
+        this.traceCode = traceCode;
+        this.reliableTopicPublisher = reliableTopicPublisher;
+        this.deserializer = deserializer;
+    }
+
+    @Override
+    public Req deserializeRequest(byte[] data) throws InvalidProtocolBufferException {
+        try {
+            return deserializer.deserialize(data);
+        } catch (IOException e) {
+            LOGGER.error("Failed to deserialize request", e);
+            return null; // TODO error handling
+            //  return Req.newBuilder().build();
+        }
+    }
+
+    @Override
+    public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Res response) {
+        reliableTopicPublisher.sendMessage(topicName, traceCode, response);
+    }
+
+    // TODO add more generic implementations of interface methods
+
+    @Override
+    public String getFlowName() {
+        return flowName;
+    }
+}
+---
+
+package osplus.pkptuna.flows.handlers;
+
+import com.google.protobuf.GeneratedMessage;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.hazelcast.core.HazelcastInstance;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
+import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
+
+import java.io.IOException;
+
+public abstract class GenericFlowHandler<Req extends GeneratedMessage, Res extends GeneratedMessage, ResWrapper extends GeneratedMessage>
+        implements FlowHandler<Req, Res, ResWrapper> {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericFlowHandler.class);
+    private final String flowName;
+    private final String traceCode;
+    private final ReliableTopicPublisher<ResWrapper> reliableTopicPublisher;
+    private final ProtobufDeserializer<Req> deserializer;
+
+    public GenericFlowHandler(String flowName, String traceCode, ReliableTopicPublisher<ResWrapper> reliableTopicPublisher, ProtobufDeserializer<Req> deserializer) {
         this.flowName = flowName;
         this.traceCode = traceCode;
         this.reliableTopicPublisher = reliableTopicPublisher;
