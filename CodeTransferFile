@@ -1,3 +1,290 @@
+package osplus.pkptuna.hazelcast.pubsub;
+
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import osplus.apl.core.test.utils.AplTestRunner;
+import osplus.apl.core.test.utils.BaseAplTest;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
+
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@SpringBootTest(
+        classes = {
+                AplTestRunner.class,
+                GenericHazelcastConsumerTest.LocalTestConfig.class,
+                FlowHandlerTestConfiguration.class
+        },
+        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+        properties = {
+                "spring.main.allow-bean-definition-overriding=true",
+                "generichazelcast.polling-rate=20",
+                "apl.application.name=uui",
+                "apl.application.version=0.0.1-TEST"
+        }
+)
+@AutoConfigureMockMvc
+public class GenericHazelcastConsumerTest extends BaseAplTest {
+
+    @Autowired
+    private FlowHandler sampleFlowHandler;
+
+    @Autowired
+    private FlowConfig flowConfig;
+
+    @Autowired
+    private HazelcastInstance hazelcastInstance;
+
+    @Autowired
+    private GenericHazelcastConsumer consumer;
+
+    @Autowired
+    private FlowHandlerTestConfiguration.TestCollector testCollector;
+
+    private IMap<Object, Object> requestMap;
+    private IMap<String, String> routerMap;
+
+    @BeforeEach
+    public void setUp() {
+        requestMap = hazelcastInstance.getMap("map-0");
+        routerMap = hazelcastInstance.getMap("router-claim-map");
+
+        hazelcastInstance.getMap("router-leader-map").clear();
+        hazelcastInstance.getMap("router-heartbeat-map").clear();
+        routerMap.clear();
+        requestMap.clear();
+        testCollector.clear();
+    }
+
+    @Test
+    public void testPollRequestMaps_PositiveFlow() {
+        Map<String, Object> request = Map.of("key", "value");
+        String correlationId = sampleFlowHandler.extractCorrelationId(request);
+
+        requestMap.put(correlationId, request);
+        routerMap.put("route-lock-" + correlationId, "");  // Simulate router claiming the request
+
+        await()
+                .atMost(5, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    assertTrue(testCollector.wasSent(flowConfig.responseTopic()), "Expected response to be sent on topic");
+                    assertEquals("wrappedResponse", testCollector.getSent(flowConfig.responseTopic()));
+                    assertFalse(requestMap.containsKey(correlationId), "Message should be removed on success");
+                    assertFalse(routerMap.containsKey("route-lock-" + correlationId), "Claim should be removed on success");
+                });
+    }
+
+    @Test
+    public void testPollRequestMaps_NoHandlerFound() {
+        IMap<Object, Object> unknownMap = hazelcastInstance.getMap("mapX-0");
+        String corrId = "id1";
+
+        unknownMap.put(corrId, "request");
+        hazelcastInstance.getMap("router-claim-map").put("route-lock-" + corrId, "");
+
+        assertFalse(testCollector.wasSent(flowConfig.responseTopic()), "No response should be sent for unknown flow");
+    }
+
+    @Test
+    public void testPollRequestMaps_HandlerThrowsException() {
+        String corrId = "id123";
+
+        requestMap.put(corrId, "faultyRequest");
+        routerMap.put("route-lock-" + corrId, "");
+
+        await()
+                .atMost(2, TimeUnit.SECONDS)
+                .pollInterval(50, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    assertFalse(testCollector.wasSent(flowConfig.responseTopic()), "No response should be sent on handler error");
+                    assertTrue(requestMap.containsKey(corrId), "Request should remain for retry");
+                    assertEquals("", routerMap.get("route-lock-" + corrId), "Claim should be reverted to original");
+                });
+    }
+
+    @TestConfiguration
+    static class LocalTestConfig {
+        @Bean(destroyMethod = "shutdown")
+        public HazelcastInstance hazelcastInstance() {
+            Config config = new Config();
+            config.setClusterName("test-cluster-" + UUID.randomUUID());
+            config.getNetworkConfig().setPortAutoIncrement(true);
+            config.setProperty("hazelcast.logging.type", "slf4j");
+            return Hazelcast.newHazelcastInstance(config);
+        }
+    }
+}
+
+
+
+----
+package osplus.pkptuna.hazelcast.pubsub;
+
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.topic.ITopic;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import osplus.apl.core.test.utils.AplTestRunner;
+import osplus.apl.core.test.utils.BaseAplTest;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.test.config.DummyMessage;
+import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
+
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.*;
+
+@SpringBootTest(classes = {
+        AplTestRunner.class,
+        GenericHazelcastRouterTest.LocalTestConfig.class,
+        FlowHandlerTestConfiguration.class
+},
+        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+        properties = {
+                "spring.main.allow-bean-definition-overriding=true",
+                "generichazelcast.polling-rate=20",
+                "apl.application.name=uui",
+                "apl.application.version=0.0.1-TEST"
+        })
+@AutoConfigureMockMvc
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+public class GenericHazelcastRouterTest extends BaseAplTest {
+
+    @Autowired private HazelcastInstance hazelcastInstance;
+    @Autowired private FlowConfig flowConfig;
+    @Autowired private FlowHandlerTestConfiguration.TestCollector testCollector;
+
+    @Autowired
+    private FlowHandler<DummyMessage, DummyMessage, DummyMessage> sampleFlowHandler;
+
+    @Autowired
+    private GenericHazelcastRouter<DummyMessage, DummyMessage, DummyMessage> router;
+
+    private IMap<String, String> leaderMap;
+    private IMap<String, Long> heartbeatMap;
+    private IMap<String, String> routerMap;
+    private IMap<Object, Object> targetMap;
+    private ITopic<byte[]> topic;
+
+    private final String routerInstanceId = "test-router-instance";
+
+    @BeforeEach
+    public void setup() {
+        leaderMap = hazelcastInstance.getMap("router-leader-map");
+        heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
+        routerMap = hazelcastInstance.getMap("router-claim-map");
+        targetMap = hazelcastInstance.getMap("map-0");
+
+        leaderMap.clear();
+        heartbeatMap.clear();
+        routerMap.clear();
+        targetMap.clear();
+        testCollector.clear();
+
+        router.setRouterInstanceId(routerInstanceId);
+        leaderMap.put("active-router", routerInstanceId);
+        heartbeatMap.put("heartbeat", System.currentTimeMillis() - 10_000);
+        topic = hazelcastInstance.getReliableTopic(flowConfig.requestTopic());
+        router.initRouters();
+    }
+
+    @Test
+    public void testMessageRoutedSuccessfully() {
+        DummyMessage mockRequest = mock(DummyMessage.class);
+        when(mockRequest.toByteArray()).thenReturn(new byte[]{1, 2, 3});
+        when(mockRequest.hashCode()).thenReturn(42);
+
+        String corrId = sampleFlowHandler.extractCorrelationId(mockRequest);
+        assertFalse(routerMap.containsKey("route-lock-" + corrId));
+
+        topic.publish(mockRequest.toByteArray());
+
+        await().atMost(5, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertTrue(testCollector.wasSent(flowConfig.responseTopic())));
+    }
+
+    @Test
+    public void testDuplicateMessageNotProcessed() {
+        DummyMessage mockRequest = mock(DummyMessage.class);
+        when(mockRequest.toByteArray()).thenReturn(new byte[]{4, 5, 6});
+        when(mockRequest.hashCode()).thenReturn(99);
+
+        String corrId = sampleFlowHandler.extractCorrelationId(mockRequest);
+        routerMap.put("route-lock-" + corrId, "existing");
+
+        topic.publish(mockRequest.toByteArray());
+
+        await().atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertFalse(targetMap.containsKey(corrId)));
+    }
+
+    @Test
+    public void testRoutingHandlerThrowsException() {
+        DummyMessage mockRequest = mock(DummyMessage.class);
+        when(mockRequest.toByteArray()).thenReturn(new byte[]{9, 9, 9});
+        when(mockRequest.hashCode()).thenReturn(999);
+
+        String corrId = sampleFlowHandler.extractCorrelationId(mockRequest);
+
+        // You may need to further mock `sampleFlowHandler.handleRequest` to throw if needed
+
+        topic.publish(mockRequest.toByteArray());
+
+        await().atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertFalse(targetMap.containsKey(corrId)));
+    }
+
+    @TestConfiguration
+    static class LocalTestConfig {
+        @Bean(destroyMethod = "shutdown")
+        public HazelcastInstance hazelcastInstance() {
+            Config config = new Config();
+            config.setClusterName("test-cluster" + UUID.randomUUID());
+            config.getNetworkConfig().setPortAutoIncrement(true);
+            config.setProperty("hazelcast.logging.type", "slf4j");
+            return Hazelcast.newHazelcastInstance(config);
+        }
+    }
+}
+
+
+----
+
 package osplus.pkptuna.hazelcast.test.config;
 
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -147,3 +434,205 @@ public class FlowHandlerTestConfiguration {
         }
     }
 }
+
+
+----
+
+package osplus.pkptuna.hazelcast.test.config;
+
+import com.google.protobuf.Descriptors;
+import com.google.protobuf.GeneratedMessage;
+import com.google.protobuf.UnknownFieldSet;
+
+import java.util.Map;
+
+public class DummyMessage extends GeneratedMessage {
+    @Override
+    public int getSerializedSize() {
+        return 0;
+    }
+
+    @Override
+    public boolean isInitialized() {
+        return true;
+    }
+
+    @Override
+    public Builder newBuilderForType() {
+        return null;
+    }
+
+    @Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output) {
+    }
+
+    @Override
+    public com.google.protobuf.Parser<DummyMessage> getParserForType() {
+        return null;
+    }
+
+    @Override
+    protected FieldAccessorTable internalGetFieldAccessorTable() {
+        return null;
+    }
+
+    @Override
+    public DummyMessage getDefaultInstanceForType() {
+        return new DummyMessage();
+    }
+
+    @Override
+    public Descriptors.Descriptor getDescriptorForType() {
+        return null;
+    }
+
+    @Override
+    public Map<Descriptors.FieldDescriptor, Object> getAllFields() {
+        return null;
+    }
+
+    @Override
+    public boolean hasField(Descriptors.FieldDescriptor field) {
+        return false;
+    }
+
+    @Override
+    public Object getField(Descriptors.FieldDescriptor field) {
+        return null;
+    }
+
+    @Override
+    public int getRepeatedFieldCount(Descriptors.FieldDescriptor field) {
+        return 0;
+    }
+
+    @Override
+    public Object getRepeatedField(Descriptors.FieldDescriptor field, int index) {
+        return null;
+    }
+
+    @Override
+    public UnknownFieldSet getUnknownFields() {
+        return null;
+    }
+
+    @Override
+    public Builder toBuilder() {
+        return null;
+    }
+}
+
+-----
+
+
+erver VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+[ERROR] Tests run: 3, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 17.58 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest
+[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest.testPollRequestMaps_HandlerThrowsException -- Time elapsed: 2.098 s <<< ERROR!
+org.awaitility.core.ConditionTimeoutException: Assertion condition defined as a Lambda expression in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest No response should be sent on handler error ==> expected: <false> but was: <true> within 2 seconds.
+	at org.awaitility.core.ConditionAwaiter.await(ConditionAwaiter.java:167)
+	at org.awaitility.core.AssertionCondition.await(AssertionCondition.java:119)
+	at org.awaitility.core.AssertionCondition.await(AssertionCondition.java:31)
+	at org.awaitility.core.ConditionFactory.until(ConditionFactory.java:1006)
+	at org.awaitility.core.ConditionFactory.untilAsserted(ConditionFactory.java:790)
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest.testPollRequestMaps_HandlerThrowsException(GenericHazelcastConsumerTest.java:118)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+Caused by: org.opentest4j.AssertionFailedError: No response should be sent on handler error ==> expected: <false> but was: <true>
+	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
+	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
+	at org.junit.jupiter.api.AssertFalse.failNotFalse(AssertFalse.java:63)
+	at org.junit.jupiter.api.AssertFalse.assertFalse(AssertFalse.java:36)
+	at org.junit.jupiter.api.Assertions.assertFalse(Assertions.java:239)
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest.lambda$testPollRequestMaps_HandlerThrowsException$1(GenericHazelcastConsumerTest.java:119)
+	at org.awaitility.core.AssertionCondition.lambda$new$0(AssertionCondition.java:53)
+	at org.awaitility.core.ConditionAwaiter$ConditionPoller.call(ConditionAwaiter.java:248)
+	at org.awaitility.core.ConditionAwaiter$ConditionPoller.call(ConditionAwaiter.java:235)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+[INFO] Running osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+[ERROR] Tests run: 3, Failures: 0, Errors: 3, Skipped: 0, Time elapsed: 15.43 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest
+[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testDuplicateMessageNotProcessed -- Time elapsed: 0.175 s <<< ERROR!
+org.mockito.exceptions.misusing.MissingMethodInvocationException: 
+when() requires an argument which has to be 'a method call on a mock'.
+For example:
+    when(mock.getArticles()).thenReturn(articles);
+Also, this error might show up because:
+1. you stub either of: final/private/native/equals()/hashCode() methods.
+   Those methods *cannot* be stubbed/verified.
+   Mocking methods declared on non-public parent classes is not supported.
+2. inside when() you don't call method on mock but on some other object.
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testDuplicateMessageNotProcessed(GenericHazelcastRouterTest.java:104)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testRoutingHandlerThrowsException -- Time elapsed: 0.016 s <<< ERROR!
+org.mockito.exceptions.misusing.MissingMethodInvocationException: 
+when() requires an argument which has to be 'a method call on a mock'.
+For example:
+    when(mock.getArticles()).thenReturn(articles);
+Also, this error might show up because:
+1. you stub either of: final/private/native/equals()/hashCode() methods.
+   Those methods *cannot* be stubbed/verified.
+   Mocking methods declared on non-public parent classes is not supported.
+2. inside when() you don't call method on mock but on some other object.
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testRoutingHandlerThrowsException(GenericHazelcastRouterTest.java:119)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully -- Time elapsed: 0.015 s <<< ERROR!
+org.mockito.exceptions.misusing.MissingMethodInvocationException: 
+when() requires an argument which has to be 'a method call on a mock'.
+For example:
+    when(mock.getArticles()).thenReturn(articles);
+Also, this error might show up because:
+1. you stub either of: final/private/native/equals()/hashCode() methods.
+   Those methods *cannot* be stubbed/verified.
+   Mocking methods declared on non-public parent classes is not supported.
+2. inside when() you don't call method on mock but on some other object.
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully(GenericHazelcastRouterTest.java:89)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+[INFO] Running osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisherTest
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 15.65 s -- in osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisherTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[ERROR] Errors: 
+[ERROR]   GenericHazelcastConsumerTest.testPollRequestMaps_HandlerThrowsException:118 » ConditionTimeout Assertion condition defined as a Lambda expression in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumerTest No response should be sent on handler error ==> expected: <false> but was: <true> within 2 seconds.
+[ERROR]   GenericHazelcastRouterTest.testDuplicateMessageNotProcessed:104 MissingMethodInvocation 
+when() requires an argument which has to be 'a method call on a mock'.
+For example:
+    when(mock.getArticles()).thenReturn(articles);
+Also, this error might show up because:
+1. you stub either of: final/private/native/equals()/hashCode() methods.
+   Those methods *cannot* be stubbed/verified.
+   Mocking methods declared on non-public parent classes is not supported.
+2. inside when() you don't call method on mock but on some other object.
+[ERROR]   GenericHazelcastRouterTest.testMessageRoutedSuccessfully:89 MissingMethodInvocation 
+when() requires an argument which has to be 'a method call on a mock'.
+For example:
+    when(mock.getArticles()).thenReturn(articles);
+Also, this error might show up because:
+1. you stub either of: final/private/native/equals()/hashCode() methods.
+   Those methods *cannot* be stubbed/verified.
+   Mocking methods declared on non-public parent classes is not supported.
+2. inside when() you don't call method on mock but on some other object.
+[ERROR]   GenericHazelcastRouterTest.testRoutingHandlerThrowsException:119 MissingMethodInvocation 
+when() requires an argument which has to be 'a method call on a mock'.
+For example:
+    when(mock.getArticles()).thenReturn(articles);
+Also, this error might show up because:
+1. you stub either of: final/private/native/equals()/hashCode() methods.
+   Those methods *cannot* be stubbed/verified.
+   Mocking methods declared on non-public parent classes is not supported.
+2. inside when() you don't call method on mock but on some other object.
+[INFO] 
+[ERROR] Tests run: 15, Failures: 0, Errors: 4, Skipped: 0
+[INFO] 
+
