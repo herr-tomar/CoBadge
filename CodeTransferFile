@@ -1,217 +1,229 @@
-syntax = "proto3";
+package osplus.pkptuna.hazelcast.pubsub;
 
-package osplus.pkptuna.dispute.model;
+import com.hazelcast.core.EntryEvent;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.map.listener.EntryAddedListener;
+import com.hazelcast.map.listener.EntryUpdatedListener;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
+import osplus.apl.core.api.AplComponent;
+import osplus.apl.core.api.administration.metrics.MetricTag;
+import osplus.apl.core.api.administration.metrics.MetricsService;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.config.MetricsConstants;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
 
-import "google/protobuf/timestamp.proto";
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
-option java_package = "osplus.pkptuna.dispute.model";
-option java_outer_classname = "DisputeResponseProto";
-option java_multiple_files = true;
+@AplComponent
+public class GenericHazelcastConsumer<Req, Res> {
 
-// -----Vom Orchestrator gesendetes DTO
+    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastConsumer.class);
+    private final String instanceId = UUID.randomUUID().toString();
 
-message DisputeDetailRequestWrapperDto {
-  string correlationId = 1;
-  DisputeDetailRequestDto payload = 2;
-}
+    private final MetricsService metricsService;
+    private final HazelcastInstance hazelcastInstance;
+    private final List<FlowConfig> flowConfigs;
+    private final FlowHandlerRegistry handlerRegistry;
 
-message DisputeDetailRequestDto {
-  DisputeDetailRequestMetadataDto metadata = 1;
-  string issuerId = 2;
-  string disputeFolderReference = 3;
-}
+    private final ConcurrentMap<String, String> listenerRegistrationMap = new ConcurrentHashMap<>();
 
-message DisputeDetailRequestMetadataDto {
-  string requestedBy = 1;
-  string requestChannel = 2;
-  string messageType = 3;
-  string businessContext = 4;
-  repeated string embed = 5;
-}
+    public GenericHazelcastConsumer(
+            MetricsService metricsService,
+            HazelcastInstance hazelcastInstance,
+            List<FlowConfig> flowConfigs,
+            FlowHandlerRegistry handlerRegistry
+    ) {
+        this.metricsService = metricsService;
+        this.hazelcastInstance = hazelcastInstance;
+        this.flowConfigs = flowConfigs;
+        this.handlerRegistry = handlerRegistry;
+    }
 
-// -----Umgewandelte DTO für die Rückkehr zum Orchestrator vorgesehen
+    @PostConstruct
+    public void registerMapListeners() {
+        for (FlowConfig config : flowConfigs) {
+            String flowName = config.name();
+            int partitions = config.partitions();
+            String baseMap = config.mapBase();
+            String responseTopic = config.responseTopic();
 
-message DisputeDetailResponseWrapperDto {
-  string correlationId = 1;
-  DisputeResponseDto response = 2;
-}
+            for (int i = 0; i < partitions; i++) {
+                String mapName = baseMap + i;
+                IMap<String, Object> map = hazelcastInstance.getMap(mapName);
 
-// -----DTO für die vom IBO- Dispute-Lookup-Aufruf abgerufene Antwort
+                var listener = new MapEntryListener(flowName, mapName, responseTopic);
+                String registrationId = map.addEntryListener(listener, true).toString();
+                listenerRegistrationMap.put(mapName, registrationId);
 
-message DisputeResponseDto {
-  ResponseMetadataDto responseMetadata = 1;
-  DataDto data = 2;
-}
+                LOGGER.info("Registered EntryListener on IMap '{}'", mapName);
+                metricsService.increaseCounter(MetricsConstants.COUNTER_ENTRY_LISTENER_REGISTER_SUCCESS, MetricTag.create(MetricsConstants.TAG_MAP_NAME, mapName));
+            }
+        }
+    }
 
-message ResponseMetadataDto {
-  string correlationId = 1;
-  LinksDto links = 2;
-  string statusMessage = 3;
-  int32 statusCode = 4;
-  google.protobuf.Timestamp responseDateTime = 5;
-  int32 timeTakenMs = 6;
-}
+    @PreDestroy
+    public void cleanupListeners() {
+        for (var entry : listenerRegistrationMap.entrySet()) {
+            String mapName = entry.getKey();
+            String id = entry.getValue();
+            try {
+                hazelcastInstance.getMap(mapName).removeEntryListener(UUID.fromString(id));
+                LOGGER.info("Removed EntryListener from IMap '{}'", mapName);
+                metricsService.increaseCounter(MetricsConstants.COUNTER_ENTRY_LISTENER_REMOVE_SUCCESS, MetricTag.create(MetricsConstants.TAG_MAP_NAME, mapName));
+            } catch (Exception e) {
+                LOGGER.warn("Failed to remove listener from '{}'", mapName, e);
+                metricsService.increaseCounter(
+                        MetricsConstants.COUNTER_ENTRY_LISTENER_REMOVE_ERROR,
+                        MetricTag.create(MetricsConstants.TAG_MAP_NAME, mapName),
+                        MetricTag.create(MetricsConstants.TAG_EXCEPTION_CLASS, e.getClass().getSimpleName())
+                );
+            }
+        }
+    }
 
-message LinksDto {
-  string self = 1;
-  string next = 2;
-}
+    private class MapEntryListener<Req, Res> implements EntryAddedListener<String, Object>, EntryUpdatedListener<String, Object> {
+        private final String flowName;
+        private final String mapName;
+        private final String responseTopic;
 
-message DataDto {
-  string issuerId = 1;
-  DisputeFolderIdentifierDto disputeFolderIdentifier = 2;
-  repeated EventDto events = 3;
-  repeated PostingDto postings = 4;
-  repeated DocumentDto documents = 5;
-  repeated MessageDto messages = 6;
-  string acquirerReferenceData = 7;
-  string transactionType = 8;
-  google.protobuf.Timestamp transactionTime = 9;
-  AmountDto transactionAmount = 10;
-  AmountDto reconciliationAmount = 11;
-  AmountDto billingAmount = 12;
-  AmountDto billingFees = 13;
-  AmountDto outstandingBalance = 14;
-  AmountDto issuerAccountingBalance = 15;
-  string statusCode = 16;
-  string reason = 17;
-  google.protobuf.Timestamp creationDate = 18;
-  string cardAcceptorName = 19;
-  string cardAcceptorCity = 20;
-  string cardAcceptorCountry = 21;
-  string cardAcceptorIdCode = 22;
-  string cardAcceptorZipCode = 23;
-  string userInCharge = 24;
-  CardIdentifierDto cardIdentifier = 25;
-  string lastMessageType = 26;
-  google.protobuf.Timestamp lastMessageDate = 27;
-  string lastMessageStatus = 28;
-  string superFolderReference = 29;
-  string transactionCategory = 30;
-  google.protobuf.Timestamp transmissionDate = 31;
-  google.protobuf.Timestamp clientOpenDate = 32;
-}
+        public MapEntryListener(String flowName, String mapName, String responseTopic) {
+            this.flowName = flowName;
+            this.mapName = mapName;
+            this.responseTopic = responseTopic;
+        }
 
-message DisputeFolderIdentifierDto {
-  string disputeFolderReference = 1;
-  string issuerDisputeExternalReference = 2;
-}
+        @Override
+        public void entryAdded(EntryEvent<String, Object> event) {
+            metricsService.timer(
+                    () -> processEntry(event.getKey(), event.getValue().toString()),
+                    MetricsConstants.TIMER_FLOW_DURATION,
+                    MetricTag.create(MetricsConstants.TAG_FLOW_NAME, flowName)
+            );
+        }
 
-message EventDto {
-  string type = 1;
-  string message = 2;
-  bool external = 3;
-  google.protobuf.Timestamp creationDate = 4;
-}
+        @Override
+        public void entryUpdated(EntryEvent<String, Object> event) {
+            LOGGER.debug("Ignoring entryUpdated event for key {}", event.getKey());
+        }
 
-message PostingDto {
-  AmountDto postingAmount = 1;
-  string message = 2;
-  bool immediateReimbursement = 3;
-  string postingTypeReference = 4;
-  string operationReference = 5;
-  string disputeAdjustmentType = 6;
-  google.protobuf.Timestamp creationDate = 7;
-}
+        private void processEntry(String correlationId, String request) {
+            // TODO "request" parameter should have generic type of handlerRegistry.getHandler(flowName) ReqWrapper
+            IMap<String, String> claimMap = hazelcastInstance.getMap("router-claim-map");
+            String claimKey = "route-lock-" + correlationId;
 
-message DocumentDto {
-  string data = 1;
-  string type = 2;
-  string label = 3;
-  string fileName = 4;
-  google.protobuf.Timestamp creationDate = 5;
-}
+            String current = claimMap.get(claimKey);
+            if (current == null || !current.isEmpty()) {
+                LOGGER.info("Skipping processing of correlationId={} as it is not claimable", correlationId);
+                return;
+            }
 
-message MessageDto {
-  string type = 1;
-  string status = 2;
-  google.protobuf.Timestamp creationDate = 3;
-  AmountDto amount = 4;
-  string reasonCode = 5;
-  string reasonCodeDescription = 6;
-  bool reverseFlag = 7;
-  string schemeCaseId = 8;
-}
+            boolean claimed = claimMap.replace(claimKey, "", instanceId);
+            if (!claimed) {
+                LOGGER.info("Could not claim message for correlationId={} (already claimed)", correlationId);
+                return;
+            }
 
-message AmountDto {
-  int64 value = 1;
-  int32 exponent = 2;
-  string isoCode = 3;
-}
+            try {
+                FlowHandler<String, FlowHandler<Req, Res>> handler = handlerRegistry.getHandler(flowName);
+                if (handler == null) {
+                    LOGGER.warn("No FlowHandler for '{}' registered. Message will be skipped.", flowName);
+                    metricsService.increaseCounter(MetricsConstants.COUNTER_MESSAGE_CONSUME_INVALID_FLOW,
+                            MetricTag.create(MetricsConstants.TAG_FLOW_NAME, flowName));
+                    return;
+                }
 
-message CardIdentifierDto {
-  string cardReference = 1;
-  string issuerCardExternalReference = 2;
-}
+                Res response = handler.handleRequest(request);
+                Object wrapped = handler.wrapResponse(correlationId, response);
+                handler.sendResponse(hazelcastInstance, responseTopic, wrapped);
 
+                hazelcastInstance.getMap(mapName).remove(correlationId);
+                claimMap.remove(claimKey);
 
----------------------
-
-
-syntax = "proto3";
-
-package osplus.pkptuna.dispute.lookup.model;
-
-option java_package = "osplus.pkptuna.dispute.lookup.model";
-option java_outer_classname = "DisputeLookupProto";
-option java_multiple_files = true;
-
-// -----Vom Orchestrator gesendetes DTO
-message DisputeLookupRequestWrapperDto {
-  string correlationId = 1;
-  DisputeLookupRequestDto payload = 2;
-}
-
-message DisputeLookupRequestDto {
-  DisputeLookupRequestMetadataDto metadata = 1;
-  string issuerId = 2;
-  string cardReference = 3;
-}
-
-message DisputeLookupRequestMetadataDto {
-  string requestChannel = 1;
-  string messageType = 2;
-  string requestedBy = 3;
-  string businessContext = 4;
-}
-
-// -----Umgewandelte DTO für die Rückkehr zum Orchestrator vorgesehen
-message DisputeLookupResponseWrapperDto {
-  string correlationId = 1;
-  DisputeLookupResponseDto response = 2;
-}
-
-message DisputeLookupResponseDto {
-  bool disputeFolderExists = 1;
-  repeated DisputeFolderEntryDto disputeFolders = 2;
-}
-
-message DisputeFolderEntryDto {
-  string disputeFolderReference = 1;
-  string statusCode = 2;
-}
-
-// -----DTO für die vom IBO- Dispute-Lookup-Aufruf abgerufene Antwort
-message FullDisputeLookupResponseDto {
-  ResponseMetadataDto responseMetadata = 1;
-  repeated DisputeFolderDataDto data = 2;
-}
-
-message ResponseMetadataDto {
-  string correlationId = 1;
-  int32 statusCode = 2;
-  string statusMessage = 3;
-  string responseDateTime = 4;
-  int32 timeTakenMs = 5;
-}
-
-message DisputeFolderDataDto {
-  DisputeFolderIdentifierDto disputeFolderIdentifier = 1;
-  string statusCode = 2;
-}
-
-message DisputeFolderIdentifierDto {
-  string disputeFolderReference = 1;
+                LOGGER.info("Processed and removed message with correlationId={} from map={}", correlationId, mapName);
+                metricsService.increaseCounter(MetricsConstants.COUNTER_MESSAGE_CONSUME_SUCCESS,
+                        MetricTag.create(MetricsConstants.TAG_FLOW_NAME, flowName));
+            } catch (Exception ex) {
+                LOGGER.error("Error processing correlationId={}: {}", correlationId, ex.getMessage(), ex);
+                claimMap.replace(claimKey, instanceId, "");
+                metricsService.increaseCounter(
+                        MetricsConstants.COUNTER_MESSAGE_CONSUME_ERROR,
+                        MetricTag.create(MetricsConstants.TAG_FLOW_NAME, flowName),
+                        MetricTag.create(MetricsConstants.TAG_EXCEPTION_CLASS, ex.getClass().getSimpleName()));
+            }
+        }
+    }
 }
 
 
+----------------
+
+
+package osplus.pkptuna.hazelcast.flows;
+
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.hazelcast.core.HazelcastInstance;
+
+/**
+ * Diese Schnittstelle definiert den vollständigen Verarbeitungszyklus eines
+ * Nachrichtenflusses (Flow) in einem verteilten System mit Hazelcast.
+ */
+public interface FlowHandler<Req,Res> {
+
+    /**
+     * Deserialisiert die empfangenen Daten in ein Anfrageobjekt.
+     *
+     * @param data das empfangene Byte-Array
+     * @return deserialisierte Anfrage
+     * @throws InvalidProtocolBufferException bei Deserialisierungsfehlern
+     */
+    Req deserializeRequest(byte[] data) throws InvalidProtocolBufferException;
+
+    /**
+     * Extrahiert die eindeutige Korrelations-ID aus einer Anfrage.
+     *
+     * @param request das Anfrageobjekt
+     * @return Korrelations-ID als String
+     */
+    String extractCorrelationId(Req request);
+
+    /**
+     * Führt die fachliche Verarbeitung einer Anfrage durch.
+     *
+     * @param request die eingehende Anfrage
+     * @return Ergebnis der Verarbeitung
+     */
+    Res handleRequest(Req request);
+
+    /**
+     * Verpackt das Antwortobjekt gemeinsam mit der Korrelations-ID.
+     *
+     * @param correlationId eindeutige ID der Anfrage
+     * @param result        das Antwortobjekt
+     * @return eingepackte Antwort (z.B. DTO oder MessageEnvelope)
+     */
+    Object wrapResponse(String correlationId, Res result);
+
+    /**
+     * Sendet die verarbeitete Antwort über Hazelcast Reliable Topic.
+     *
+     * @param hazelcastInstance Hazelcast-Instanz
+     * @param topicName         Zieltopic
+     * @param response          die gesendete Antwort
+     */
+    void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Res response);
+
+    /**
+     * Gibt den Namen des Flows zurück (z.B. für Registrierung oder Logging).
+     *
+     * @return Flow-Name
+     */
+    String getFlowName();
+}
