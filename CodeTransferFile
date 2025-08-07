@@ -1,4 +1,148 @@
 
+package osplus.pkptuna.hazelcast.pubsub;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.topic.ITopic;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import osplus.apl.core.test.utils.AplTestRunner;
+import osplus.apl.core.test.utils.BaseAplTest;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
+
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+@SpringBootTest(classes = {
+        AplTestRunner.class,
+        GenericHazelcastRouterTest.LocalTestConfig.class,
+        FlowHandlerTestConfiguration.class
+},
+        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+        properties = {
+                "spring.main.allow-bean-definition-overriding=true",
+                "generichazelcast.polling-rate=20",
+                "apl.application.name=uui",
+                "apl.application.version=0.0.1-TEST"
+        })
+@AutoConfigureMockMvc
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+public class GenericHazelcastRouterTest extends BaseAplTest {
+
+    @Autowired private HazelcastInstance hazelcastInstance;
+    @Autowired private FlowHandler sampleFlowHandler;
+    @Autowired private FlowConfig flowConfig;
+    @Autowired private GenericHazelcastRouter router;
+    @Autowired private FlowHandlerTestConfiguration.TestCollector testCollector;
+
+    private IMap<String, String> leaderMap;
+    private IMap<String, Long> heartbeatMap;
+    private IMap<String, String> routerMap;
+    private IMap<Object, Object> targetMap;
+    private ITopic<byte[]> topic;
+
+    private final String routerInstanceId = "test-router-instance";
+
+    @BeforeEach
+    public void setup() {
+        leaderMap = hazelcastInstance.getMap("router-leader-map");
+        heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
+        routerMap = hazelcastInstance.getMap("router-claim-map");
+        targetMap = hazelcastInstance.getMap("map-0");
+
+        leaderMap.clear();
+        heartbeatMap.clear();
+        routerMap.clear();
+        targetMap.clear();
+        testCollector.clear();
+
+        router.setRouterInstanceId(routerInstanceId);
+        leaderMap.put("active-router",routerInstanceId);
+        heartbeatMap.put("heartbeat", System.currentTimeMillis() -10_000);
+        topic = hazelcastInstance.getReliableTopic(flowConfig.requestTopic());
+        router.initRouters();
+    }
+
+    @Test
+    public void testMessageRoutedSuccessfully() throws Exception {
+
+        Thread.sleep(500); // Let router subscribe
+
+        // Prepare request
+        Map<String, Object> request = Map.of("key", "value");
+        String corrId = sampleFlowHandler.extractCorrelationId(request);
+
+        // Assert no pre-existing claim
+        assertFalse(routerMap.containsKey("route-lock-" + corrId));
+
+        topic.publish(new ObjectMapper().writeValueAsBytes(request));
+
+        await().atMost(5, TimeUnit.SECONDS)
+                .untilAsserted(() -> {
+                    assertTrue(testCollector.wasSent(flowConfig.responseTopic()));
+                });
+    }
+
+    @Test
+    public void testDuplicateMessageNotProcessed() throws Exception {
+
+        Thread.sleep(500); // Let router subscribe
+
+        Map<String, Object> requestMap = Map.of("dup", "check");
+        String corrId = sampleFlowHandler.extractCorrelationId(requestMap);
+        routerMap.put("route-lock-" + corrId, "existing"); // Simulate duplicate
+
+        topic.publish(new ObjectMapper().writeValueAsBytes(requestMap));
+
+        await().atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertFalse(targetMap.containsKey(corrId)));
+    }
+
+    @Test
+    public void testRoutingHandlerThrowsException() throws Exception {
+
+        Thread.sleep(500); // Let router subscribe
+
+        Map<String, Object> faulty = Map.of("key", "faultyRequest"); // Triggers exception
+        String corrId = sampleFlowHandler.extractCorrelationId(faulty);
+
+        topic.publish(new ObjectMapper().writeValueAsBytes(faulty));
+
+        await().atMost(2, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertFalse(targetMap.containsKey(corrId)));
+    }
+
+    @TestConfiguration
+    static class LocalTestConfig {
+        @Bean(destroyMethod = "shutdown")
+        public HazelcastInstance hazelcastInstance() {
+            Config config = new Config();
+            config.setClusterName("test-cluster" + UUID.randomUUID());
+            config.getNetworkConfig().setPortAutoIncrement(true);
+            config.setProperty("hazelcast.logging.type", "slf4j");
+            return Hazelcast.newHazelcastInstance(config);
+        }
+    }
+}
+----
+
+
 package osplus.pkptuna.hazelcast.test.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,6 +159,7 @@ import osplus.pkptuna.hazelcast.config.FlowHandlerInitializer;
 import osplus.pkptuna.hazelcast.config.HazelcastFlowBootstrap;
 import osplus.pkptuna.hazelcast.flows.FlowHandler;
 import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+import osplus.pkptuna.hazelcast.flows.GenericFlowHandler;
 import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
 import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
 
@@ -65,7 +210,7 @@ public class FlowHandlerTestConfiguration {
 
     @Bean
     public FlowHandler sampleFlowHandler() {
-        return new FlowHandler<>() {
+        return new FlowHandler()  {
             private final ObjectMapper objectMapper = new ObjectMapper();
 
             @Override
@@ -170,4 +315,70 @@ public class FlowHandlerTestConfiguration {
             sentResponses.clear();
         }
     }
+}
+
+
+------
+
+package osplus.pkptuna.hazelcast.flows;
+
+import com.google.protobuf.GeneratedMessage;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.hazelcast.core.HazelcastInstance;
+
+/**
+ * Diese Schnittstelle definiert den vollständigen Verarbeitungszyklus eines
+ * Nachrichtenflusses (Flow) in einem verteilten System mit Hazelcast.
+ */
+public interface FlowHandler<Req extends GeneratedMessage, Res extends GeneratedMessage, ResWrapper extends GeneratedMessage> {
+
+    /**
+     * Deserialisiert die empfangenen Daten in ein Anfrageobjekt.
+     *
+     * @param data das empfangene Byte-Array
+     * @return deserialisierte Anfrage
+     * @throws InvalidProtocolBufferException bei Deserialisierungsfehlern
+     */
+    Req deserializeRequest(byte[] data) throws InvalidProtocolBufferException;
+
+    /**
+     * Extrahiert die eindeutige Korrelations-ID aus einer Anfrage.
+     *
+     * @param request das Anfrageobjekt
+     * @return Korrelations-ID als String
+     */
+    String extractCorrelationId(Req request);
+
+    /**
+     * Führt die fachliche Verarbeitung einer Anfrage durch.
+     *
+     * @param request die eingehende Anfrage
+     * @return Ergebnis der Verarbeitung
+     */
+    Res handleRequest(Req request);
+
+    /**
+     * Verpackt das Antwortobjekt gemeinsam mit der Korrelations-ID.
+     *
+     * @param correlationId eindeutige ID der Anfrage
+     * @param result        das Antwortobjekt
+     * @return eingepackte Antwort (z.B. DTO oder MessageEnvelope)
+     */
+    ResWrapper wrapResponse(String correlationId, Res result);
+
+    /**
+     * Sendet die verarbeitete Antwort über Hazelcast Reliable Topic.
+     *
+     * @param hazelcastInstance Hazelcast-Instanz
+     * @param topicName         Zieltopic
+     * @param response          die gesendete Antwort
+     */
+    void sendResponse(HazelcastInstance hazelcastInstance, String topicName, ResWrapper response);
+
+    /**
+     * Gibt den Namen des Flows zurück (z.B. für Registrierung oder Logging).
+     *
+     * @return Flow-Name
+     */
+    String getFlowName();
 }
