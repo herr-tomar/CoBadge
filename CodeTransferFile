@@ -1,54 +1,38 @@
-package osplus.pkptuna.hazelcast.flows;
+package osplus.pkptuna.dispute.service.impl;
 
-import osplus.apl.core.api.AplComponent;
+import org.apache.http.HttpHeaders;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.reactive.function.client.WebClient;
+import osplus.pkptuna.dispute.config.DisputeServiceProperties;
+import osplus.pkptuna.rest.dispute.model.mapper.DisputeCreateRequestIboDtoMapper;
 
-import java.util.HashMap;
-import java.util.Map;
-
-/**
- * Registry zur Verwaltung von {@link FlowHandler}-Instanzen nach Flow-Name.
- * Ermöglicht das Registrieren und Abrufen typisierter Handler zur Laufzeit.
- *
- * @param <T> Typ der Anfrage
- * @param <R> Typ der Antwort
- */
-@AplComponent
-public class FlowHandlerRegistry<T, R> {
-
-    private final Map<String, FlowHandler<T, R>> handlerMap = new HashMap<>();
-
-    /**
-     * Registriert einen {@link FlowHandler} unter einem eindeutigen Namen.
-     *
-     * @param flowName eindeutiger Name des Flows
-     * @param handler  die zugehörige Handler-Instanz
-     */
-    public void register(String flowName, FlowHandler<T, R> handler) {
-        handlerMap.put(flowName, handler);
+@Configuration
+@EnableConfigurationProperties(DisputeServiceProperties.class)
+public class ProjecteigeneTestConfiguration {
+    
+    
+    public ProjecteigeneTestConfiguration () {
+        
+    }
+    
+    @Bean
+    public WebClient webClient(@Value("${dispute.base-url}") String baseUrl) {
+        return WebClient.builder()
+                .baseUrl(baseUrl)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, "application/json")
+                .build();
     }
 
-    /**
-     * Gibt den registrierten Handler für den angegebenen Flow zurück.
-     *
-     * @param flowName der gesuchte Flow-Name
-     * @return zugehöriger Handler
-     * @throws IllegalArgumentException wenn kein Handler vorhanden ist
-     */
-    public FlowHandler<T, R> getHandler(String flowName) {
-        FlowHandler<T, R> handler = handlerMap.get(flowName);
-        if (handler == null) {
-            throw new IllegalArgumentException("No FlowHandler registered for flow: " + flowName);
-        }
-        return handler;
+    @Bean
+    public DisputeDetailServiceImpl disputeDetailService(WebClient webClient, DisputeServiceProperties props) {
+        return new DisputeDetailServiceImpl(webClient, props);
     }
 
-    /**
-     * Prüft, ob ein Handler für den gegebenen Flow registriert ist.
-     *
-     * @param flowName Flow-Name
-     * @return {@code true}, wenn ein Handler vorhanden ist
-     */
-    public boolean contains(String flowName) {
-        return handlerMap.containsKey(flowName);
+    @Bean
+    public DisputeServiceImpl disputeService(WebClient webClient, DisputeServiceProperties props, DisputeCreateRequestIboDtoMapper disputeCreateRequestIboDtoMapper) {
+        return new DisputeServiceImpl(webClient, props, disputeCreateRequestIboDtoMapper);
     }
 }
