@@ -1,50 +1,18 @@
-@Test
-public void testPollRequestMaps_PositiveFlow() {
-    Map<String, Object> request = Map.of("key", "value");
-    String correlationId = sampleFlowHandler.extractCorrelationId(request);
+@TestConfiguration
+static class FaultyHandlerTestConfig {
 
-    requestMap.put(correlationId, request);
-    routerMap.put("route-lock-" + correlationId, "");  // Simulate router claiming the request
+    @Bean
+    public FlowHandler<DummyMessage, DummyMessage, DummyMessage> faultyHandler() {
+        FlowHandler<DummyMessage, DummyMessage, DummyMessage> handler = mock(FlowHandler.class);
+        when(handler.getFlowName()).thenReturn("myFlow");
+        when(handler.deserializeRequest(any())).thenReturn(new DummyMessage());
+        when(handler.extractCorrelationId(any())).thenReturn("id123");
+        when(handler.handleRequest(any())).thenThrow(new RuntimeException("boom!"));
+        return handler;
+    }
 
-    await()
-        .atMost(5, TimeUnit.SECONDS)
-        .pollInterval(100, TimeUnit.MILLISECONDS)
-        .untilAsserted(() -> {
-            assertTrue(testCollector.wasSent(flowConfig.responseTopic()), "Expected response to be sent on topic");
-            assertTrue(testCollector.getSent(flowConfig.responseTopic()) instanceof DummyMessage);
-            assertFalse(requestMap.containsKey(correlationId), "Message should be removed on success");
-            assertFalse(routerMap.containsKey("route-lock-" + correlationId), "Claim should be removed on success");
-        });
-}
-
----------
-
-@Test
-public void testPollRequestMaps_HandlerThrowsException() throws Exception {
-    String corrId = "id123";
-    String routeKey = "route-lock-" + corrId;
-
-    Map<String, Object> faultyRequest = Map.of("key", "value");
-
-    requestMap.put(corrId, faultyRequest);
-    routerMap.put(routeKey, "");
-
-    // Create a handler that throws
-    FlowHandler<Object, Object, Object> throwingHandler = mock(FlowHandler.class);
-    when(throwingHandler.getFlowName()).thenReturn("myFlow");
-    when(throwingHandler.extractCorrelationId(any())).thenReturn(corrId);
-    when(throwingHandler.handleRequest(any())).thenThrow(new RuntimeException("Simulated handler failure"));
-    when(throwingHandler.deserializeRequest(any())).thenReturn(faultyRequest);
-
-    // Inject this into the registry
-    consumer.getRegistry().register("myFlow", throwingHandler);
-
-    await()
-        .atMost(3, TimeUnit.SECONDS)
-        .pollInterval(100, TimeUnit.MILLISECONDS)
-        .untilAsserted(() -> {
-            assertFalse(testCollector.wasSent(flowConfig.responseTopic()), "No response should be sent on handler error");
-            assertTrue(requestMap.containsKey(corrId), "Request should remain for retry");
-            assertEquals("", routerMap.get(routeKey), "Claim should be reverted to original");
-        });
+    @Bean
+    public Map<String, FlowHandler> handlerMap(FlowHandler<DummyMessage, DummyMessage, DummyMessage> faultyHandler) {
+        return Map.of("myFlow", faultyHandler);
+    }
 }
