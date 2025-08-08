@@ -47,7 +47,7 @@ import static org.mockito.Mockito.when;
 @AutoConfigureMockMvc
 public class GenericHazelcastConsumerTest extends BaseAplTest {
 
-    // This is the mock provided by FlowHandlerTestConfiguration
+    // Provided as a Mockito mock by FlowHandlerTestConfiguration
     @Autowired
     private FlowHandler<DummyMessage, DummyMessage, DummyMessage> sampleFlowHandler;
 
@@ -61,7 +61,7 @@ public class GenericHazelcastConsumerTest extends BaseAplTest {
 
     @BeforeEach
     public void setUp() {
-        requestMap = hazelcastInstance.getMap("map-0"); // from FlowConfig("map-", 1) -> "map-0"
+        requestMap = hazelcastInstance.getMap("map-0"); // FlowConfig("map-", 1) -> "map-0"
         routerMap = hazelcastInstance.getMap("router-claim-map");
 
         hazelcastInstance.getMap("router-leader-map").clear();
@@ -70,36 +70,39 @@ public class GenericHazelcastConsumerTest extends BaseAplTest {
         requestMap.clear();
         testCollector.clear();
 
-        // Ensure a clean happy-path baseline for EACH test
+        // --- Happy-path baseline stubs for EACH test ---
         when(sampleFlowHandler.getFlowName()).thenReturn("myFlow");
         when(sampleFlowHandler.deserializeRequest(any())).thenReturn(new DummyMessage());
-        when(sampleFlowHandler.extractCorrelationId(any())).thenReturn("corr-42"); // returns same ID regardless of request
+        when(sampleFlowHandler.extractCorrelationId(any())).thenReturn("corr-42");
         when(sampleFlowHandler.handleRequest(any())).thenReturn(new DummyMessage());
         // sendResponse is already wired to TestCollector in FlowHandlerTestConfiguration
     }
 
     @Test
     public void testPollRequestMaps_PositiveFlow() {
+        // the consumer stores arbitrary request objects; we can use a Map as the value
         Map<String, Object> request = Map.of("key", "value");
-        String correlationId = sampleFlowHandler.extractCorrelationId(request); // use the request Map
+
+        // Ask the handler for the corrId using a DummyMessage, since that's its signature
+        String correlationId = sampleFlowHandler.extractCorrelationId(new DummyMessage()); // "corr-42"
 
         // Simulate a router claim and an enqueued request
         requestMap.put(correlationId, request);
         routerMap.put("route-lock-" + correlationId, "");
 
         await()
-                .atMost(5, TimeUnit.SECONDS)
-                .pollInterval(100, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> {
-                    assertTrue(testCollector.wasSent(flowConfig.responseTopic()), "Expected response to be sent on topic");
+            .atMost(5, TimeUnit.SECONDS)
+            .pollInterval(100, TimeUnit.MILLISECONDS)
+            .untilAsserted(() -> {
+                assertTrue(testCollector.wasSent(flowConfig.responseTopic()), "Expected response to be sent on topic");
 
-                    Object sent = testCollector.getSent(flowConfig.responseTopic());
-                    assertNotNull(sent, "A response object must be sent");
-                    assertTrue(sent instanceof DummyMessage, "Response should be a DummyMessage");
+                Object sent = testCollector.getSent(flowConfig.responseTopic());
+                assertNotNull(sent, "A response object must be sent");
+                assertTrue(sent instanceof DummyMessage, "Response should be a DummyMessage");
 
-                    assertFalse(requestMap.containsKey(correlationId), "Message should be removed on success");
-                    assertFalse(routerMap.containsKey("route-lock-" + correlationId), "Claim should be removed on success");
-                });
+                assertFalse(requestMap.containsKey(correlationId), "Message should be removed on success");
+                assertFalse(routerMap.containsKey("route-lock-" + correlationId), "Claim should be removed on success");
+            });
     }
 
     @Test
@@ -117,9 +120,9 @@ public class GenericHazelcastConsumerTest extends BaseAplTest {
 
     @Test
     public void testPollRequestMaps_HandlerThrowsException() {
-        // Build the same type of request the consumer will see
+        // Build a request object and use the handler's API to determine the key
         Map<String, Object> faultyRequest = Map.of("key", "value");
-        String corrId = sampleFlowHandler.extractCorrelationId(faultyRequest); // use the request Map
+        String corrId = sampleFlowHandler.extractCorrelationId(new DummyMessage()); // "corr-42"
 
         // For THIS test only, make the handler fail
         doThrow(new RuntimeException("boom")).when(sampleFlowHandler).handleRequest(any());
@@ -129,14 +132,14 @@ public class GenericHazelcastConsumerTest extends BaseAplTest {
         routerMap.put("route-lock-" + corrId, "");
 
         await()
-                .atMost(5, TimeUnit.SECONDS) // give it a little more time to be safe
-                .pollInterval(100, TimeUnit.MILLISECONDS)
-                .untilAsserted(() -> {
-                    assertFalse(testCollector.wasSent(flowConfig.responseTopic()),
-                            "No response should be sent on handler error");
-                    assertTrue(requestMap.containsKey(corrId), "Request should remain for retry");
-                    assertEquals("", routerMap.get("route-lock-" + corrId), "Claim should be reverted to original");
-                });
+            .atMost(5, TimeUnit.SECONDS)
+            .pollInterval(100, TimeUnit.MILLISECONDS)
+            .untilAsserted(() -> {
+                assertFalse(testCollector.wasSent(flowConfig.responseTopic()),
+                        "No response should be sent on handler error");
+                assertTrue(requestMap.containsKey(corrId), "Request should remain for retry");
+                assertEquals("", routerMap.get("route-lock-" + corrId), "Claim should be reverted to original");
+            });
     }
 
     @TestConfiguration
