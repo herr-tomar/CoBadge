@@ -1,61 +1,149 @@
-package osplus.pkptuna.hazelcast.flows;
+package osplus.pkptuna.hazelcast.test.config;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.hazelcast.core.HazelcastInstance;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import osplus.apl.core.api.administration.metrics.MetricsService;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.config.FlowHandlerInitializer;
+import osplus.pkptuna.hazelcast.config.HazelcastFlowBootstrap;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
+import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
 
-/**
- * Diese Schnittstelle definiert den vollständigen Verarbeitungszyklus eines
- * Nachrichtenflusses (Flow) in einem verteilten System mit Hazelcast.
- */
-public interface FlowHandler<Req, Res, ResWrapper> {
+import java.util.*;
 
-    /**
-     * Deserialisiert die empfangenen Daten in ein Anfrageobjekt.
-     *
-     * @param data das empfangene Byte-Array
-     * @return deserialisierte Anfrage
-     * @throws InvalidProtocolBufferException bei Deserialisierungsfehlern
-     */
-    Req deserializeRequest(byte[] data) throws InvalidProtocolBufferException;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
-    /**
-     * Extrahiert die eindeutige Korrelations-ID aus einer Anfrage.
-     *
-     * @param request das Anfrageobjekt
-     * @return Korrelations-ID als String
-     */
-    String extractCorrelationId(Req request);
+@TestConfiguration
+public class FlowHandlerTestConfiguration {
 
-    /**
-     * Führt die fachliche Verarbeitung einer Anfrage durch.
-     *
-     * @param request die eingehende Anfrage
-     * @return Ergebnis der Verarbeitung
-     */
-    Res handleRequest(Req request);
+    private static final Logger LOGGER = LoggerFactory.getLogger(FlowHandlerTestConfiguration.class);
 
-    /**
-     * Verpackt das Antwortobjekt gemeinsam mit der Korrelations-ID.
-     *
-     * @param correlationId eindeutige ID der Anfrage
-     * @param result        das Antwortobjekt
-     * @return eingepackte Antwort (z.B. DTO oder MessageEnvelope)
-     */
-    ResWrapper wrapResponse(String correlationId, Res result);
+    @Bean
+    public FlowHandlerRegistry<DummyMessage, DummyMessage, DummyMessage> handlerRegistry() throws InvalidProtocolBufferException {
+        FlowHandlerRegistry<DummyMessage, DummyMessage, DummyMessage> registry = new FlowHandlerRegistry<>();
+        registry.register("myFlow", sampleFlowHandler());
+        return registry;
+    }
 
-    /**
-     * Sendet die verarbeitete Antwort über Hazelcast Reliable Topic.
-     *
-     * @param hazelcastInstance Hazelcast-Instanz
-     * @param topicName         Zieltopic
-     * @param response          die gesendete Antwort
-     */
-    void sendResponse(HazelcastInstance hazelcastInstance, String topicName, ResWrapper response);
+    @Bean
+    public FlowHandlerInitializer flowHandlerInitializer(List<FlowConfig> configs,
+                                                         Map<String, FlowHandler> handlerMap,
+                                                         FlowHandlerRegistry registry,
+                                                         HazelcastFlowBootstrap bootstrap) {
+        return new FlowHandlerInitializer(configs, handlerMap, registry, bootstrap);
+    }
 
-    /**
-     * Gibt den Namen des Flows zurück (z.B. für Registrierung oder Logging).
-     *
-     * @return Flow-Name
-     */
-    String getFlowName();
+    @Bean
+    public FlowConfig flowConfig() {
+        return new FlowConfig("myFlow",
+                "req-topic-" + UUID.randomUUID(),
+                "res-topic-" + UUID.randomUUID(),
+                "map-", 1);
+    }
+
+    @Bean
+    public List<FlowConfig> flowConfigs(FlowConfig flowConfig) {
+        return List.of(flowConfig);
+    }
+
+    @Bean
+    public Map<String, FlowHandler> handlerMap() throws InvalidProtocolBufferException {
+        return Map.of("myFlow", sampleFlowHandler());
+    }
+
+    @Bean
+    public FlowHandler<DummyMessage, DummyMessage, DummyMessage> sampleFlowHandler() throws InvalidProtocolBufferException {
+        FlowHandler<DummyMessage, DummyMessage, DummyMessage> handler = mock(FlowHandler.class);
+
+        DummyMessage request = new DummyMessage(); // ✅ Real instance
+        DummyMessage response = new DummyMessage(); // ✅ Real instance
+
+        when(handler.getFlowName()).thenReturn("myFlow");
+        when(handler.deserializeRequest(any())).thenReturn(request);
+        when(handler.extractCorrelationId(any())).thenReturn("corr-42");
+        when(handler.handleRequest(any())).thenReturn(response);
+        when(handler.wrapResponse(anyString(), any())).thenReturn(response);
+
+        doAnswer(invocation -> {
+            String topic = invocation.getArgument(1);
+            Object resp = invocation.getArgument(2);
+            testCollector().recordSent(topic, resp);
+            return null;
+        }).when(handler).sendResponse(any(HazelcastInstance.class), anyString(), any());
+
+        return handler;
+    }
+
+    @Bean
+    public HazelcastFlowBootstrap hazelcastFlowBootstrap(GenericHazelcastRouter router,
+                                                         GenericHazelcastConsumer consumer) {
+        return new HazelcastFlowBootstrap(router, consumer);
+    }
+
+    @Bean
+    public GenericHazelcastRouter<DummyMessage, DummyMessage, DummyMessage> hazelcastRouter(
+            MetricsService metricsService,
+            HazelcastInstance hazelcastInstance,
+            List<FlowConfig> flowConfigs,
+            FlowHandlerRegistry<DummyMessage, DummyMessage, DummyMessage> registry) {
+        return new GenericHazelcastRouter<>(metricsService, hazelcastInstance, flowConfigs, registry);
+    }
+
+    @Bean
+    public GenericHazelcastConsumer<DummyMessage, DummyMessage, DummyMessage> hazelcastConsumer(
+            MetricsService metricsService,
+            HazelcastInstance hazelcastInstance,
+            List<FlowConfig> flowConfigs,
+            FlowHandlerRegistry<DummyMessage, DummyMessage, DummyMessage> registry) {
+        return new GenericHazelcastConsumer<>(metricsService, hazelcastInstance, flowConfigs, registry);
+    }
+
+    @Bean("flowTaskScheduler")
+    public ThreadPoolTaskScheduler taskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(1);
+        scheduler.setThreadNamePrefix("hazelcast-scheduler-");
+        scheduler.initialize();
+        return scheduler;
+    }
+
+    @Bean
+    public TestCollector testCollector() {
+        return new TestCollector();
+    }
+
+    @Bean
+    @Primary
+    public MetricsService metricsService() {
+        return mock(MetricsService.class);
+    }
+
+    public static class TestCollector {
+        private final Map<String, Object> sentResponses = new HashMap<>();
+
+        public void recordSent(String topic, Object response) {
+            sentResponses.put(topic, response);
+        }
+
+        public Object getSent(String topic) {
+            return sentResponses.get(topic);
+        }
+
+        public boolean wasSent(String topic) {
+            return sentResponses.containsKey(topic);
+        }
+
+        public void clear() {
+            sentResponses.clear();
+        }
+    }
 }
