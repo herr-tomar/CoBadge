@@ -11,7 +11,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Bean;
 import osplus.apl.core.test.utils.AplTestRunner;
 import osplus.apl.core.test.utils.BaseAplTest;
@@ -27,7 +26,6 @@ import java.util.concurrent.TimeUnit;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
@@ -49,9 +47,8 @@ import static org.mockito.Mockito.when;
 @AutoConfigureMockMvc
 public class GenericHazelcastConsumerTest extends BaseAplTest {
 
-    // IMPORTANT: this name must match the bean method name in FlowHandlerTestConfiguration
-    @MockBean(name = "sampleFlowHandler")
-    private FlowHandler<DummyMessage, DummyMessage, DummyMessage> sampleFlowHandler;
+    @Autowired
+    private FlowHandler<DummyMessage, DummyMessage, DummyMessage> sampleFlowHandler; // this is already a Mockito mock from FlowHandlerTestConfiguration
 
     @Autowired
     private FlowConfig flowConfig;
@@ -70,7 +67,7 @@ public class GenericHazelcastConsumerTest extends BaseAplTest {
 
     @BeforeEach
     public void setUp() {
-        requestMap = hazelcastInstance.getMap("map-0");              // from FlowConfig("map-", 1) -> map-0
+        requestMap = hazelcastInstance.getMap("map-0"); // from FlowConfig("map-", 1) -> "map-0"
         routerMap = hazelcastInstance.getMap("router-claim-map");
 
         hazelcastInstance.getMap("router-leader-map").clear();
@@ -79,22 +76,13 @@ public class GenericHazelcastConsumerTest extends BaseAplTest {
         requestMap.clear();
         testCollector.clear();
 
-        // ---- Default (happy-path) stubs for ALL tests ----
+        // --- Ensure a clean happy-path baseline for EACH test ---
+        // (We re-stub the mock provided by FlowHandlerTestConfiguration to avoid bleed from other tests)
         when(sampleFlowHandler.getFlowName()).thenReturn("myFlow");
         when(sampleFlowHandler.deserializeRequest(any())).thenReturn(new DummyMessage());
         when(sampleFlowHandler.extractCorrelationId(any())).thenReturn("corr-42");
-
-        DummyMessage response = new DummyMessage();
-        when(sampleFlowHandler.handleRequest(any())).thenReturn(response);
-        when(sampleFlowHandler.wrapResponse(any(String.class), any())).thenReturn(response);
-
-        // Make sendResponse feed the TestCollector
-        doAnswer(inv -> {
-            String topic = inv.getArgument(1);
-            Object resp = inv.getArgument(2);
-            testCollector.recordSent(topic, resp);
-            return null;
-        }).when(sampleFlowHandler).sendResponse(any(HazelcastInstance.class), any(String.class), any());
+        when(sampleFlowHandler.handleRequest(any())).thenReturn(new DummyMessage());
+        // We do NOT restub sendResponse here; FlowHandlerTestConfiguration already wires it to TestCollector
     }
 
     @Test
@@ -113,7 +101,7 @@ public class GenericHazelcastConsumerTest extends BaseAplTest {
                     assertTrue(testCollector.wasSent(flowConfig.responseTopic()), "Expected response to be sent on topic");
 
                     Object sent = testCollector.getSent(flowConfig.responseTopic());
-                    assertNotNull(sent);
+                    assertNotNull(sent, "A response object must be sent");
                     assertTrue(sent instanceof DummyMessage, "Response should be a DummyMessage");
 
                     assertFalse(requestMap.containsKey(correlationId), "Message should be removed on success");
@@ -136,7 +124,7 @@ public class GenericHazelcastConsumerTest extends BaseAplTest {
 
     @Test
     public void testPollRequestMaps_HandlerThrowsException() {
-        // Use the SAME correlation id the handler generates
+        // Use the SAME correlation id the handler generates to match the key/claim
         String corrId = sampleFlowHandler.extractCorrelationId(new DummyMessage()); // "corr-42" per stub
 
         // For THIS test only, make the handler fail
