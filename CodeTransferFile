@@ -1,43 +1,57 @@
+// inside GenericHazelcastConsumerTest.LocalTestConfig (tests only)
+import com.google.protobuf.Message;
+import com.hazelcast.config.SerializerConfig;
+import com.hazelcast.nio.serialization.StreamSerializer;
+import com.hazelcast.nio.ObjectDataInput;
+import com.hazelcast.nio.ObjectDataOutput;
 
-2025-08-08T09:55:54.042+02:00  INFO 43856 --- [uui] [           main] o.p.h.p.GenericHazelcastConsumerTest     : Started GenericHazelcastConsumerTest in 14.862 seconds (process running for 15.777)
-2025-08-08T09:55:54.163+02:00 ERROR 43856 --- [uui] [ukovsky.event-3] c.h.s.i.e.impl.EventServiceImpl          : [16.160.162.148]:5701 [test-cluster-e0f15f77-1dc2-49a3-b070-b94d245a8f1b] [5.3.0] hz.kind_zhukovsky.event-3 caught an exception while processing:com.hazelcast.spi.impl.eventservice.impl.LocalEventDispatcher@36818564
+@Bean(destroyMethod = "shutdown")
+public HazelcastInstance hazelcastInstance() {
+    Config config = new Config();
+    config.setClusterName("test-cluster-" + UUID.randomUUID());
+    config.getNetworkConfig().setPortAutoIncrement(true);
+    config.setProperty("hazelcast.logging.type", "slf4j");
 
-com.hazelcast.nio.serialization.HazelcastSerializationException: java.lang.RuntimeException: Unable to find DEFAULT_INSTANCE in osplus.pkptuna.hazelcast.test.config.DummyMessage
-	at com.hazelcast.internal.serialization.impl.SerializationUtil.handleException(SerializationUtil.java:111) ~[hazelcast-5.3.0.jar:5.3.0]
-	at com.hazelcast.internal.serialization.impl.AbstractSerializationService.toObject(AbstractSerializationService.java:277) ~[hazelcast-5.3.0.jar:5.3.0]
-	at com.hazelcast.map.impl.DataAwareEntryEvent.getValue(DataAwareEntryEvent.java:90) ~[hazelcast-5.3.0.jar:5.3.0]
-	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer$MapEntryListener.lambda$entryAdded$0(GenericHazelcastConsumer.java:107) ~[classes/:na]
-	at io.micrometer.core.instrument.composite.CompositeTimer.record(CompositeTimer.java:141) ~[micrometer-core-1.15.1.jar:1.15.1]
-	at io.micrometer.core.instrument.Timer.lambda$wrap$2(Timer.java:199) ~[micrometer-core-1.15.1.jar:1.15.1]
-	at osplus.apl.core.administration.metrics.MetricsServiceImpl.timer(MetricsServiceImpl.java:107) ~[apl-core-services-251.0.0.jar:251.0.0]
-	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer$MapEntryListener.entryAdded(GenericHazelcastConsumer.java:106) ~[classes/:na]
-	at com.hazelcast.map.impl.MapListenerAdaptors.lambda$null$0(MapListenerAdaptors.java:55) ~[hazelcast-5.3.0.jar:5.3.0]
-	at com.hazelcast.map.impl.InternalMapListenerAdapter.onEvent(InternalMapListenerAdapter.java:56) ~[hazelcast-5.3.0.jar:5.3.0]
-	at com.hazelcast.map.impl.InternalMapListenerAdapter.onEvent(InternalMapListenerAdapter.java:35) ~[hazelcast-5.3.0.jar:5.3.0]
-	at com.hazelcast.map.impl.event.MapEventPublishingService.callListener(MapEventPublishingService.java:172) ~[hazelcast-5.3.0.jar:5.3.0]
-	at com.hazelcast.map.impl.event.MapEventPublishingService.dispatchEntryEventData(MapEventPublishingService.java:184) ~[hazelcast-5.3.0.jar:5.3.0]
-	at com.hazelcast.map.impl.event.MapEventPublishingService.dispatchEvent(MapEventPublishingService.java:83) ~[hazelcast-5.3.0.jar:5.3.0]
-	at com.hazelcast.map.impl.event.MapEventPublishingService.dispatchEvent(MapEventPublishingService.java:47) ~[hazelcast-5.3.0.jar:5.3.0]
-	at com.hazelcast.map.impl.MapService.dispatchEvent(MapService.java:134) ~[hazelcast-5.3.0.jar:5.3.0]
-	at com.hazelcast.map.impl.MapService.dispatchEvent(MapService.java:101) ~[hazelcast-5.3.0.jar:5.3.0]
-	at com.hazelcast.spi.impl.eventservice.impl.LocalEventDispatcher.run(LocalEventDispatcher.java:64) ~[hazelcast-5.3.0.jar:5.3.0]
-	at com.hazelcast.internal.util.executor.StripedExecutor$Worker.process(StripedExecutor.java:245) ~[hazelcast-5.3.0.jar:5.3.0]
-	at com.hazelcast.internal.util.executor.StripedExecutor$Worker.run(StripedExecutor.java:228) ~[hazelcast-5.3.0.jar:5.3.0]
-Caused by: java.lang.RuntimeException: Unable to find DEFAULT_INSTANCE in osplus.pkptuna.hazelcast.test.config.DummyMessage
-	at com.google.protobuf.GeneratedMessageLite$SerializedForm.readResolve(GeneratedMessageLite.java:1437) ~[protobuf-java-4.31.1.jar:na]
-	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
-	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
-	at java.base/java.io.ObjectStreamClass.invokeReadResolve(ObjectStreamClass.java:1192) ~[na:na]
-	at java.base/java.io.ObjectInputStream.readOrdinaryObject(ObjectInputStream.java:2293) ~[na:na]
-	at java.base/java.io.ObjectInputStream.readObject0(ObjectInputStream.java:1762) ~[na:na]
-	at java.base/java.io.ObjectInputStream.readObject(ObjectInputStream.java:540) ~[na:na]
-	at java.base/java.io.ObjectInputStream.readObject(ObjectInputStream.java:498) ~[na:na]
-	at com.hazelcast.internal.serialization.impl.defaultserializers.JavaDefaultSerializers$JavaSerializer.read(JavaDefaultSerializers.java:92) ~[hazelcast-5.3.0.jar:5.3.0]
-	at com.hazelcast.internal.serialization.impl.defaultserializers.JavaDefaultSerializers$JavaSerializer.read(JavaDefaultSerializers.java:85) ~[hazelcast-5.3.0.jar:5.3.0]
-	at com.hazelcast.internal.serialization.impl.StreamSerializerAdapter.read(StreamSerializerAdapter.java:44) ~[hazelcast-5.3.0.jar:5.3.0]
-	at com.hazelcast.internal.serialization.impl.AbstractSerializationService.toObject(AbstractSerializationService.java:271) ~[hazelcast-5.3.0.jar:5.3.0]
-	... 18 common frames omitted
-Caused by: java.lang.NoSuchFieldException: DEFAULT_INSTANCE
-	at java.base/java.lang.Class.getDeclaredField(Class.java:2782) ~[na:na]
-	at com.google.protobuf.GeneratedMessageLite$SerializedForm.readResolve(GeneratedMessageLite.java:1428) ~[protobuf-java-4.31.1.jar:na]
-	... 29 common frames omitted
+    // Register protobuf serializer for ALL Message subtypes — TESTS ONLY
+    SerializerConfig pbSer = new SerializerConfig()
+        .setTypeClass(Message.class)
+        .setImplementation(new StreamSerializer<Message>() {
+            @Override public void write(ObjectDataOutput out, Message obj) throws IOException {
+                out.writeString(obj.getClass().getName());
+                byte[] bytes = obj.toByteArray();
+                out.writeInt(bytes.length);
+                out.write(bytes);
+            }
+            @Override public Message read(ObjectDataInput in) throws IOException {
+                String className = in.readString();
+                int len = in.readInt();
+                byte[] bytes = new byte[len];
+                in.readFully(bytes);
+                try {
+                    Class<?> clazz = Class.forName(className);
+                    // Try getDefaultInstance().getParserForType()
+                    try {
+                        var gdi = clazz.getMethod("getDefaultInstance");
+                        var def = (Message) gdi.invoke(null);
+                        var parser = def.getParserForType();
+                        if (parser != null) return parser.parseFrom(bytes);
+                    } catch (NoSuchMethodException ignore) {}
+                    // Try parser()
+                    try {
+                        var pm = clazz.getMethod("parser");
+                        var parser = (com.google.protobuf.Parser<? extends Message>) pm.invoke(null);
+                        return parser.parseFrom(bytes);
+                    } catch (NoSuchMethodException ignore) {}
+                    // Fallback for skeletal DummyMessage
+                    return (Message) clazz.getDeclaredConstructor().newInstance();
+                } catch (Exception e) {
+                    throw new IOException("Failed to deserialize protobuf " + className, e);
+                }
+            }
+            @Override public int getTypeId() { return 100_001; }
+            @Override public void destroy() {}
+        });
+    config.getSerializationConfig().addSerializerConfig(pbSer);
+
+    return Hazelcast.newHazelcastInstance(config);
+}
