@@ -1,33 +1,63 @@
-POST http://4.239.136.13:43001/api/v2/search-transactions?page=0&offset=100&filter=transactionIdentifier.transactionId&filter=issuerId
-Authorization: Basic V1NfT1NQTFVTX0lCTy9GSV9TVERfU0VSVklDRV9DT05UUkFDVC9ERUZBVUxUX01BTkRBVE9SOkRFRkFVTFRfTUFOREFUT1I=
-Content-Type: application/json
-Accept: application/json
+syntax = "proto3";
 
-{
-    "issuerId":"1004",
-    "acquirerReferenceDataList": ["22222861306211102082665"]
+package transactions.v2;
+
+// ------------------------------
+// Request body
+// ------------------------------
+message SearchTransactionsRequest {
+  // "issuerId"
+  string issuer_id = 1;
+
+  // "acquirerReferenceDataList"
+  repeated string acquirer_reference_data_list = 2;
 }
 
-----
+// ------------------------------
+// Response body
+// ------------------------------
+message SearchTransactionsResponse {
+  // "responseMetadata"
+  ResponseMetadata response_metadata = 1;
 
+  // "data"
+  repeated Data data = 2;
+}
 
-{
-  "responseMetadata": {
-    "correlationId": "92d018c7-a803-4e4f-a500-fa60d3c5b954",
-    "links": {
-      "self": "http://4.239.136.13:43001/api/v2/search-transactions?page=0&offset=100&filter=transactionIdentifier.transactionId&filter=issuerId"
-    },
-    "statusMessage": "Executed successfully",
-    "statusCode": 200,
-    "responseDateTime": "2025-08-08T16:15:07.521+0200",
-    "timeTakenMs": 515
-  },
-  "data": [
-    {
-      "issuerId": "1004",
-      "transactionIdentifier": {
-        "transactionId": "1000000000013000"
-      }
-    }
-  ]
+message ResponseMetadata {
+  // "correlationId"
+  string correlation_id = 1;
+
+  // "links"
+  Links links = 2;
+
+  // "statusMessage"
+  string status_message = 3;
+
+  // "statusCode"
+  int32 status_code = 4;
+
+  // "responseDateTime" (keep as string to preserve exact format)
+  string response_date_time = 5;
+
+  // "timeTakenMs"
+  int64 time_taken_ms = 6;
+}
+
+message Links {
+  // "self"
+  string self = 1;
+}
+
+message Data {
+  // "issuerId"
+  string issuer_id = 1;
+
+  // "transactionIdentifier"
+  TransactionIdentifier transaction_identifier = 2;
+}
+
+message TransactionIdentifier {
+  // "transactionId"
+  string transaction_id = 1;
 }
