@@ -1,8 +1,165 @@
-[ERROR] Tests run: 3, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 15.77 s <<< FAILURE! -- in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest
-[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully -- Time elapsed: 0.035 s <<< ERROR!
-java.lang.RuntimeException: bad-bytes
-	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.setup(GenericHazelcastRouterTest.java:84)
-	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-[INFO] Running osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisherTest
+package osplus.pkptuna.hazelcast.pubsub;
+
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.topic.ITopic;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import osplus.apl.core.test.utils.AplTestRunner;
+import osplus.apl.core.test.utils.BaseAplTest;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.test.config.DummyMessage;
+import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
+
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.when;
+
+@SpringBootTest(
+        classes = {
+                AplTestRunner.class,
+                GenericHazelcastRouterTest.LocalTestConfig.class,
+                FlowHandlerTestConfiguration.class
+        },
+        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+        properties = {
+                "spring.main.allow-bean-definition-overriding=true",
+                "generichazelcast.polling-rate=20",
+                "apl.application.name=uui",
+                "apl.application.version=0.0.1-TEST"
+        }
+)
+@AutoConfigureMockMvc
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+public class GenericHazelcastRouterTest extends BaseAplTest {
+
+    @Autowired private HazelcastInstance hazelcastInstance;
+    @Autowired private FlowConfig flowConfig;
+    @Autowired private FlowHandlerTestConfiguration.TestCollector testCollector;
+
+    // Mockito mock provided by FlowHandlerTestConfiguration
+    @Autowired
+    private FlowHandler<DummyMessage, DummyMessage, DummyMessage> sampleFlowHandler;
+
+    @Autowired
+    private GenericHazelcastRouter<DummyMessage, DummyMessage, DummyMessage> router;
+
+    private IMap<String, String> leaderMap;
+    private IMap<String, Long> heartbeatMap;
+    private IMap<String, String> routerMap;
+    private IMap<Object, Object> targetMap;
+    private ITopic<byte[]> topic;
+
+    private final String routerInstanceId = "test-router-instance";
+
+    @BeforeEach
+    public void setup() {
+        leaderMap = hazelcastInstance.getMap("router-leader-map");
+        heartbeatMap = hazelcastInstance.getMap("router-heartbeat-map");
+        routerMap = hazelcastInstance.getMap("router-claim-map");
+        targetMap = hazelcastInstance.getMap("map-0");
+
+        leaderMap.clear();
+        heartbeatMap.clear();
+        routerMap.clear();
+        targetMap.clear();
+        testCollector.clear();
+
+        // IMPORTANT: reset the mock so prior test stubs (like doThrow) don't leak here
+        reset(sampleFlowHandler);
+
+        // Baseline stubs (router path only: deserialize + extractCorrelationId)
+        when(sampleFlowHandler.getFlowName()).thenReturn("myFlow");
+        when(sampleFlowHandler.deserializeRequest(any())).thenReturn(new DummyMessage());
+        when(sampleFlowHandler.extractCorrelationId(any())).thenReturn("corr-42");
+
+        router.setRouterInstanceId(routerInstanceId);
+        leaderMap.put("active-router", routerInstanceId);
+        heartbeatMap.put("heartbeat", System.currentTimeMillis()); // fresh heartbeat
+
+        topic = hazelcastInstance.getReliableTopic(flowConfig.requestTopic());
+        router.initRouters();
+    }
+
+    @Test
+    public void testMessageRoutedSuccessfully() {
+        String corrId = sampleFlowHandler.extractCorrelationId(new DummyMessage());
+
+        // Sanity: no prior claim
+        assertFalse(routerMap.containsKey("route-lock-" + corrId));
+
+        // Publish bytes (router will call deserializeRequest on the mock)
+        topic.publish(new byte[]{1, 2, 3});
+
+        await().atMost(5, TimeUnit.SECONDS)
+               .pollInterval(100, TimeUnit.MILLISECONDS)
+               .untilAsserted(() -> {
+                   // Router should claim and enqueue to the target map
+                   assertTrue(routerMap.containsKey("route-lock-" + corrId), "Router should claim the correlation id");
+                   assertTrue(targetMap.containsKey(corrId), "Router should enqueue the request into target map");
+               });
+    }
+
+    @Test
+    public void testDuplicateMessageNotProcessed() {
+        String corrId = sampleFlowHandler.extractCorrelationId(new DummyMessage());
+
+        // Pre-create a claim: simulate a duplicate/already-processing message
+        routerMap.put("route-lock-" + corrId, "existing");
+
+        topic.publish(new byte[]{4, 5, 6});
+
+        await().atMost(2, TimeUnit.SECONDS)
+               .pollInterval(100, TimeUnit.MILLISECONDS)
+               .untilAsserted(() -> {
+                   // Since a claim existed, router must not enqueue the message
+                   assertFalse(targetMap.containsKey(corrId), "Duplicate message must not be enqueued");
+               });
+    }
+
+    @Test
+    public void testRoutingHandlerThrowsException() {
+        String corrId = sampleFlowHandler.extractCorrelationId(new DummyMessage());
+
+        // Make routing fail at deserialization stage (router path)
+        doThrow(new RuntimeException("bad-bytes")).when(sampleFlowHandler).deserializeRequest(any());
+
+        topic.publish(new byte[]{9, 9, 9});
+
+        await().atMost(2, TimeUnit.SECONDS)
+               .pollInterval(100, TimeUnit.MILLISECONDS)
+               .untilAsserted(() -> {
+                   // On failure, router should not enqueue anything or create a claim
+                   assertFalse(targetMap.containsKey(corrId), "On deserialization failure, nothing should be enqueued");
+                   assertFalse(routerMap.containsKey("route-lock-" + corrId), "No claim should be created on failure");
+               });
+    }
+
+    @TestConfiguration
+    static class LocalTestConfig {
+        @Bean(destroyMethod = "shutdown")
+        public HazelcastInstance hazelcastInstance() {
+            Config config = new Config();
+            config.setClusterName("test-cluster" + UUID.randomUUID());
+            config.getNetworkConfig().setPortAutoIncrement(true);
+            config.setProperty("hazelcast.logging.type", "slf4j");
+            return Hazelcast.newHazelcastInstance(config);
+        }
+    }
+}
