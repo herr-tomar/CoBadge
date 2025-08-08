@@ -1,163 +1,146 @@
 package osplus.pkptuna.hazelcast.pubsub;
 
-import com.hazelcast.core.EntryEvent;
+import com.google.protobuf.Message;
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
-import com.hazelcast.map.listener.EntryAddedListener;
-import com.hazelcast.map.listener.EntryUpdatedListener;
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
-import osplus.apl.core.api.AplComponent;
-import osplus.apl.core.api.administration.metrics.MetricTag;
-import osplus.apl.core.api.administration.metrics.MetricsService;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import osplus.apl.core.test.utils.AplTestRunner;
+import osplus.apl.core.test.utils.BaseAplTest;
 import osplus.pkptuna.hazelcast.config.FlowConfig;
-import osplus.pkptuna.hazelcast.config.MetricsConstants;
 import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
+import osplus.pkptuna.hazelcast.test.config.DummyMessage;
+import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
 
-import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 
-@AplComponent
-public class GenericHazelcastConsumer<Req, Res, ResWrapper> {
+import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.when;
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(GenericHazelcastConsumer.class);
-    private final String instanceId = UUID.randomUUID().toString();
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@SpringBootTest(
+        classes = {
+                AplTestRunner.class,
+                GenericHazelcastConsumerTest.LocalTestConfig.class,
+                FlowHandlerTestConfiguration.class
+        },
+        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+        properties = {
+                "spring.main.allow-bean-definition-overriding=true",
+                "generichazelcast.polling-rate=20",
+                "apl.application.name=uui",
+                "apl.application.version=0.0.1-TEST"
+        }
+)
+@AutoConfigureMockMvc
+public class GenericHazelcastConsumerTest extends BaseAplTest {
 
-    private final MetricsService metricsService;
-    private final HazelcastInstance hazelcastInstance;
-    private final List<FlowConfig> flowConfigs;
-    private final FlowHandlerRegistry handlerRegistry;
+    // Mockito mock from FlowHandlerTestConfiguration
+    @Autowired
+    private FlowHandler<DummyMessage, DummyMessage, DummyMessage> sampleFlowHandler;
 
-    private final ConcurrentMap<String, String> listenerRegistrationMap = new ConcurrentHashMap<>();
+    @Autowired private FlowConfig flowConfig;
+    @Autowired private HazelcastInstance hazelcastInstance;
+    @Autowired private GenericHazelcastConsumer<DummyMessage, DummyMessage, DummyMessage> consumer;
+    @Autowired private FlowHandlerTestConfiguration.TestCollector testCollector;
 
-    public GenericHazelcastConsumer(
-            MetricsService metricsService,
-            HazelcastInstance hazelcastInstance,
-            List<FlowConfig> flowConfigs,
-            FlowHandlerRegistry handlerRegistry
-    ) {
-        this.metricsService = metricsService;
-        this.hazelcastInstance = hazelcastInstance;
-        this.flowConfigs = flowConfigs;
-        this.handlerRegistry = handlerRegistry;
+    private IMap<String, Message> requestMap; // <- now matches consumer
+    private IMap<String, String> routerMap;
+
+    @BeforeEach
+    public void setUp() {
+        requestMap = hazelcastInstance.getMap("map-0"); // value type Message
+        routerMap = hazelcastInstance.getMap("router-claim-map");
+
+        hazelcastInstance.getMap("router-leader-map").clear();
+        hazelcastInstance.getMap("router-heartbeat-map").clear();
+        routerMap.clear();
+        requestMap.clear();
+        testCollector.clear();
+
+        // happy-path baseline stubs
+        when(sampleFlowHandler.getFlowName()).thenReturn("myFlow");
+        when(sampleFlowHandler.deserializeRequest(any())).thenReturn(new DummyMessage());
+        when(sampleFlowHandler.extractCorrelationId(any())).thenReturn("corr-42");
+        when(sampleFlowHandler.handleRequest(any())).thenReturn(new DummyMessage());
     }
 
-    @PostConstruct
-    public void registerMapListeners() {
-        for (FlowConfig config : flowConfigs) {
-            String flowName = config.name();
-            int partitions = config.partitions();
-            String baseMap = config.mapBase();
-            String responseTopic = config.responseTopic();
+    @Test
+    public void testPollRequestMaps_PositiveFlow() {
+        DummyMessage request = new DummyMessage();                    // <- protobuf message
+        String correlationId = sampleFlowHandler.extractCorrelationId(request); // "corr-42"
 
-            for (int i = 0; i < partitions; i++) {
-                String mapName = baseMap + i;
-                IMap<String, Object> map = hazelcastInstance.getMap(mapName);
+        requestMap.put(correlationId, request);                       // <- put Message
+        routerMap.put("route-lock-" + correlationId, "");
 
-                var listener = new MapEntryListener(flowName, mapName, responseTopic);
-                String registrationId = map.addEntryListener(listener, true).toString();
-                listenerRegistrationMap.put(mapName, registrationId);
+        await()
+            .atMost(5, TimeUnit.SECONDS)
+            .pollInterval(100, TimeUnit.MILLISECONDS)
+            .untilAsserted(() -> {
+                assertTrue(testCollector.wasSent(flowConfig.responseTopic()), "Expected response to be sent on topic");
 
-                LOGGER.info("Registered EntryListener on IMap '{}'", mapName);
-                metricsService.increaseCounter(MetricsConstants.COUNTER_ENTRY_LISTENER_REGISTER_SUCCESS, MetricTag.create(MetricsConstants.TAG_MAP_NAME, mapName));
-            }
-        }
+                Object sent = testCollector.getSent(flowConfig.responseTopic());
+                assertNotNull(sent);
+                assertTrue(sent instanceof DummyMessage);
+
+                assertFalse(requestMap.containsKey(correlationId), "Message should be removed on success");
+                assertFalse(routerMap.containsKey("route-lock-" + correlationId), "Claim should be removed on success");
+            });
     }
 
-    @PreDestroy
-    public void cleanupListeners() {
-        for (var entry : listenerRegistrationMap.entrySet()) {
-            String mapName = entry.getKey();
-            String id = entry.getValue();
-            try {
-                hazelcastInstance.getMap(mapName).removeEntryListener(UUID.fromString(id));
-                LOGGER.info("Removed EntryListener from IMap '{}'", mapName);
-                metricsService.increaseCounter(MetricsConstants.COUNTER_ENTRY_LISTENER_REMOVE_SUCCESS, MetricTag.create(MetricsConstants.TAG_MAP_NAME, mapName));
-            } catch (Exception e) {
-                LOGGER.warn("Failed to remove listener from '{}'", mapName, e);
-                metricsService.increaseCounter(
-                        MetricsConstants.COUNTER_ENTRY_LISTENER_REMOVE_ERROR,
-                        MetricTag.create(MetricsConstants.TAG_MAP_NAME, mapName),
-                        MetricTag.create(MetricsConstants.TAG_EXCEPTION_CLASS, e.getClass().getSimpleName())
-                );
-            }
-        }
+    @Test
+    public void testPollRequestMaps_NoHandlerFound() {
+        // This uses a different map name, no listener registered -> remains unchanged
+        IMap<Object, Object> unknownMap = hazelcastInstance.getMap("mapX-0");
+        String corrId = "id1";
+
+        unknownMap.put(corrId, "request");
+        hazelcastInstance.getMap("router-claim-map").put("route-lock-" + corrId, "");
+
+        assertFalse(testCollector.wasSent(flowConfig.responseTopic()), "No response should be sent for unknown flow");
     }
 
-    private class MapEntryListener implements EntryAddedListener<String, Object>, EntryUpdatedListener<String, Object> {
-        private final String flowName;
-        private final String mapName;
-        private final String responseTopic;
+    @Test
+    public void testPollRequestMaps_HandlerThrowsException() {
+        DummyMessage faultyRequest = new DummyMessage();              // <- protobuf message
+        String corrId = sampleFlowHandler.extractCorrelationId(faultyRequest); // "corr-42"
 
-        public MapEntryListener(String flowName, String mapName, String responseTopic) {
-            this.flowName = flowName;
-            this.mapName = mapName;
-            this.responseTopic = responseTopic;
-        }
+        doThrow(new RuntimeException("boom")).when(sampleFlowHandler).handleRequest(any());
 
-        @Override
-        public void entryAdded(EntryEvent<String, Object> event) {
-            metricsService.timer(
-                    () -> processEntry(event.getKey(), event.getValue()),
-                    MetricsConstants.TIMER_FLOW_DURATION,
-                    MetricTag.create(MetricsConstants.TAG_FLOW_NAME, flowName)
-            );
-        }
+        requestMap.put(corrId, faultyRequest);                        // <- put Message
+        routerMap.put("route-lock-" + corrId, "");
 
-        @Override
-        public void entryUpdated(EntryEvent<String, Object> event) {
-            LOGGER.debug("Ignoring entryUpdated event for key {}", event.getKey());
-        }
+        await()
+            .atMost(5, TimeUnit.SECONDS)
+            .pollInterval(100, TimeUnit.MILLISECONDS)
+            .untilAsserted(() -> {
+                assertFalse(testCollector.wasSent(flowConfig.responseTopic()), "No response should be sent on handler error");
+                assertTrue(requestMap.containsKey(corrId), "Request should remain for retry");
+                assertEquals("", routerMap.get("route-lock-" + corrId), "Claim should be reverted to original");
+            });
+    }
 
-        private void processEntry(String correlationId, Object request) {
-            // TODO "request" parameter should have generic type of handlerRegistry.getHandler(flowName) ReqWrapper
-            IMap<String, String> claimMap = hazelcastInstance.getMap("router-claim-map");
-            String claimKey = "route-lock-" + correlationId;
-
-            String current = claimMap.get(claimKey);
-            if (current == null || !current.isEmpty()) {
-                LOGGER.info("Skipping processing of correlationId={} as it is not claimable", correlationId);
-                return;
-            }
-
-            boolean claimed = claimMap.replace(claimKey, "", instanceId);
-            if (!claimed) {
-                LOGGER.info("Could not claim message for correlationId={} (already claimed)", correlationId);
-                return;
-            }
-
-            try {
-                FlowHandler<Req, Res, ResWrapper> handler = (FlowHandler<Req, Res, ResWrapper>) handlerRegistry.getHandler(flowName);
-                if (handler == null) {
-                    LOGGER.warn("No FlowHandler for '{}' registered. Message will be skipped.", flowName);
-                    metricsService.increaseCounter(MetricsConstants.COUNTER_MESSAGE_CONSUME_INVALID_FLOW,
-                            MetricTag.create(MetricsConstants.TAG_FLOW_NAME, flowName));
-                    return;
-                }
-
-                Res response = handler.handleRequest((Req)request);
-                ResWrapper wrapped = handler.wrapResponse(correlationId, response);
-                handler.sendResponse(hazelcastInstance, responseTopic, wrapped);
-
-                hazelcastInstance.getMap(mapName).remove(correlationId);
-                claimMap.remove(claimKey);
-
-                LOGGER.info("Processed and removed message with correlationId={} from map={}", correlationId, mapName);
-                metricsService.increaseCounter(MetricsConstants.COUNTER_MESSAGE_CONSUME_SUCCESS,
-                        MetricTag.create(MetricsConstants.TAG_FLOW_NAME, flowName));
-            } catch (Exception ex) {
-                LOGGER.error("Error processing correlationId={}: {}", correlationId, ex.getMessage(), ex);
-                claimMap.replace(claimKey, instanceId, "");
-                metricsService.increaseCounter(
-                        MetricsConstants.COUNTER_MESSAGE_CONSUME_ERROR,
-                        MetricTag.create(MetricsConstants.TAG_FLOW_NAME, flowName),
-                        MetricTag.create(MetricsConstants.TAG_EXCEPTION_CLASS, ex.getClass().getSimpleName()));
-            }
+    @TestConfiguration
+    static class LocalTestConfig {
+        @Bean(destroyMethod = "shutdown")
+        public HazelcastInstance hazelcastInstance() {
+            Config config = new Config();
+            config.setClusterName("test-cluster-" + UUID.randomUUID());
+            config.getNetworkConfig().setPortAutoIncrement(true);
+            config.setProperty("hazelcast.logging.type", "slf4j");
+            return Hazelcast.newHazelcastInstance(config);
         }
     }
 }
