@@ -1,184 +1,57 @@
-package osplus.pkptuna.flows.handlers;
+Request
 
-import jakarta.annotation.PostConstruct;
-import osplus.apl.core.api.AplComponent;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkptuna.dispute.model.DisputeCreateRequestDto;
-import osplus.pkptuna.dispute.model.DisputeCreateRequestWrapperDto;
-import osplus.pkptuna.dispute.model.DisputeCreateResponseDto;
-import osplus.pkptuna.dispute.model.DisputeCreateResponseWrapperDto;
-import osplus.pkptuna.dispute.service.DisputeService;
-import osplus.pkptuna.hazelcast.flows.AbstractFlowHandler;
-import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
-import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
-
-@AplComponent("dispute-create")
-public class DisputeCreateFlowHandler extends  AbstractFlowHandler {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeCreateFlowHandler.class);
-    private static final String FLOW_NAME = "dispute-create";
-    private static final String TRACE_CODE = "DISPUTE_CREATE";
-    private final DisputeService disputeService;
-
-    public DisputeCreateFlowHandler(ReliableTopicPublisher<DisputeCreateResponseWrapperDto> reliableTopicPublisher, ProtobufDeserializer<DisputeCreateRequestWrapperDto> deserializer, DisputeService disputeService) {
-        super(FLOW_NAME, TRACE_CODE, reliableTopicPublisher, deserializer);
-        this.disputeService = disputeService;
+{
+  "issuerId": "string",
+  "includeSubIssuers": false,
+  "issuerIds": [
+    "string"
+  ],
+  "pan": "string",
+  "cardScheme": "string",
+  "merchantCategoryCode": "string",
+  "cardAcceptorName": "string",
+  "panToken": "string",
+  "acquirerReferenceDataList": [
+    "string"
+  ],
+  "transactionAmount": {
+    "value": 0,
+    "exponent": 0,
+    "isoCode": "string"
+  },
+  "transactionAmountCurrency": "string",
+  "transactionIdentifiers": [
+    {
+      "transactionId": "string"
     }
-
-    @Override
-    public String extractCorrelationId(DisputeCreateRequestWrapperDto request) {
-        return request.getCorrelationId();
-    }
-
-    @Override
-    public DisputeCreateResponseDto handleRequest(DisputeCreateRequestWrapperDto request) {
-        DisputeCreateRequestDto dto = request.getPayload();
-        // TODO get transaction id (inside service)
-        String transactionId = null;
-        return disputeService.createDisputeFolder(dto.getIssuerId(), transactionId, request.getPayload().getBody());
-    }
-
-    @Override
-    public DisputeCreateResponseWrapperDto wrapResponse(String correlationId, DisputeCreateResponseDto result) {
-        return DisputeCreateResponseWrapperDto.newBuilder()
-                .setCorrelationId(correlationId)
-                .setResponse(result)
-                .build();
-    }
-
-    @PostConstruct
-    void init() {
-        LOGGER.info("DisputeCreateFlowHandler loaded and initialised.");
-    }
+  ],
+  "transactionDateFrom": "2025-07-23T12:50:49Z",
+  "transactionDateTo": "2025-07-23T12:50:49Z",
+  "disputedTransactions": "string",
+  "fraudulentTransactions": "string",
+  "virtualServiceCardNumber": "string",
+  "acquirerMemberId": "string",
+  "reasonCode": "string",
+  "eventDate": "2025-07-23T12:50:49Z",
+  "status": "string",
+  "processingDateFrom": "2025-07-23T12:50:49Z",
+  "processingDateTo": "2025-07-23T12:50:49Z",
+  "transactionTypes": [
+    "string"
+  ],
+  "cardIdentifier": {
+    "cardReference": "string",
+    "issuerCardExternalReference": "string"
+  },
+  "accountIdentifier": {
+    "accountReference": "string",
+    "issuerAccountExternalReference": "string"
+  }
 }
 
----------------------
+---------------------------------------
 
-
-package osplus.pkptuna.hazelcast.flows;
-
-import com.google.protobuf.GeneratedMessage;
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.Message;
-import com.hazelcast.core.HazelcastInstance;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
-import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
-
-import java.io.IOException;
-
-public abstract class AbstractFlowHandler<T extends Message> implements FlowHandler<T> {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(AbstractFlowHandler.class);
-    private final String flowName;
-    private final String traceCode;
-    private final ReliableTopicPublisher reliableTopicPublisher;
-    private final ProtobufDeserializer deserializer;
-
-    public AbstractFlowHandler(String flowName, String traceCode,
-                               ReliableTopicPublisher reliableTopicPublisher,
-                               ProtobufDeserializer deserializer) {
-        this.flowName = flowName;
-        this.traceCode = traceCode;
-        this.reliableTopicPublisher = reliableTopicPublisher;
-        this.deserializer = deserializer;
-    }
-
-    @Override
-    public T deserializeRequest(byte[] data) throws InvalidProtocolBufferException {
-        try {
-            return (T) deserializer.deserialize(data);
-        } catch (IOException e) {
-            LOGGER.error("Failed to deserialize request", e);
-            return null; // TODO error handling
-            //  return Req.newBuilder().build();
-        }
-    }
-
-    @Override
-    public void sendResponse(HazelcastInstance hazelcastInstance, String topicName, Message response) {
-        reliableTopicPublisher.sendMessage(topicName, traceCode, (GeneratedMessage) response);
-    }
-
-    @Override
-    public String getFlowName() {
-        return flowName;
-    }
-
-    @Override
-    public abstract String extractCorrelationId(T request);
-}
-
-
-------------------
-
-
-package osplus.pkptuna.hazelcast.flows;
-
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.Message;
-import com.hazelcast.core.HazelcastInstance;
-
-/**
- * Diese Schnittstelle definiert den vollständigen Verarbeitungszyklus eines
- * Nachrichtenflusses (Flow) in einem verteilten System mit Hazelcast.
- */
-public interface FlowHandler<T extends Message> {
-
-    /**
-     * Deserialisiert die empfangenen Daten in ein Anfrageobjekt.
-     *
-     * @param data das empfangene Byte-Array
-     * @return deserialisierte Anfrage
-     * @throws InvalidProtocolBufferException bei Deserialisierungsfehlern
-     */
-    T deserializeRequest(byte[] data) throws InvalidProtocolBufferException;
-
-    /**
-     * Extrahiert die eindeutige Korrelations-ID aus einer Anfrage.
-     *
-     * @param request das Anfrageobjekt
-     * @return Korrelations-ID als String
-     */
-    String extractCorrelationId(T request);
-
-    /**
-     * Führt die fachliche Verarbeitung einer Anfrage durch.
-     *
-     * @param request die eingehende Anfrage
-     * @return Ergebnis der Verarbeitung
-     */
-    T handleRequest(T request);
-
-    /**
-     * Verpackt das Antwortobjekt gemeinsam mit der Korrelations-ID.
-     *
-     * @param correlationId eindeutige ID der Anfrage
-     * @param result        das Antwortobjekt
-     * @return eingepackte Antwort (z.B. DTO oder MessageEnvelope)
-     */
-    T wrapResponse(String correlationId, T result);
-
-    /**
-     * Sendet die verarbeitete Antwort über Hazelcast Reliable Topic.
-     *
-     * @param hazelcastInstance Hazelcast-Instanz
-     * @param topicName         Zieltopic
-     * @param response          die gesendete Antwort
-     */
-    void sendResponse(HazelcastInstance hazelcastInstance, String topicName, T response);
-
-    /**
-     * Gibt den Namen des Flows zurück (z.B. für Registrierung oder Logging).
-     *
-     * @return Flow-Name
-     */
-    String getFlowName();
-}
+Response
 
 
 
-
------------------------
