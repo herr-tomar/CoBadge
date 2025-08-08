@@ -1,149 +1,43 @@
-package osplus.pkptuna.hazelcast.test.config;
 
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.hazelcast.core.HazelcastInstance;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
-import osplus.apl.core.api.administration.metrics.MetricsService;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkptuna.hazelcast.config.FlowConfig;
-import osplus.pkptuna.hazelcast.config.FlowHandlerInitializer;
-import osplus.pkptuna.hazelcast.config.HazelcastFlowBootstrap;
-import osplus.pkptuna.hazelcast.flows.FlowHandler;
-import osplus.pkptuna.hazelcast.flows.FlowHandlerRegistry;
-import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer;
-import osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouter;
+2025-08-08T09:55:54.042+02:00  INFO 43856 --- [uui] [           main] o.p.h.p.GenericHazelcastConsumerTest     : Started GenericHazelcastConsumerTest in 14.862 seconds (process running for 15.777)
+2025-08-08T09:55:54.163+02:00 ERROR 43856 --- [uui] [ukovsky.event-3] c.h.s.i.e.impl.EventServiceImpl          : [16.160.162.148]:5701 [test-cluster-e0f15f77-1dc2-49a3-b070-b94d245a8f1b] [5.3.0] hz.kind_zhukovsky.event-3 caught an exception while processing:com.hazelcast.spi.impl.eventservice.impl.LocalEventDispatcher@36818564
 
-import java.util.*;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
-
-@TestConfiguration
-public class FlowHandlerTestConfiguration {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(FlowHandlerTestConfiguration.class);
-
-    @Bean
-    public FlowHandlerRegistry<DummyMessage, DummyMessage, DummyMessage> handlerRegistry() throws InvalidProtocolBufferException {
-        FlowHandlerRegistry<DummyMessage, DummyMessage, DummyMessage> registry = new FlowHandlerRegistry<>();
-        registry.register("myFlow", sampleFlowHandler());
-        return registry;
-    }
-
-    @Bean
-    public FlowHandlerInitializer flowHandlerInitializer(List<FlowConfig> configs,
-                                                         Map<String, FlowHandler> handlerMap,
-                                                         FlowHandlerRegistry registry,
-                                                         HazelcastFlowBootstrap bootstrap) {
-        return new FlowHandlerInitializer(configs, handlerMap, registry, bootstrap);
-    }
-
-    @Bean
-    public FlowConfig flowConfig() {
-        return new FlowConfig("myFlow",
-                "req-topic-" + UUID.randomUUID(),
-                "res-topic-" + UUID.randomUUID(),
-                "map-", 1);
-    }
-
-    @Bean
-    public List<FlowConfig> flowConfigs(FlowConfig flowConfig) {
-        return List.of(flowConfig);
-    }
-
-    @Bean
-    public Map<String, FlowHandler> handlerMap() throws InvalidProtocolBufferException {
-        return Map.of("myFlow", sampleFlowHandler());
-    }
-
-    @Bean
-    public FlowHandler<DummyMessage, DummyMessage, DummyMessage> sampleFlowHandler() throws InvalidProtocolBufferException {
-        FlowHandler<DummyMessage, DummyMessage, DummyMessage> handler = mock(FlowHandler.class);
-
-        DummyMessage request = new DummyMessage(); // ✅ Real instance
-        DummyMessage response = new DummyMessage(); // ✅ Real instance
-
-        when(handler.getFlowName()).thenReturn("myFlow");
-        when(handler.deserializeRequest(any())).thenReturn(request);
-        when(handler.extractCorrelationId(any())).thenReturn("corr-42");
-        when(handler.handleRequest(any())).thenReturn(response);
-        when(handler.wrapResponse(anyString(), any())).thenReturn(response);
-
-        doAnswer(invocation -> {
-            String topic = invocation.getArgument(1);
-            Object resp = invocation.getArgument(2);
-            testCollector().recordSent(topic, resp);
-            return null;
-        }).when(handler).sendResponse(any(HazelcastInstance.class), anyString(), any());
-
-        return handler;
-    }
-
-    @Bean
-    public HazelcastFlowBootstrap hazelcastFlowBootstrap(GenericHazelcastRouter router,
-                                                         GenericHazelcastConsumer consumer) {
-        return new HazelcastFlowBootstrap(router, consumer);
-    }
-
-    @Bean
-    public GenericHazelcastRouter<DummyMessage, DummyMessage, DummyMessage> hazelcastRouter(
-            MetricsService metricsService,
-            HazelcastInstance hazelcastInstance,
-            List<FlowConfig> flowConfigs,
-            FlowHandlerRegistry<DummyMessage, DummyMessage, DummyMessage> registry) {
-        return new GenericHazelcastRouter<>(metricsService, hazelcastInstance, flowConfigs, registry);
-    }
-
-    @Bean
-    public GenericHazelcastConsumer<DummyMessage, DummyMessage, DummyMessage> hazelcastConsumer(
-            MetricsService metricsService,
-            HazelcastInstance hazelcastInstance,
-            List<FlowConfig> flowConfigs,
-            FlowHandlerRegistry<DummyMessage, DummyMessage, DummyMessage> registry) {
-        return new GenericHazelcastConsumer<>(metricsService, hazelcastInstance, flowConfigs, registry);
-    }
-
-    @Bean("flowTaskScheduler")
-    public ThreadPoolTaskScheduler taskScheduler() {
-        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
-        scheduler.setPoolSize(1);
-        scheduler.setThreadNamePrefix("hazelcast-scheduler-");
-        scheduler.initialize();
-        return scheduler;
-    }
-
-    @Bean
-    public TestCollector testCollector() {
-        return new TestCollector();
-    }
-
-    @Bean
-    @Primary
-    public MetricsService metricsService() {
-        return mock(MetricsService.class);
-    }
-
-    public static class TestCollector {
-        private final Map<String, Object> sentResponses = new HashMap<>();
-
-        public void recordSent(String topic, Object response) {
-            sentResponses.put(topic, response);
-        }
-
-        public Object getSent(String topic) {
-            return sentResponses.get(topic);
-        }
-
-        public boolean wasSent(String topic) {
-            return sentResponses.containsKey(topic);
-        }
-
-        public void clear() {
-            sentResponses.clear();
-        }
-    }
-}
+com.hazelcast.nio.serialization.HazelcastSerializationException: java.lang.RuntimeException: Unable to find DEFAULT_INSTANCE in osplus.pkptuna.hazelcast.test.config.DummyMessage
+	at com.hazelcast.internal.serialization.impl.SerializationUtil.handleException(SerializationUtil.java:111) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.internal.serialization.impl.AbstractSerializationService.toObject(AbstractSerializationService.java:277) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.map.impl.DataAwareEntryEvent.getValue(DataAwareEntryEvent.java:90) ~[hazelcast-5.3.0.jar:5.3.0]
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer$MapEntryListener.lambda$entryAdded$0(GenericHazelcastConsumer.java:107) ~[classes/:na]
+	at io.micrometer.core.instrument.composite.CompositeTimer.record(CompositeTimer.java:141) ~[micrometer-core-1.15.1.jar:1.15.1]
+	at io.micrometer.core.instrument.Timer.lambda$wrap$2(Timer.java:199) ~[micrometer-core-1.15.1.jar:1.15.1]
+	at osplus.apl.core.administration.metrics.MetricsServiceImpl.timer(MetricsServiceImpl.java:107) ~[apl-core-services-251.0.0.jar:251.0.0]
+	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastConsumer$MapEntryListener.entryAdded(GenericHazelcastConsumer.java:106) ~[classes/:na]
+	at com.hazelcast.map.impl.MapListenerAdaptors.lambda$null$0(MapListenerAdaptors.java:55) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.map.impl.InternalMapListenerAdapter.onEvent(InternalMapListenerAdapter.java:56) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.map.impl.InternalMapListenerAdapter.onEvent(InternalMapListenerAdapter.java:35) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.map.impl.event.MapEventPublishingService.callListener(MapEventPublishingService.java:172) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.map.impl.event.MapEventPublishingService.dispatchEntryEventData(MapEventPublishingService.java:184) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.map.impl.event.MapEventPublishingService.dispatchEvent(MapEventPublishingService.java:83) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.map.impl.event.MapEventPublishingService.dispatchEvent(MapEventPublishingService.java:47) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.map.impl.MapService.dispatchEvent(MapService.java:134) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.map.impl.MapService.dispatchEvent(MapService.java:101) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.spi.impl.eventservice.impl.LocalEventDispatcher.run(LocalEventDispatcher.java:64) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.internal.util.executor.StripedExecutor$Worker.process(StripedExecutor.java:245) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.internal.util.executor.StripedExecutor$Worker.run(StripedExecutor.java:228) ~[hazelcast-5.3.0.jar:5.3.0]
+Caused by: java.lang.RuntimeException: Unable to find DEFAULT_INSTANCE in osplus.pkptuna.hazelcast.test.config.DummyMessage
+	at com.google.protobuf.GeneratedMessageLite$SerializedForm.readResolve(GeneratedMessageLite.java:1437) ~[protobuf-java-4.31.1.jar:na]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+	at java.base/java.io.ObjectStreamClass.invokeReadResolve(ObjectStreamClass.java:1192) ~[na:na]
+	at java.base/java.io.ObjectInputStream.readOrdinaryObject(ObjectInputStream.java:2293) ~[na:na]
+	at java.base/java.io.ObjectInputStream.readObject0(ObjectInputStream.java:1762) ~[na:na]
+	at java.base/java.io.ObjectInputStream.readObject(ObjectInputStream.java:540) ~[na:na]
+	at java.base/java.io.ObjectInputStream.readObject(ObjectInputStream.java:498) ~[na:na]
+	at com.hazelcast.internal.serialization.impl.defaultserializers.JavaDefaultSerializers$JavaSerializer.read(JavaDefaultSerializers.java:92) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.internal.serialization.impl.defaultserializers.JavaDefaultSerializers$JavaSerializer.read(JavaDefaultSerializers.java:85) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.internal.serialization.impl.StreamSerializerAdapter.read(StreamSerializerAdapter.java:44) ~[hazelcast-5.3.0.jar:5.3.0]
+	at com.hazelcast.internal.serialization.impl.AbstractSerializationService.toObject(AbstractSerializationService.java:271) ~[hazelcast-5.3.0.jar:5.3.0]
+	... 18 common frames omitted
+Caused by: java.lang.NoSuchFieldException: DEFAULT_INSTANCE
+	at java.base/java.lang.Class.getDeclaredField(Class.java:2782) ~[na:na]
+	at com.google.protobuf.GeneratedMessageLite$SerializedForm.readResolve(GeneratedMessageLite.java:1428) ~[protobuf-java-4.31.1.jar:na]
+	... 29 common frames omitted
