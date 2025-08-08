@@ -53,5 +53,192 @@ Request
 
 Response
 
-
+{
+  "responseMetadata": {
+    "correlationId": "string",
+    "links": {
+      "self": "/x/{x}?x=x",
+      "next": "/x/{x}?page[offset]=2"
+    },
+    "statusMessage": "Executed successfully",
+    "statusCode": 200,
+    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+    "timeTakenMs": 12
+  },
+  "data": [
+    {
+      "issuerId": "string",
+      "transactionIdentifier": {
+        "transactionId": "string"
+      },
+      "acquirerReferenceData": "string",
+      "acquisitionMaterial": "string",
+      "cardAcceptorCity": "string",
+      "cardAcceptorCountry": "string",
+      "cardAcceptorIdCode": "string",
+      "cardAcceptorName": "string",
+      "cardAcceptorZipCode": "string",
+      "cardScheme": "string",
+      "debit": true,
+      "maskedPan": "string",
+      "merchantCategoryCode": "string",
+      "pan": "string",
+      "reconciliationAmount": {
+        "value": 0,
+        "exponent": 0,
+        "isoCode": "string"
+      },
+      "reversal": true,
+      "transactionAmount": {
+        "value": 0,
+        "exponent": 0,
+        "isoCode": "string"
+      },
+      "transactionDate": "2025-07-23T12:50:49Z",
+      "walletId": "string",
+      "approvalCode": "string",
+      "pointOfSaleEnvironment": "string",
+      "mailPhoneEcommerceAndPaymentIndicator": "string",
+      "pointOfService": {
+        "entryModePan": "string",
+        "entryModePin": "string",
+        "conditionCode": "string",
+        "posTerminalCapability": "string",
+        "cardDataInputCapability": "string",
+        "cardholderAuthenticationCapability": "string",
+        "cardCaptureCapability": "string",
+        "terminalOperatingEnvironment": "string",
+        "cardholderPresentData": "string",
+        "cardPresentData": "string",
+        "cardDataInputMode": "string",
+        "cardholderAuthenticationMethod": "string",
+        "cardholderAuthenticationEntity": "string",
+        "cardDataOutputCapability": "string",
+        "terminalDataOutputCapability": "string",
+        "pinCaptureCapability": "string"
+      },
+      "acquirerId": "string",
+      "destinationId": "string",
+      "authorizationBusinessCaseIdentifier": {
+        "businessCaseId": "string"
+      },
+      "cardIdentifier": {
+        "cardReference": "string",
+        "issuerCardExternalReference": "string"
+      },
+      "panTokenIdentifier": {
+        "panTokenReference": "string"
+      },
+      "lodgingInformation": {
+        "businessFormatCode": "string",
+        "noShowIndicator": "string",
+        "extraCharges": "string",
+        "checkInDate": "string",
+        "dailyRoomRate": "string",
+        "totalTax": "string",
+        "prepaidExpenses": "string",
+        "foodBeverageCharge": "string",
+        "folioCashAdvances": "string",
+        "totalRoomNights": "string",
+        "totalRoomTax": "string"
+      },
+      "carRentalInformation": {
+        "businessFormatCode": "string",
+        "days": "string",
+        "noShowIndicator": "string",
+        "extraCharges": "string",
+        "checkOutDate": "string",
+        "dailyRentRate": "string",
+        "weeklyRentRate": "string",
+        "insuranceCharge": "string",
+        "fuelCharge": "string",
+        "classCode": "string",
+        "oneWayDropCharge": "string",
+        "renterName": "string"
+      },
+      "airItineraryInformation": {
+        "businessFormatCode": "string",
+        "travelAgent": "string",
+        "travelAgentCode": "string",
+        "passengerName": "string",
+        "departureDate": "string",
+        "originCityCode": "string",
+        "restrictedTicketIndicator": "string",
+        "reservationSystem": "string",
+        "creditReasonIndicator": "string",
+        "ticketChangeIndicator": "string",
+        "ticketNumber": "string",
+        "IATACode": "string",
+        "leg1": {
+          "flightNumber": "string",
+          "carrier": "string",
+          "class": "string",
+          "stopOver": "string",
+          "destination": "string",
+          "fareCode": "string"
+        },
+        "leg2": {
+          "flightNumber": "string",
+          "carrier": "string",
+          "class": "string",
+          "stopOver": "string",
+          "destination": "string",
+          "fareCode": "string"
+        },
+        "leg3": {
+          "flightNumber": "string",
+          "carrier": "string",
+          "class": "string",
+          "stopOver": "string",
+          "destination": "string",
+          "fareCode": "string"
+        },
+        "leg4": {
+          "flightNumber": "string",
+          "carrier": "string",
+          "class": "string",
+          "stopOver": "string",
+          "destination": "string",
+          "fareCode": "string"
+        }
+      },
+      "eCommerceSecurityLevelIndicator": {
+        "securityProtocol": "string",
+        "cardHolderAuthentication": "string",
+        "ucafCollectionIndicator": "string"
+      },
+      "transactionCategory": "string",
+      "status": "string",
+      "transmissionDate": "2025-07-23T12:50:49Z",
+      "billingAmount": {
+        "value": 0,
+        "exponent": 0,
+        "isoCode": "string"
+      },
+      "recalculatedBillingAmount": {
+        "value": 0,
+        "exponent": 0,
+        "isoCode": "string"
+      },
+      "disputeStatus": "string",
+      "fraudStatus": "string",
+      "accountIdentifier": {
+        "accountReference": "string",
+        "issuerAccountExternalReference": "string"
+      },
+      "action": "string",
+      "panToken": "string",
+      "processingDate": "2025-07-23T12:50:49Z",
+      "virtualServiceCardNumber": "string",
+      "acquirerMemberId": "string",
+      "reasonCode": "string",
+      "eventDate": "2025-07-23T12:50:49Z",
+      "reversed": true,
+      "authorizationIdentifier": {
+        "transactionId": "string",
+        "issuerExternalAuthorizationReference": "string"
+      }
+    }
+  ]
+}
 
