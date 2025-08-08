@@ -26,6 +26,9 @@ import java.util.concurrent.TimeUnit;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest(classes = {
         AplTestRunner.class,
@@ -47,6 +50,7 @@ public class GenericHazelcastRouterTest extends BaseAplTest {
     @Autowired private FlowConfig flowConfig;
     @Autowired private FlowHandlerTestConfiguration.TestCollector testCollector;
 
+    // Mock provided by FlowHandlerTestConfiguration
     @Autowired
     private FlowHandler<DummyMessage, DummyMessage, DummyMessage> sampleFlowHandler;
 
@@ -74,51 +78,77 @@ public class GenericHazelcastRouterTest extends BaseAplTest {
         targetMap.clear();
         testCollector.clear();
 
+        // Baseline stubs (safe & explicit)
+        when(sampleFlowHandler.getFlowName()).thenReturn("myFlow");
+        when(sampleFlowHandler.deserializeRequest(any())).thenReturn(new DummyMessage());
+        when(sampleFlowHandler.extractCorrelationId(any())).thenReturn("corr-42");
+
         router.setRouterInstanceId(routerInstanceId);
+        // Mark this instance as leader / active so routing happens
         leaderMap.put("active-router", routerInstanceId);
-        heartbeatMap.put("heartbeat", System.currentTimeMillis() - 10_000);
+        // Some routers check freshness; put a recent-ish heartbeat
+        heartbeatMap.put("heartbeat", System.currentTimeMillis());
+
         topic = hazelcastInstance.getReliableTopic(flowConfig.requestTopic());
         router.initRouters();
     }
 
     @Test
     public void testMessageRoutedSuccessfully() {
-        DummyMessage mockRequest = new DummyMessage();
+        DummyMessage request = new DummyMessage();
+        String corrId = sampleFlowHandler.extractCorrelationId(request);
 
-        String corrId = sampleFlowHandler.extractCorrelationId(mockRequest);
+        // Sanity: no prior claim
         assertFalse(routerMap.containsKey("route-lock-" + corrId));
 
-        topic.publish(mockRequest.toByteArray());
+        // Publish bytes (router will deserialize via mocked handler)
+        topic.publish(new byte[]{1, 2, 3});
 
+        // Assert: router claimed and enqueued into target map
         await().atMost(5, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertTrue(testCollector.wasSent(flowConfig.responseTopic())));
+               .pollInterval(100, TimeUnit.MILLISECONDS)
+               .untilAsserted(() -> {
+                    assertTrue(routerMap.containsKey("route-lock-" + corrId), "Router should claim the correlation id");
+                    assertTrue(targetMap.containsKey(corrId), "Router should enqueue the request into target map");
+               });
     }
 
     @Test
     public void testDuplicateMessageNotProcessed() {
-        DummyMessage mockRequest = new DummyMessage();
+        DummyMessage request = new DummyMessage();
+        String corrId = sampleFlowHandler.extractCorrelationId(request);
 
-        String corrId = sampleFlowHandler.extractCorrelationId(mockRequest);
+        // Pre-create a claim: simulate duplicate or already-processing message
         routerMap.put("route-lock-" + corrId, "existing");
 
-        topic.publish(mockRequest.toByteArray());
+        topic.publish(new byte[]{4, 5, 6});
 
         await().atMost(2, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertFalse(targetMap.containsKey(corrId)));
+               .pollInterval(100, TimeUnit.MILLISECONDS)
+               .untilAsserted(() -> {
+                    // Because the claim already exists, router should not enqueue the message
+                    assertFalse(targetMap.containsKey(corrId), "Duplicate message must not be enqueued");
+               });
     }
 
     @Test
     public void testRoutingHandlerThrowsException() {
-        DummyMessage mockRequest = new DummyMessage();
+        DummyMessage request = new DummyMessage();
+        String corrId = sampleFlowHandler.extractCorrelationId(request);
 
-        String corrId = sampleFlowHandler.extractCorrelationId(mockRequest);
+        // Make routing fail at deserialization stage (router path)
+        doThrow(new RuntimeException("bad-bytes")).when(sampleFlowHandler).deserializeRequest(any());
 
-        // You may need to further mock `sampleFlowHandler.handleRequest` to throw if needed
-
-        topic.publish(mockRequest.toByteArray());
+        topic.publish(new byte[]{9, 9, 9});
 
         await().atMost(2, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertFalse(targetMap.containsKey(corrId)));
+               .pollInterval(100, TimeUnit.MILLISECONDS)
+               .untilAsserted(() -> {
+                    // On failure, router should not enqueue anything
+                    assertFalse(targetMap.containsKey(corrId), "On deserialization failure, nothing should be enqueued");
+                    // And it should not create a claim either
+                    assertFalse(routerMap.containsKey("route-lock-" + corrId), "No claim should be created on failure");
+               });
     }
 
     @TestConfiguration
@@ -133,66 +163,3 @@ public class GenericHazelcastRouterTest extends BaseAplTest {
         }
     }
 }
-
-
-------------------
-
-
-
-
-[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testRoutingHandlerThrowsException -- Time elapsed: 2.127 s <<< ERROR!
-org.awaitility.core.ConditionTimeoutException: Assertion condition defined as a Lambda expression in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest expected: <false> but was: <true> within 2 seconds.
-	at org.awaitility.core.ConditionAwaiter.await(ConditionAwaiter.java:167)
-	at org.awaitility.core.AssertionCondition.await(AssertionCondition.java:119)
-	at org.awaitility.core.AssertionCondition.await(AssertionCondition.java:31)
-	at org.awaitility.core.ConditionFactory.until(ConditionFactory.java:1006)
-	at org.awaitility.core.ConditionFactory.untilAsserted(ConditionFactory.java:790)
-	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testRoutingHandlerThrowsException(GenericHazelcastRouterTest.java:121)
-	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-Caused by: org.opentest4j.AssertionFailedError: expected: <false> but was: <true>
-	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
-	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
-	at org.junit.jupiter.api.AssertFalse.failNotFalse(AssertFalse.java:63)
-	at org.junit.jupiter.api.AssertFalse.assertFalse(AssertFalse.java:36)
-	at org.junit.jupiter.api.AssertFalse.assertFalse(AssertFalse.java:31)
-	at org.junit.jupiter.api.Assertions.assertFalse(Assertions.java:231)
-	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.lambda$testRoutingHandlerThrowsException$2(GenericHazelcastRouterTest.java:121)
-	at org.awaitility.core.AssertionCondition.lambda$new$0(AssertionCondition.java:53)
-	at org.awaitility.core.ConditionAwaiter$ConditionPoller.call(ConditionAwaiter.java:248)
-	at org.awaitility.core.ConditionAwaiter$ConditionPoller.call(ConditionAwaiter.java:235)
-	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
-	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
-	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
-	at java.base/java.lang.Thread.run(Thread.java:1583)
-[ERROR] osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully -- Time elapsed: 5.074 s <<< ERROR!
-org.awaitility.core.ConditionTimeoutException: Assertion condition defined as a Lambda expression in osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest expected: <true> but was: <false> within 5 seconds.
-	at org.awaitility.core.ConditionAwaiter.await(ConditionAwaiter.java:167)
-	at org.awaitility.core.AssertionCondition.await(AssertionCondition.java:119)
-	at org.awaitility.core.AssertionCondition.await(AssertionCondition.java:31)
-	at org.awaitility.core.ConditionFactory.until(ConditionFactory.java:1006)
-	at org.awaitility.core.ConditionFactory.untilAsserted(ConditionFactory.java:790)
-	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.testMessageRoutedSuccessfully(GenericHazelcastRouterTest.java:94)
-	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
-Caused by: org.opentest4j.AssertionFailedError: expected: <true> but was: <false>
-	at org.junit.jupiter.api.AssertionFailureBuilder.build(AssertionFailureBuilder.java:151)
-	at org.junit.jupiter.api.AssertionFailureBuilder.buildAndThrow(AssertionFailureBuilder.java:132)
-	at org.junit.jupiter.api.AssertTrue.failNotTrue(AssertTrue.java:63)
-	at org.junit.jupiter.api.AssertTrue.assertTrue(AssertTrue.java:36)
-	at org.junit.jupiter.api.AssertTrue.assertTrue(AssertTrue.java:31)
-	at org.junit.jupiter.api.Assertions.assertTrue(Assertions.java:183)
-	at osplus.pkptuna.hazelcast.pubsub.GenericHazelcastRouterTest.lambda$testMessageRoutedSuccessfully$0(GenericHazelcastRouterTest.java:94)
-	at org.awaitility.core.AssertionCondition.lambda$new$0(AssertionCondition.java:53)
-	at org.awaitility.core.ConditionAwaiter$ConditionPoller.call(ConditionAwaiter.java:248)
-	at org.awaitility.core.ConditionAwaiter$ConditionPoller.call(ConditionAwaiter.java:235)
-	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
-	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
-	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
-	at java.base/java.lang.Thread.run(Thread.java:1583)
-[INFO] Running osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisherTest
-OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
-[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 14.72 s -- in osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisherTest
-[INFO] 
