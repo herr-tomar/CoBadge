@@ -1,27 +1,171 @@
-@TestConfiguration
-static class FaultyHandlerTestConfig {
+package osplus.pkptuna.hazelcast.pubsub;
 
-    // 1) Provide an EMPTY registry to prevent the default 'sampleFlowHandler' from being pre-registered
-    @Bean
-    public FlowHandlerRegistry<DummyMessage, DummyMessage, DummyMessage> handlerRegistry() {
-        return new FlowHandlerRegistry<>();
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Bean;
+import osplus.apl.core.test.utils.AplTestRunner;
+import osplus.apl.core.test.utils.BaseAplTest;
+import osplus.pkptuna.hazelcast.config.FlowConfig;
+import osplus.pkptuna.hazelcast.flows.FlowHandler;
+import osplus.pkptuna.hazelcast.test.config.DummyMessage;
+import osplus.pkptuna.hazelcast.test.config.FlowHandlerTestConfiguration;
+
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.when;
+
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@SpringBootTest(
+        classes = {
+                AplTestRunner.class,
+                GenericHazelcastConsumerTest.LocalTestConfig.class,
+                FlowHandlerTestConfiguration.class
+        },
+        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+        properties = {
+                "spring.main.allow-bean-definition-overriding=true",
+                "generichazelcast.polling-rate=20",
+                "apl.application.name=uui",
+                "apl.application.version=0.0.1-TEST"
+        }
+)
+@AutoConfigureMockMvc
+public class GenericHazelcastConsumerTest extends BaseAplTest {
+
+    // IMPORTANT: this name must match the bean method name in FlowHandlerTestConfiguration
+    @MockBean(name = "sampleFlowHandler")
+    private FlowHandler<DummyMessage, DummyMessage, DummyMessage> sampleFlowHandler;
+
+    @Autowired
+    private FlowConfig flowConfig;
+
+    @Autowired
+    private HazelcastInstance hazelcastInstance;
+
+    @Autowired
+    private GenericHazelcastConsumer<DummyMessage, DummyMessage, DummyMessage> consumer;
+
+    @Autowired
+    private FlowHandlerTestConfiguration.TestCollector testCollector;
+
+    private IMap<Object, Object> requestMap;
+    private IMap<String, String> routerMap;
+
+    @BeforeEach
+    public void setUp() {
+        requestMap = hazelcastInstance.getMap("map-0");              // from FlowConfig("map-", 1) -> map-0
+        routerMap = hazelcastInstance.getMap("router-claim-map");
+
+        hazelcastInstance.getMap("router-leader-map").clear();
+        hazelcastInstance.getMap("router-heartbeat-map").clear();
+        routerMap.clear();
+        requestMap.clear();
+        testCollector.clear();
+
+        // ---- Default (happy-path) stubs for ALL tests ----
+        when(sampleFlowHandler.getFlowName()).thenReturn("myFlow");
+        when(sampleFlowHandler.deserializeRequest(any())).thenReturn(new DummyMessage());
+        when(sampleFlowHandler.extractCorrelationId(any())).thenReturn("corr-42");
+
+        DummyMessage response = new DummyMessage();
+        when(sampleFlowHandler.handleRequest(any())).thenReturn(response);
+        when(sampleFlowHandler.wrapResponse(any(String.class), any())).thenReturn(response);
+
+        // Make sendResponse feed the TestCollector
+        doAnswer(inv -> {
+            String topic = inv.getArgument(1);
+            Object resp = inv.getArgument(2);
+            testCollector.recordSent(topic, resp);
+            return null;
+        }).when(sampleFlowHandler).sendResponse(any(HazelcastInstance.class), any(String.class), any());
     }
 
-    // 2) Provide a handler that throws on handleRequest
-    @Bean
-    public FlowHandler<DummyMessage, DummyMessage, DummyMessage> faultyHandler() {
-        FlowHandler<DummyMessage, DummyMessage, DummyMessage> handler = mock(FlowHandler.class);
-        when(handler.getFlowName()).thenReturn("myFlow");
-        when(handler.deserializeRequest(any())).thenReturn(new DummyMessage());
-        when(handler.extractCorrelationId(any())).thenReturn("id123");
-        when(handler.handleRequest(any())).thenThrow(new RuntimeException("boom!"));
-        return handler;
+    @Test
+    public void testPollRequestMaps_PositiveFlow() {
+        Map<String, Object> request = Map.of("key", "value");
+        String correlationId = sampleFlowHandler.extractCorrelationId(request); // "corr-42" per stub
+
+        // Simulate a router claim and an enqueued request
+        requestMap.put(correlationId, request);
+        routerMap.put("route-lock-" + correlationId, "");
+
+        await()
+                .atMost(5, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    assertTrue(testCollector.wasSent(flowConfig.responseTopic()), "Expected response to be sent on topic");
+
+                    Object sent = testCollector.getSent(flowConfig.responseTopic());
+                    assertNotNull(sent);
+                    assertTrue(sent instanceof DummyMessage, "Response should be a DummyMessage");
+
+                    assertFalse(requestMap.containsKey(correlationId), "Message should be removed on success");
+                    assertFalse(routerMap.containsKey("route-lock-" + correlationId), "Claim should be removed on success");
+                });
     }
 
-    // 3) Make sure the initializer sees ONLY this map
-    @Bean
-    public Map<String, FlowHandler> handlerMap(
-            FlowHandler<DummyMessage, DummyMessage, DummyMessage> faultyHandler) {
-        return Map.of("myFlow", faultyHandler);
+    @Test
+    public void testPollRequestMaps_NoHandlerFound() {
+        // Put into a map that doesn't belong to any configured flow
+        IMap<Object, Object> unknownMap = hazelcastInstance.getMap("mapX-0");
+        String corrId = "id1";
+
+        unknownMap.put(corrId, "request");
+        hazelcastInstance.getMap("router-claim-map").put("route-lock-" + corrId, "");
+
+        // No handler should process this, hence no response
+        assertFalse(testCollector.wasSent(flowConfig.responseTopic()), "No response should be sent for unknown flow");
+    }
+
+    @Test
+    public void testPollRequestMaps_HandlerThrowsException() {
+        // Use the SAME correlation id the handler generates
+        String corrId = sampleFlowHandler.extractCorrelationId(new DummyMessage()); // "corr-42" per stub
+
+        // For THIS test only, make the handler fail
+        doThrow(new RuntimeException("boom")).when(sampleFlowHandler).handleRequest(any());
+
+        // Simulate a router claim and an enqueued request
+        requestMap.put(corrId, "faultyRequest");
+        routerMap.put("route-lock-" + corrId, "");
+
+        await()
+                .atMost(3, TimeUnit.SECONDS)
+                .pollInterval(100, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    assertFalse(testCollector.wasSent(flowConfig.responseTopic()),
+                            "No response should be sent on handler error");
+                    assertTrue(requestMap.containsKey(corrId), "Request should remain for retry");
+                    assertEquals("", routerMap.get("route-lock-" + corrId), "Claim should be reverted to original");
+                });
+    }
+
+    @TestConfiguration
+    static class LocalTestConfig {
+        @Bean(destroyMethod = "shutdown")
+        public HazelcastInstance hazelcastInstance() {
+            Config config = new Config();
+            config.setClusterName("test-cluster-" + UUID.randomUUID());
+            config.getNetworkConfig().setPortAutoIncrement(true);
+            config.setProperty("hazelcast.logging.type", "slf4j");
+            return Hazelcast.newHazelcastInstance(config);
+        }
     }
 }
