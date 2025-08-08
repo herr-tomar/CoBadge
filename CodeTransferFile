@@ -1,244 +1,172 @@
-Request
+The API provides possibility to retrieve a list of transactions (original first presentments received from the card schemes), based on certain criteria.
 
-{
-  "issuerId": "string",
-  "includeSubIssuers": false,
-  "issuerIds": [
-    "string"
-  ],
-  "pan": "string",
-  "cardScheme": "string",
-  "merchantCategoryCode": "string",
-  "cardAcceptorName": "string",
-  "panToken": "string",
-  "acquirerReferenceDataList": [
-    "string"
-  ],
-  "transactionAmount": {
-    "value": 0,
-    "exponent": 0,
-    "isoCode": "string"
-  },
-  "transactionAmountCurrency": "string",
-  "transactionIdentifiers": [
-    {
-      "transactionId": "string"
-    }
-  ],
-  "transactionDateFrom": "2025-07-23T12:50:49Z",
-  "transactionDateTo": "2025-07-23T12:50:49Z",
-  "disputedTransactions": "string",
-  "fraudulentTransactions": "string",
-  "virtualServiceCardNumber": "string",
-  "acquirerMemberId": "string",
-  "reasonCode": "string",
-  "eventDate": "2025-07-23T12:50:49Z",
-  "status": "string",
-  "processingDateFrom": "2025-07-23T12:50:49Z",
-  "processingDateTo": "2025-07-23T12:50:49Z",
-  "transactionTypes": [
-    "string"
-  ],
-  "cardIdentifier": {
-    "cardReference": "string",
-    "issuerCardExternalReference": "string"
-  },
-  "accountIdentifier": {
-    "accountReference": "string",
-    "issuerAccountExternalReference": "string"
-  }
-}
+At least one of the following criteria for searching must be provided: • PAN • PAN token • Transaction identifier • Acquirer reference number • Virtual Service Card Number • Card Identifier • Account Identifier
 
----------------------------------------
+If requested, the API allows also to: • search from an issuer and optionally with sub-issuers OR search from a list of issuers (by default, the search is performed on all issuers allowed for the user depending on its rights) • return only certain transactions (disputed transactions, fraudulent transactions) • request to enrich the response with additional data relative to addendum (to retrieve lodging information, car rental information, air itinerary information) by using embedded fields
 
-Response
+The API response contains all matched transactions sorted by descending transaction date.
 
-{
-  "responseMetadata": {
-    "correlationId": "string",
-    "links": {
-      "self": "/x/{x}?x=x",
-      "next": "/x/{x}?page[offset]=2"
-    },
-    "statusMessage": "Executed successfully",
-    "statusCode": 200,
-    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
-    "timeTakenMs": 12
-  },
-  "data": [
-    {
-      "issuerId": "string",
-      "transactionIdentifier": {
-        "transactionId": "string"
-      },
-      "acquirerReferenceData": "string",
-      "acquisitionMaterial": "string",
-      "cardAcceptorCity": "string",
-      "cardAcceptorCountry": "string",
-      "cardAcceptorIdCode": "string",
-      "cardAcceptorName": "string",
-      "cardAcceptorZipCode": "string",
-      "cardScheme": "string",
-      "debit": true,
-      "maskedPan": "string",
-      "merchantCategoryCode": "string",
-      "pan": "string",
-      "reconciliationAmount": {
-        "value": 0,
-        "exponent": 0,
-        "isoCode": "string"
-      },
-      "reversal": true,
-      "transactionAmount": {
-        "value": 0,
-        "exponent": 0,
-        "isoCode": "string"
-      },
-      "transactionDate": "2025-07-23T12:50:49Z",
-      "walletId": "string",
-      "approvalCode": "string",
-      "pointOfSaleEnvironment": "string",
-      "mailPhoneEcommerceAndPaymentIndicator": "string",
-      "pointOfService": {
-        "entryModePan": "string",
-        "entryModePin": "string",
-        "conditionCode": "string",
-        "posTerminalCapability": "string",
-        "cardDataInputCapability": "string",
-        "cardholderAuthenticationCapability": "string",
-        "cardCaptureCapability": "string",
-        "terminalOperatingEnvironment": "string",
-        "cardholderPresentData": "string",
-        "cardPresentData": "string",
-        "cardDataInputMode": "string",
-        "cardholderAuthenticationMethod": "string",
-        "cardholderAuthenticationEntity": "string",
-        "cardDataOutputCapability": "string",
-        "terminalDataOutputCapability": "string",
-        "pinCaptureCapability": "string"
-      },
-      "acquirerId": "string",
-      "destinationId": "string",
-      "authorizationBusinessCaseIdentifier": {
-        "businessCaseId": "string"
-      },
-      "cardIdentifier": {
-        "cardReference": "string",
-        "issuerCardExternalReference": "string"
-      },
-      "panTokenIdentifier": {
-        "panTokenReference": "string"
-      },
-      "lodgingInformation": {
-        "businessFormatCode": "string",
-        "noShowIndicator": "string",
-        "extraCharges": "string",
-        "checkInDate": "string",
-        "dailyRoomRate": "string",
-        "totalTax": "string",
-        "prepaidExpenses": "string",
-        "foodBeverageCharge": "string",
-        "folioCashAdvances": "string",
-        "totalRoomNights": "string",
-        "totalRoomTax": "string"
-      },
-      "carRentalInformation": {
-        "businessFormatCode": "string",
-        "days": "string",
-        "noShowIndicator": "string",
-        "extraCharges": "string",
-        "checkOutDate": "string",
-        "dailyRentRate": "string",
-        "weeklyRentRate": "string",
-        "insuranceCharge": "string",
-        "fuelCharge": "string",
-        "classCode": "string",
-        "oneWayDropCharge": "string",
-        "renterName": "string"
-      },
-      "airItineraryInformation": {
-        "businessFormatCode": "string",
-        "travelAgent": "string",
-        "travelAgentCode": "string",
-        "passengerName": "string",
-        "departureDate": "string",
-        "originCityCode": "string",
-        "restrictedTicketIndicator": "string",
-        "reservationSystem": "string",
-        "creditReasonIndicator": "string",
-        "ticketChangeIndicator": "string",
-        "ticketNumber": "string",
-        "IATACode": "string",
-        "leg1": {
-          "flightNumber": "string",
-          "carrier": "string",
-          "class": "string",
-          "stopOver": "string",
-          "destination": "string",
-          "fareCode": "string"
-        },
-        "leg2": {
-          "flightNumber": "string",
-          "carrier": "string",
-          "class": "string",
-          "stopOver": "string",
-          "destination": "string",
-          "fareCode": "string"
-        },
-        "leg3": {
-          "flightNumber": "string",
-          "carrier": "string",
-          "class": "string",
-          "stopOver": "string",
-          "destination": "string",
-          "fareCode": "string"
-        },
-        "leg4": {
-          "flightNumber": "string",
-          "carrier": "string",
-          "class": "string",
-          "stopOver": "string",
-          "destination": "string",
-          "fareCode": "string"
-        }
-      },
-      "eCommerceSecurityLevelIndicator": {
-        "securityProtocol": "string",
-        "cardHolderAuthentication": "string",
-        "ucafCollectionIndicator": "string"
-      },
-      "transactionCategory": "string",
-      "status": "string",
-      "transmissionDate": "2025-07-23T12:50:49Z",
-      "billingAmount": {
-        "value": 0,
-        "exponent": 0,
-        "isoCode": "string"
-      },
-      "recalculatedBillingAmount": {
-        "value": 0,
-        "exponent": 0,
-        "isoCode": "string"
-      },
-      "disputeStatus": "string",
-      "fraudStatus": "string",
-      "accountIdentifier": {
-        "accountReference": "string",
-        "issuerAccountExternalReference": "string"
-      },
-      "action": "string",
-      "panToken": "string",
-      "processingDate": "2025-07-23T12:50:49Z",
-      "virtualServiceCardNumber": "string",
-      "acquirerMemberId": "string",
-      "reasonCode": "string",
-      "eventDate": "2025-07-23T12:50:49Z",
-      "reversed": true,
-      "authorizationIdentifier": {
-        "transactionId": "string",
-        "issuerExternalAuthorizationReference": "string"
-      }
-    }
-  ]
-}
+Authorizations:
+basic
+query Parameters
+filter
+Array of strings
+Filtered Fields
 
+page
+integer <int32>
+Default: 0
+0
+
+offset
+integer <int32>
+Default: 100
+100
+
+embed
+Array of strings
+Items Value: "addendum"
+Available values for embed : addendum (to retrieve lodgingInformation, carRentalInformation, airItineraryInformation)
+
+header Parameters
+WL-Correlation-ID
+string
+WL-Origin
+string
+WL-Username
+string
+Request Body schema: application/json
+issuerId
+string
+The search is performed by default on all issuers allowed for the user (depending on its rights)
+
+The user can limit the search to one issuer (optional).
+If provided, the list of issuerIds must not be provided, otherwise the search is not performed (an error is generated).
+includeSubIssuers
+boolean
+Default: false
+The user can request to include in the search the sub issuers of an issuer, limited to issuers allowed for the user depending on its rights, only if an issuerId is provided. Default value is false.
+
+issuerIds
+Array of strings
+The search is performed by default on all issuers allowed for the user (depending on its rights)
+
+The user can limit the search to a list of issuers (optional)
+If provided, the issuerId must not be provided, otherwise the search is not performed (an error is generated).
+If at least one issuer is not allowed for this user among the provided list of issuers, the search is not performed (an error is generated).
+pan
+string
+Refer to Transaction.pan One of pan, virtualServiceCardNumber, panToken, acquirerReferenceDataList, cardIdentifier, accountIdentifier or transactionIdentifiers is mandatory
+
+cardScheme
+string
+Refer to Transaction.cardScheme
+
+merchantCategoryCode
+string
+Refer to Transaction.merchantCategoryCode
+
+cardAcceptorName
+string
+Refer to Transaction.cardAcceptorName
+
+panToken
+string
+Refer to Transaction.panToken One of pan, virtualServiceCardNumber, panToken, acquirerReferenceDataList, cardIdentifier, accountIdentifier or transactionIdentifiers is mandatory
+
+acquirerReferenceDataList
+Array of strings
+Refer to Transaction.acquirerReferenceData One of pan, virtualServiceCardNumber, panToken, acquirerReferenceDataList, cardIdentifier, accountIdentifier or transactionIdentifiers is mandatory
+
+transactionAmount
+object
+Refer to Transaction.transactionAmount
+
+transactionAmountCurrency
+string
+Used to search on the transaction original amount currency. In ISO4217 alphabetic format.
+
+transactionIdentifiers
+Array of objects (TransactionIdentifier)
+Refer to Transaction.transactionIdentifier One of pan, virtualServiceCardNumber, panToken, acquirerReferenceDataList, cardIdentifier, accountIdentifier or transactionIdentifiers is mandatory
+
+transactionDateFrom
+string <date-time>
+Refer to Transaction.transactionDate
+
+transactionDateTo
+string <date-time>
+Refer to Transaction.transactionDate
+
+disputedTransactions
+string
+To search transaction based on dispute status.
+
+Possible values :
+
+"ALL" : all transaction regardless the dispute status
+"YES" : only disputed transactions
+"NO" : only non disputed transactions
+Default value : "ALL
+
+fraudulentTransactions
+string
+To search transaction based on fraudulent status.
+
+Possible values :
+
+"ALL" : all transaction regardless the fraud status
+"YES" : only fraudulent transactions
+"NO" : only non fraudulent transactions
+Default value : "ALL
+
+virtualServiceCardNumber
+string
+Refer to Transaction.virtualServiceCardNumber One of pan, virtualServiceCardNumber, panToken, acquirerReferenceDataList, cardIdentifier, accountIdentifier or transactionIdentifiers is mandatory
+
+acquirerMemberId
+string
+Acquirer Member Id of the transaction
+
+reasonCode
+string
+Reason Code of the transaction
+
+eventDate
+string <date-time>
+Event Date of the transaction
+
+status
+string
+Refer to Transaction.status
+
+Possible values :
+
+CREATED
+ABANDON
+IN_ERROR
+DELETED
+REPROCESS
+PROCESSED
+EMBARGO_WAIT
+Default value : "PROCESSED
+
+processingDateFrom
+string <date-time>
+Date the transaction has been processed by the system
+
+processingDateTo
+string <date-time>
+Date the transaction has been processed by the system
+
+transactionTypes
+Array of strings
+Internal transaction type Possible values : BILL_PAYMENT, CASH, CASH_WITHDRAWAL, CREDIT, CREDIT_ADJUSTMENT, CREDIT_FEE, CREDIT_PAYMENT, DEBIT_ADJUSTMENT, DEBIT_FEE, DEBIT_PAYMENT, FUND_TRANSFER, LOAD, PAYMENT, REFUND_PURCHASE, SALES, SALES_CASHBACK
+
+cardIdentifier
+object
+Identification of the card either by Issuer card external reference or by card reference One of pan, virtualServiceCardNumber, panToken, acquirerReferenceDataList, cardIdentifier, accountIdentifier or transactionIdentifiers is mandatory
+
+accountIdentifier
+object
+Identification of the account either by Issuer account external reference or by account reference. One of pan, virtualServiceCardNumber, panToken, acquirerReferenceDataList, cardIdentifier, accountIdentifier or transactionIdentifiers is mandatory
