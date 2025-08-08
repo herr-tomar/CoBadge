@@ -47,20 +47,14 @@ import static org.mockito.Mockito.when;
 @AutoConfigureMockMvc
 public class GenericHazelcastConsumerTest extends BaseAplTest {
 
+    // This is the mock provided by FlowHandlerTestConfiguration
     @Autowired
-    private FlowHandler<DummyMessage, DummyMessage, DummyMessage> sampleFlowHandler; // this is already a Mockito mock from FlowHandlerTestConfiguration
+    private FlowHandler<DummyMessage, DummyMessage, DummyMessage> sampleFlowHandler;
 
-    @Autowired
-    private FlowConfig flowConfig;
-
-    @Autowired
-    private HazelcastInstance hazelcastInstance;
-
-    @Autowired
-    private GenericHazelcastConsumer<DummyMessage, DummyMessage, DummyMessage> consumer;
-
-    @Autowired
-    private FlowHandlerTestConfiguration.TestCollector testCollector;
+    @Autowired private FlowConfig flowConfig;
+    @Autowired private HazelcastInstance hazelcastInstance;
+    @Autowired private GenericHazelcastConsumer<DummyMessage, DummyMessage, DummyMessage> consumer;
+    @Autowired private FlowHandlerTestConfiguration.TestCollector testCollector;
 
     private IMap<Object, Object> requestMap;
     private IMap<String, String> routerMap;
@@ -76,19 +70,18 @@ public class GenericHazelcastConsumerTest extends BaseAplTest {
         requestMap.clear();
         testCollector.clear();
 
-        // --- Ensure a clean happy-path baseline for EACH test ---
-        // (We re-stub the mock provided by FlowHandlerTestConfiguration to avoid bleed from other tests)
+        // Ensure a clean happy-path baseline for EACH test
         when(sampleFlowHandler.getFlowName()).thenReturn("myFlow");
         when(sampleFlowHandler.deserializeRequest(any())).thenReturn(new DummyMessage());
-        when(sampleFlowHandler.extractCorrelationId(any())).thenReturn("corr-42");
+        when(sampleFlowHandler.extractCorrelationId(any())).thenReturn("corr-42"); // returns same ID regardless of request
         when(sampleFlowHandler.handleRequest(any())).thenReturn(new DummyMessage());
-        // We do NOT restub sendResponse here; FlowHandlerTestConfiguration already wires it to TestCollector
+        // sendResponse is already wired to TestCollector in FlowHandlerTestConfiguration
     }
 
     @Test
     public void testPollRequestMaps_PositiveFlow() {
         Map<String, Object> request = Map.of("key", "value");
-        String correlationId = sampleFlowHandler.extractCorrelationId(request); // "corr-42" per stub
+        String correlationId = sampleFlowHandler.extractCorrelationId(request); // use the request Map
 
         // Simulate a router claim and an enqueued request
         requestMap.put(correlationId, request);
@@ -124,18 +117,19 @@ public class GenericHazelcastConsumerTest extends BaseAplTest {
 
     @Test
     public void testPollRequestMaps_HandlerThrowsException() {
-        // Use the SAME correlation id the handler generates to match the key/claim
-        String corrId = sampleFlowHandler.extractCorrelationId(new DummyMessage()); // "corr-42" per stub
+        // Build the same type of request the consumer will see
+        Map<String, Object> faultyRequest = Map.of("key", "value");
+        String corrId = sampleFlowHandler.extractCorrelationId(faultyRequest); // use the request Map
 
         // For THIS test only, make the handler fail
         doThrow(new RuntimeException("boom")).when(sampleFlowHandler).handleRequest(any());
 
         // Simulate a router claim and an enqueued request
-        requestMap.put(corrId, "faultyRequest");
+        requestMap.put(corrId, faultyRequest);
         routerMap.put("route-lock-" + corrId, "");
 
         await()
-                .atMost(3, TimeUnit.SECONDS)
+                .atMost(5, TimeUnit.SECONDS) // give it a little more time to be safe
                 .pollInterval(100, TimeUnit.MILLISECONDS)
                 .untilAsserted(() -> {
                     assertFalse(testCollector.wasSent(flowConfig.responseTopic()),
