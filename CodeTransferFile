@@ -1,1 +1,123 @@
- Optional.ofNullable(responseMetadataDto).isPresent(()-> new RuntimeException("Exception in fetching transaction identifier"));
+message DisputeCreateRequestDto {
+  string impulsOId = 1;
+  string umsatzId = 2;
+  string empfKontoId = 3;
+  string empfBlz = 4;
+  string reklaGrundKat1 = 5;
+  string reklaBetrag = 6;
+  string reklaBetragWs = 7;
+  string reklaTeilbetragKz = 8;
+  string karteSperren = 9;
+  string autoErstattungKz = 10;
+  string crdVfggOrigWs = 11;
+  string crdVfggOrigBtrg = 12;
+  string crdVfggOrigKurs = 13;
+  string crdVerfallMon = 14;
+  string crdTaTraceNr = 15;
+  string primaryAccountNumber = 16;
+  string acquiringReferenceNumber = 17;
+  string transactionDateAndTime = 18;
+  string issuerId = 19;
+}
+
+--------
+
+syntax = "proto3";
+
+package osplus.pkptuna.dispute.ibo.create.model;
+
+import "google/protobuf/timestamp.proto";
+
+option java_package = "osplus.pkptuna.dispute.ibo.create.model";
+option java_outer_classname = "DisputeIboCreateProto";
+option java_multiple_files = true;
+
+// -------------Request body-----------------
+
+message DisputeIboCreateRequestDto {
+  string disputeReason = 1;
+  string refundRedebitIndicator = 2;
+  AmountDto refundRedebitAmount = 3;
+  bool declareFraudIndicator = 4;
+  string issuerDisputeExternalReference = 5;
+
+  repeated DisputePostingRequestDto disputePostings = 6;
+  repeated DisputeEventRequestDto disputeEvents = 7;
+  repeated DisputeDocumentRequestDto disputeDocuments = 8;
+}
+
+message AmountDto {
+  int64 value = 1;
+  int32 exponent = 2;
+  string isoCode = 3;
+}
+
+message DisputePostingRequestDto {
+  AmountDto postingAmount = 1;
+  string message = 2;
+  bool immediateReimbursement = 3;
+  string postingTypeReference = 4;
+}
+
+message DisputeEventRequestDto {
+  string type = 1;
+  string message = 2;
+}
+
+message DisputeDocumentRequestDto {
+  string data = 1;
+  string type = 2;
+  string label = 3;
+  string fileName = 4;
+  string documentTypeId = 5;
+}
+
+// -------------Response body-----------------
+
+message DisputeIboCreateResponseDto {
+  ResponseMetadataDto responseMetadata = 1;
+  DisputeCreateDataDto data = 2;
+}
+
+message ResponseMetadataDto {
+  string correlationId = 1;
+  LinksDto links = 2;
+  string statusMessage = 3;
+  int32 statusCode = 4;
+  string responseDateTime = 5;
+  int64 timeTakenMs = 6;
+}
+
+message LinksDto {
+  string self = 1;
+  string next = 2;
+}
+
+message DisputeCreateDataDto {
+  DisputeFolderIdentifierDto disputeFolderIdentifier = 1;
+  repeated DisputePostingResponseDto disputePostings = 2;
+  repeated DisputeEventResponseDto disputeEvents = 3;
+  repeated DisputeDocumentResponseDto disputeDocuments = 4;
+}
+
+message DisputeFolderIdentifierDto {
+  string disputeFolderReference = 1;
+  string issuerDisputeExternalReference = 2;
+}
+
+message DisputePostingResponseDto {
+  AmountDto postingAmount = 1;
+  string postingTypeReference = 2;
+  google.protobuf.Timestamp creationDate = 3;
+}
+
+message DisputeEventResponseDto {
+  string type = 1;
+  google.protobuf.Timestamp creationDate = 2;
+}
+
+message DisputeDocumentResponseDto {
+  string fileName = 1;
+  google.protobuf.Timestamp creationDate = 2;
+  string documentTypeId = 3;
+}
