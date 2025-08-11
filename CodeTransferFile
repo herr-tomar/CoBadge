@@ -1,58 +1,149 @@
-private DisputeTransactionResponseDto lookUpTransactionId(String issuerId,
-                                                          String arn,
-                                                          DisputeTransactionsRequestDto requestDto) {
-    try {
-        // Basic Auth header
-        String basicAuth = Base64.getEncoder().encodeToString(
-                (username + ":" + password).getBytes(StandardCharsets.UTF_8)
-        );
-
-        // POST call
-        String json = webClient.post()
-                .uri(uriBuilder -> uriBuilder.path(pathLookupTransactionId).build())
-                .header("WL-Correlation-ID", "pkptuna-" + System.currentTimeMillis())
-                .header("WL-Origin", "pkptuna-service")
-                .header(HttpHeaders.AUTHORIZATION, "Basic " + basicAuth)
-                .header(HttpHeaders.CONTENT_TYPE, "application/json")
-                .header(HttpHeaders.ACCEPT, "application/json")
-                // Mapper must translate:
-                // issuer_id -> "issuerId"
-                // acquirerReferenceId[] -> "acquirerReferenceDataList":[...]
-                .bodyValue(disputeTransactionsRequestDtoMapper.toRestDto(requestDto))
-                .retrieve()
-                .bodyToMono(String.class)
-                .block();
-
-        // Parse JSON -> Proto (fills everything, including repeated fields)
-        DisputeTransactionResponseDto.Builder builder = DisputeTransactionResponseDto.newBuilder();
-        ProtobufJsonUtil.parseJsonToProto(json, builder);
-        return builder.build();
-
-    } catch (WebClientResponseException e) {
-        // Build a structured error response with metadata
-        return DisputeTransactionResponseDto.newBuilder()
-                .setResponseMetadata(ResponseMetadataDto.newBuilder()
-                        .setCorrelationId(e.getResponseHeaders() != null
-                                ? e.getResponseHeaders().getFirst("WL-Correlation-ID")
-                                : "")
-                        .setStatusMessage("HTTP " + e.getStatusCode().value() + " - " + e.getStatusText())
-                        .setStatusCode(e.getStatusCode().value())
-                        .setResponseDateTime(java.time.OffsetDateTime.now().toString())
-                        .setTimeTakenMs(0)
-                        .build())
-                // leave data empty on error
-                .build();
-
-    } catch (Exception e) {
-        LOGGER.error("Exception during transactionId lookup (issuerId={}, arn={})", issuerId, arn, e);
-        return DisputeTransactionResponseDto.newBuilder()
-                .setResponseMetadata(ResponseMetadataDto.newBuilder()
-                        .setCorrelationId("")
-                        .setStatusMessage("ERROR - " + e.getClass().getSimpleName() + ": " + e.getMessage())
-                        .setStatusCode(500)
-                        .setResponseDateTime(java.time.OffsetDateTime.now().toString())
-                        .setTimeTakenMs(0)
-                        .build())
-                .build();
+{
+  "disputeReason": "string",
+  "refundRedebitIndicator": "string",
+  "refundRedebitAmount": {
+    "value": 0,
+    "exponent": 0,
+    "isoCode": "string"
+  },
+  "declareFraudIndicator": true,
+  "issuerDisputeExternalReference": "string",
+  "disputePostings": [
+    {
+      "postingAmount": {
+        "value": 0,
+        "exponent": 0,
+        "isoCode": "string"
+      },
+      "message": "string",
+      "immediateReimbursement": true,
+      "postingTypeReference": "string"
     }
+  ],
+  "disputeEvents": [
+    {
+      "type": "string",
+      "message": "string"
+    }
+  ],
+  "disputeDocuments": [
+    {
+      "data": "string",
+      "type": "string",
+      "label": "string",
+      "fileName": "string",
+      "documentTypeId": "string"
+    }
+  ]
 }
+
+-------------------------------------
+
+{
+  "responseMetadata": {
+    "correlationId": "string",
+    "links": {
+      "self": "/x/{x}?x=x",
+      "next": "/x/{x}?page[offset]=2"
+    },
+    "statusMessage": "Executed successfully",
+    "statusCode": 200,
+    "responseDateTime": "format:yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+    "timeTakenMs": 12
+  },
+  "data": {
+    "disputeFolderIdentifier": {
+      "disputeFolderReference": "string",
+      "issuerDisputeExternalReference": "string"
+    },
+    "disputePostings": [
+      {
+        "postingAmount": {
+          "value": 0,
+          "exponent": 0,
+          "isoCode": "string"
+        },
+        "postingTypeReference": "string",
+        "creationDate": "2025-07-23T12:50:48Z"
+      }
+    ],
+    "disputeEvents": [
+      {
+        "type": "string",
+        "creationDate": "2025-07-23T12:50:48Z"
+      }
+    ],
+    "disputeDocuments": [
+      {
+        "fileName": "string",
+        "creationDate": "2025-07-23T12:50:48Z",
+        "documentTypeId": "string"
+      }
+    ]
+  }
+}
+
+
+
+----------------------
+
+syntax = "proto3";
+
+package osplus.pkptuna.dispute.model;
+
+import "google/protobuf/timestamp.proto";
+
+option java_package = "osplus.pkptuna.dispute.model"; // TODO add create
+option java_outer_classname = "DisputeCreateProto";
+option java_multiple_files = true;
+
+// -----Vom Orchestrator gesendetes DTO
+message DisputeCreateRequestWrapperDto {
+  string correlationId = 1;
+  DisputeCreateRequestDto payload = 2;
+}
+
+message DisputeCreateRequestDto {
+    DisputeCreateRequestIboDto body = 1;
+    string issuerId = 2;
+}
+
+// Rest dto wird für IBO-Call verwendet
+message DisputeCreateRequestIboDto {
+  string disputeReason = 1;
+  string refundRedebitIndicator = 2;
+  RefundRedebitAmountDto refundRedebitAmount = 3;
+  string declareFraudIndicator = 4;
+  repeated DisputeEventDto disputeEvents = 5;
+  repeated DisputeDocumentDto disputeDocuments = 6;
+}
+
+message RefundRedebitAmountDto {
+  int32 value = 1;
+  int32 exponent = 2;
+  string isoCode = 3;
+}
+
+message DisputeEventDto {
+  string type = 1;
+  string message = 2;
+}
+
+message DisputeDocumentDto {
+  string data = 1;
+  string type = 2;
+  string label = 3;
+  string fileName = 4;
+  string documentTypeId = 5;
+}
+
+message DisputeCreateResponseDto {
+  string status = 1;
+}
+
+message DisputeCreateResponseWrapperDto {
+  string correlationId = 1;
+  DisputeCreateResponseDto response = 2;
+}
+
+
