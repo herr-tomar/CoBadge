@@ -1,18 +1,24 @@
 syntax = "proto3";
 
-package osplus.pkptuna.dispute.model;
+package osplus.pkptuna.dispute.create.model;
 
 import "google/protobuf/timestamp.proto";
 
-option java_package = "osplus.pkptuna.dispute.model";
+option java_package = "osplus.pkptuna.dispute.create.model";
 option java_outer_classname = "DisputeCreateProto";
 option java_multiple_files = true;
 
-/* ===== Request (wrapper + body) ===== */
-
+// -----Vom Orchestrator gesendetes DTO
 message DisputeCreateRequestWrapperDto {
   string correlationId = 1;
   DisputeCreateRequestDto payload = 2;
+}
+
+message DisputeCreateRequestMetadataDto {
+  string requestedBy = 1;
+  string requestChannel = 2;
+  string messageType = 3;
+  string businessContext = 4;
 }
 
 message DisputeCreateRequestDto {
@@ -22,12 +28,9 @@ message DisputeCreateRequestDto {
 
 message DisputeCreateRequestIboDto {
   string disputeReason = 1;
-  string refundRedebitIndicator = 2;   // consider enum later
+  string refundRedebitIndicator = 2;
   AmountDto refundRedebitAmount = 3;
-
   bool declareFraudIndicator = 4;
-
-  // ✅ present in your JSON request (top-level)
   string issuerDisputeExternalReference = 5;
 
   repeated DisputePostingRequestDto disputePostings = 6;
@@ -36,7 +39,7 @@ message DisputeCreateRequestIboDto {
 }
 
 message AmountDto {
-  int64 value = 1;    // use int64 for money
+  int64 value = 1;
   int32 exponent = 2;
   string isoCode = 3;
 }
@@ -53,12 +56,67 @@ message DisputeEventRequestDto {
   string message = 2;
 }
 
-// If `data` is Base64, prefer bytes (protobuf JSON renders Base64 automatically).
-// If it’s literal text, keep string. Pick one based on your backend.
 message DisputeDocumentRequestDto {
-  bytes data = 1;   // change to: string data = 1;  if server expects plain text
+  string data = 1;
   string type = 2;
   string label = 3;
   string fileName = 4;
   string documentTypeId = 5;
+}
+
+
+// Rest dto wird für IBO-Call verwendet
+
+message DisputeCreateResponseWrapperDto {
+  string correlationId = 1;
+  ResponseMetadataDto responseMetadata = 2;
+  DisputeCreateResponseDto response = 3;
+}
+
+message ResponseMetadataDto {
+  string correlationId = 1;
+  LinksDto links = 2;
+  string statusMessage = 3;
+  int32 statusCode = 4;
+  string responseDateTime = 5;
+  int64 timeTakenMs = 6;
+}
+
+message LinksDto {
+  string self = 1;
+  string next = 2;
+}
+
+// Business payload
+message DisputeCreateResponseDto {
+  DisputeCreateDataDto data = 1;
+}
+
+message DisputeCreateDataDto {
+  DisputeFolderIdentifierDto disputeFolderIdentifier = 1;
+  repeated DisputePostingResponseDto disputePostings = 2;
+  repeated DisputeEventResponseDto disputeEvents = 3;
+  repeated DisputeDocumentResponseDto disputeDocuments = 4;
+}
+
+message DisputeFolderIdentifierDto {
+  string disputeFolderReference = 1;
+  string issuerDisputeExternalReference = 2;
+}
+
+message DisputePostingResponseDto {
+  AmountDto postingAmount = 1;
+  string postingTypeReference = 2;
+  google.protobuf.Timestamp creationDate = 3;
+}
+
+message DisputeEventResponseDto {
+  string type = 1;
+  google.protobuf.Timestamp creationDate = 2;
+}
+
+message DisputeDocumentResponseDto {
+  string fileName = 1;
+  google.protobuf.Timestamp creationDate = 2;
+  string documentTypeId = 3;
 }
