@@ -1,123 +1,52 @@
-message DisputeCreateRequestDto {
-  string impulsOId = 1;
-  string umsatzId = 2;
-  string empfKontoId = 3;
-  string empfBlz = 4;
-  string reklaGrundKat1 = 5;
-  string reklaBetrag = 6;
-  string reklaBetragWs = 7;
-  string reklaTeilbetragKz = 8;
-  string karteSperren = 9;
-  string autoErstattungKz = 10;
-  string crdVfggOrigWs = 11;
-  string crdVfggOrigBtrg = 12;
-  string crdVfggOrigKurs = 13;
-  string crdVerfallMon = 14;
-  string crdTaTraceNr = 15;
-  string primaryAccountNumber = 16;
-  string acquiringReferenceNumber = 17;
-  string transactionDateAndTime = 18;
-  string issuerId = 19;
-}
-
---------
-
-syntax = "proto3";
-
-package osplus.pkptuna.dispute.ibo.create.model;
-
-import "google/protobuf/timestamp.proto";
-
-option java_package = "osplus.pkptuna.dispute.ibo.create.model";
-option java_outer_classname = "DisputeIboCreateProto";
-option java_multiple_files = true;
-
-// -------------Request body-----------------
-
-message DisputeIboCreateRequestDto {
-  string disputeReason = 1;
-  string refundRedebitIndicator = 2;
-  AmountDto refundRedebitAmount = 3;
-  bool declareFraudIndicator = 4;
-  string issuerDisputeExternalReference = 5;
-
-  repeated DisputePostingRequestDto disputePostings = 6;
-  repeated DisputeEventRequestDto disputeEvents = 7;
-  repeated DisputeDocumentRequestDto disputeDocuments = 8;
-}
-
-message AmountDto {
-  int64 value = 1;
-  int32 exponent = 2;
-  string isoCode = 3;
-}
-
-message DisputePostingRequestDto {
-  AmountDto postingAmount = 1;
-  string message = 2;
-  bool immediateReimbursement = 3;
-  string postingTypeReference = 4;
-}
-
-message DisputeEventRequestDto {
-  string type = 1;
-  string message = 2;
-}
-
-message DisputeDocumentRequestDto {
-  string data = 1;
-  string type = 2;
-  string label = 3;
-  string fileName = 4;
-  string documentTypeId = 5;
-}
-
-// -------------Response body-----------------
-
-message DisputeIboCreateResponseDto {
-  ResponseMetadataDto responseMetadata = 1;
-  DisputeCreateDataDto data = 2;
-}
-
-message ResponseMetadataDto {
-  string correlationId = 1;
-  LinksDto links = 2;
-  string statusMessage = 3;
-  int32 statusCode = 4;
-  string responseDateTime = 5;
-  int64 timeTakenMs = 6;
-}
-
-message LinksDto {
-  string self = 1;
-  string next = 2;
-}
-
-message DisputeCreateDataDto {
-  DisputeFolderIdentifierDto disputeFolderIdentifier = 1;
-  repeated DisputePostingResponseDto disputePostings = 2;
-  repeated DisputeEventResponseDto disputeEvents = 3;
-  repeated DisputeDocumentResponseDto disputeDocuments = 4;
-}
-
-message DisputeFolderIdentifierDto {
-  string disputeFolderReference = 1;
-  string issuerDisputeExternalReference = 2;
-}
-
-message DisputePostingResponseDto {
-  AmountDto postingAmount = 1;
-  string postingTypeReference = 2;
-  google.protobuf.Timestamp creationDate = 3;
-}
-
-message DisputeEventResponseDto {
-  string type = 1;
-  google.protobuf.Timestamp creationDate = 2;
-}
-
-message DisputeDocumentResponseDto {
-  string fileName = 1;
-  google.protobuf.Timestamp creationDate = 2;
-  string documentTypeId = 3;
-}
+Der Service dient dazu, eine Reklamation zu einem Cobadge-Umsatz im IDM anzulegen.
+IBO-IDM ist ein CoBadge-System, indem der DMC/VID Teil der Spk-Card CoBadge DMC/VID verwaltet und durch die qards (Service-Prozessor der Sparkassen) prozessiert wird.
+Zusätzlich zu den übergebenen Daten lädt der Service weitere Daten, die vom IDM benötigt werden.
+Die Kommunikation mit dem IDM erfolgt immer über ein Gateway.
+Das Ergebnis aus dem IDM wird dann vom Service zurückgeliefert.
+Der Service nimmt folgende Parameter entgegen, die zu einer Reklamation erfasst werden:
+- IMPM_IMPS_OID: Eindeutige Identifikation des Impulses im OSPlus
+- UMSATZ_ID: Eindeutige Identifikation eines Umsatzes eines Empfänger-Kontos
+- EMPF_KONTO_ID: Eindeutige Identifikation des Empfängerkontos der Transaktion
+- IMPS_KTGR: Grund der Reklamation (Kategorie Ebene 1)
+- ORIG_BTRG_TBTR: Nur bei einer Teilreklamation gefüllt. Enthält in dem Fall den zu reklamierenden Betrag in der verfügten Währung.
+- KARTEN_SPERR_KZ: Kennzeichen, ob Karte gesperrt werden soll
+- CBD_UMS_ERST_AUTO_ANZ: Anzahl der bereits erhaltenen automatischen Erstattungen eines KI im abgefragten Zeitraum
+Der Service bestimmt über einen Aufruf des Shared-Service UmsatzInternLesen weitere Daten zu dem Umsatz:
+- UMSATZ_BETRAG: Gesamtbetrag, mit dem das Karteninhaber-Konto belastet wurde. Währung ist die aus dem Zahlungsverkehr (EUR).
+- EMPF_BLZ: Bankleitzahl des Empfängerkontos
+- CRD_TA_TRACE_NR: Transaction Life Cycle ID
+- CRD_PAN: PrimaryAccountNumber
+- SEP_UTMT_CRED_ID: AcquiringReferenceNumber
+- CRD_TA_DATE_TIME: Zeitpunkt der Verfügung (Ortszeit)
+- CRD_VERFALL_MON: Verfall Jahr/ Monat der verwendeten Karte
+- CRD_VFGG_ORIG_KURS: Umrechnungskurs bei einer Transaktion in Fremdwährung
+- CRD_VFGG_ORIG_WS: Original-Währungsschlüssel
+- CRD_VFGG_ORIG_BTRG: verfügter Betrag in Original-Währung
+Der Service liest die Institutswerte:
+- DMC-MAXBT-AE: Maximaler Betrag für automatische Erstattung
+- DMC-MAXAZ-AE: Maximaler Anzahl automatischer Erstattungen im Zeitraum
+- DMC-SVPROC-I: Kurztext für den Kartenprozessor
+Der Service bestimmt dann anhand der gelesenen und übergebenen Daten, ob eine automatische Erstattung zulässig ist oder nicht.
+Alle für das Anlegen der Reklamation im IDM benötigten Daten werden anschließend in einem Aufruf an das Gateway übergeben:
+- impulsOId: IMPULS_OID
+- umsatzId: UMSATZ_ID
+- empfKontoId: EMPF_KONTO_ID
+- empfBlz: EMPF_BLZ
+- reklaGrundKat1: REKLA_GRUND_KAT_1
+- reklaBetrag: TEILBETRAG bei Teilreklamation, sonst UMSATZ_BETRAG
+- reklaBetragWs: CRD_VFGG_ORIG_WS bei Teilreklamation, sonst EUR
+- reklaTeilbetragKz: Kennzeichen, ob Voll- oder Teilreklamation (J/N)
+- karteSperren: KARTE_SPERREN_KZ
+- autoErstattungKz: Prüfergebnis, ob automatische Erstattung zulässig ist (J/N)
+- crdVfggOrigWs: CRD_VFGG_ORIG_WS
+- crdVfggOrigBtrg: CRD_VFGG_ORIG_BTRG
+- crdVfggOrigKurs: CRD_VFGG_ORIG_KURS
+- crdVerfallMon: CRD_VERFALL_MON
+- crdTaTraceNr: CRD_TA_TRACE_NR
+- primaryAccountNumber: CRD_PAN
+- acquiringReferenceNumber: SEP_UTMT_CRED_ID
+- transactionDateAndTime: CRD_TA_DATE_TIME
+- IssuerId: Eindeutige Id des Mandanten für das IDM, aus dem Kartenprozessor abgeleitet
+Der Service gibt zurück:
+- REKL_VGNG_INTN_NR: ID des dispute Folders im IDM
+- CBD_UMS_ERST_AUTO_KZ: Prüfergebnis, ob automatische Erstattung zulässig ist (J/N)	
