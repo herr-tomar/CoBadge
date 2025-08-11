@@ -1,63 +1,219 @@
 syntax = "proto3";
 
-package transactions.v2;
+package osplus.pkptuna.dispute.transaction.identifier.model;
 
-// ------------------------------
-// Request body
-// ------------------------------
-message SearchTransactionsRequest {
-  // "issuerId"
+option java_package = "osplus.pkptuna.dispute.transaction.identifier.model";
+option java_outer_classname = "DisputeTransactionIdentifierProto";
+option java_multiple_files = true;
+
+// -------------Request body-----------------
+message DisputeTransactionsRequestDto {
   string issuer_id = 1;
-
-  // "acquirerReferenceDataList"
-  repeated string acquirer_reference_data_list = 2;
+  repeated string acquirerReferenceId = 2;
 }
 
-// ------------------------------
-// Response body
-// ------------------------------
-message SearchTransactionsResponse {
-  // "responseMetadata"
-  ResponseMetadata response_metadata = 1;
-
-  // "data"
-  repeated Data data = 2;
+// -------------Response body-----------------
+message DisputeTransactionsResponseDto {
+  ResponseMetadataDto response_metadata = 1;
+  repeated DataDto data = 2;
 }
 
-message ResponseMetadata {
-  // "correlationId"
+message ResponseMetadataDto {
   string correlation_id = 1;
-
-  // "links"
-  Links links = 2;
-
-  // "statusMessage"
+  LinksDto links = 2;
   string status_message = 3;
-
-  // "statusCode"
   int32 status_code = 4;
-
-  // "responseDateTime" (keep as string to preserve exact format)
   string response_date_time = 5;
-
-  // "timeTakenMs"
   int64 time_taken_ms = 6;
 }
 
-message Links {
-  // "self"
+message LinksDto {
   string self = 1;
 }
 
-message Data {
-  // "issuerId"
+message DataDto {
   string issuer_id = 1;
-
-  // "transactionIdentifier"
-  TransactionIdentifier transaction_identifier = 2;
+  TransactionIdentifierDto transaction_identifier = 2;
 }
 
-message TransactionIdentifier {
-  // "transactionId"
+message TransactionIdentifierDto {
   string transaction_id = 1;
+}
+
+
+
+---------------------
+
+package osplus.pkptuna.dispute.service.impl;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.dispute.config.DisputeServiceProperties;
+import osplus.pkptuna.dispute.lookup.model.DisputeFolderEntryDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
+import osplus.pkptuna.dispute.lookup.model.FullDisputeLookupResponseDto;
+import osplus.pkptuna.dispute.model.DisputeCreateRequestIboDto;
+import osplus.pkptuna.dispute.model.DisputeCreateResponseDto;
+import osplus.pkptuna.dispute.service.DisputeService;
+import osplus.pkptuna.dispute.transaction.identifier.model.DisputeTransactionsRequestDto;
+import osplus.pkptuna.dispute.transaction.identifier.model.DisputeTransactionsResponseDto;
+import osplus.pkptuna.protobuf.util.ProtobufJsonUtil;
+import osplus.pkptuna.rest.dispute.transaction.identifier.model.mapper.DisputeTransactionsRequestDtoMapper;
+
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * Implementierung des {@link DisputeService} zur Abfrage von Dispute-Ordnern
+ * über eine externe Issuer-API mithilfe von WebClient (Spring WebFlux).
+ */
+public class DisputeServiceImpl implements DisputeService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeServiceImpl.class);
+    private final WebClient webClient;
+    private final String username;
+    private final String password;
+    private final String pathDisputeLookup;
+    private final String pathDisputeFolderCreate;
+    private final String pathLookupTransactionId;
+    private final DisputeTransactionsRequestDtoMapper disputeTransactionsRequestDtoMapper;
+
+    /**
+     * Konstruktor für {@code DisputeServiceImpl}.
+     *
+     * @param webClient WebClient zur Erstellung des REST-Clients
+     * @param props            Konfigurationseigenschaften für Authentifizierung und Endpunkte
+     */
+    public DisputeServiceImpl(final WebClient webClient,
+                              final DisputeServiceProperties props,
+                              DisputeTransactionsRequestDtoMapper disputeTransactionsRequestDtoMapper) {
+        this.username = props.auth().username();
+        this.password = props.auth().password();
+        this.pathDisputeLookup = props.paths().lookupDisputes();
+        this.pathDisputeFolderCreate = props.paths().createDisputeFolder();
+        this.pathLookupTransactionId = props.paths().lookupTransactionid();
+        this.webClient = webClient;
+        this.disputeTransactionsRequestDtoMapper = disputeTransactionsRequestDtoMapper;
+    }
+
+    /**
+     * {@inheritDoc}
+     * Führt eine Abfrage eines Dispute-Ordners anhand der übergebenen Issuer-ID und Kartenreferenz durch.
+     */
+    @Override
+    public DisputeLookupResponseDto lookupDisputeFolder(String issuerId, String cardReference) {
+        try {
+            String basicAuth = Base64.getEncoder().encodeToString(
+                    (username + ":" + password).getBytes(StandardCharsets.UTF_8)
+            );
+
+            String json = webClient.get()
+                    .uri(uriBuilder -> {
+                        URI builder = uriBuilder
+                                .path(pathDisputeLookup)
+                                .build(issuerId, cardReference);
+                        return builder;
+                    })
+                    .header("WL-Correlation-ID", "pkptuna-" + System.currentTimeMillis())
+                    .header("WL-Origin", "pkptuna-service")
+                    .header(HttpHeaders.AUTHORIZATION, "Basic " + basicAuth)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+
+            FullDisputeLookupResponseDto.Builder fullBuilder = FullDisputeLookupResponseDto.newBuilder();
+            ProtobufJsonUtil.parseJsonToProto(json, fullBuilder);
+
+            List<DisputeFolderEntryDto> folderEntries = fullBuilder.getDataList().stream()
+                    .map(data -> DisputeFolderEntryDto.newBuilder()
+                            .setDisputeFolderReference(data.getDisputeFolderIdentifier().getDisputeFolderReference())
+                            .setStatusCode(data.getStatusCode())
+                            .build())
+                    .collect(Collectors.toList());
+
+            return DisputeLookupResponseDto.newBuilder()
+                    .setDisputeFolderExists(!folderEntries.isEmpty())
+                    .addAllDisputeFolders(folderEntries)
+                    .build();
+
+        } catch (WebClientResponseException e) {
+            LOGGER.warn("External API returned error: {}", e.getStatusCode());
+        } catch (Exception e) {
+            LOGGER.error("Exception during dispute lookup", e);
+        }
+
+        return DisputeLookupResponseDto.newBuilder()
+                .setDisputeFolderExists(false)
+                .build();
+    }
+
+    @Override
+    public DisputeCreateResponseDto createDisputeFolder(String issuerId,
+                                                        String transactionId,
+                                                        DisputeCreateRequestIboDto requestDto) {
+
+    }
+
+
+
+
+
+    // Private --------------------------------
+    private DisputeCreateResponseDto createDisputeFolder(String issuerId,
+                                                        String transactionId,
+                                                        DisputeTransactionsRequestDto requestDto) {
+        try {
+            String basicAuth = Base64.getEncoder().encodeToString(
+                    (username + ":" + password).getBytes(StandardCharsets.UTF_8)
+            );
+
+            String json = webClient.post()
+                    .uri(uriBuilder -> {
+                        URI builder = uriBuilder
+                                .path(pathLookupTransactionId).build();
+                        return builder;
+                    })
+                    .header("WL-Correlation-ID", "pkptuna-" + System.currentTimeMillis())
+                    .header("WL-Origin", "pkptuna-service")
+                    .header(HttpHeaders.AUTHORIZATION, "Basic " + basicAuth)
+                    .bodyValue(disputeTransactionsRequestDtoMapper.toRestDto(requestDto))
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+
+            DisputeTransactionsResponseDto.Builder fullBuilder = DisputeTransactionsResponseDto.newBuilder();
+            ProtobufJsonUtil.parseJsonToProto(json, fullBuilder);
+
+            List<DisputeFolderEntryDto> folderEntries = fullBuilder.getDataList().stream()
+                    .map(data -> DisputeFolderEntryDto.newBuilder()
+                            .setDisputeFolderReference(data.getDisputeFolderIdentifier().getDisputeFolderReference())
+                            .setStatusCode(data.getStatusCode())
+                            .build())
+                    .collect(Collectors.toList());
+
+            return DisputeLookupResponseDto.newBuilder()
+                    .setDisputeFolderExists(!folderEntries.isEmpty())
+                    .addAllDisputeFolders(folderEntries)
+                    .build();
+
+            return DisputeCreateResponseDto.newBuilder()
+                    .setStatus("OK")
+                    .build();
+
+        } catch (WebClientResponseException e) {
+            LOGGER.warn("External API returned error: {}", e.getStatusCode());
+        } catch (Exception e) {
+            LOGGER.error("Exception during dispute lookup", e);
+        }
+
+        return DisputeCreateResponseDto.newBuilder()
+                .setStatus("ERROR")
+                .build();
+    }
 }
