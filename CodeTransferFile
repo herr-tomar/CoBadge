@@ -1,38 +1,64 @@
-{
-  "disputeReason": "string",
-  "refundRedebitIndicator": "string",
-  "refundRedebitAmount": {
-    "value": 0,
-    "exponent": 0,
-    "isoCode": "string"
-  },
-  "declareFraudIndicator": true,
-  "issuerDisputeExternalReference": "string",
-  "disputePostings": [
-    {
-      "postingAmount": {
-        "value": 0,
-        "exponent": 0,
-        "isoCode": "string"
-      },
-      "message": "string",
-      "immediateReimbursement": true,
-      "postingTypeReference": "string"
-    }
-  ],
-  "disputeEvents": [
-    {
-      "type": "string",
-      "message": "string"
-    }
-  ],
-  "disputeDocuments": [
-    {
-      "data": "string",
-      "type": "string",
-      "label": "string",
-      "fileName": "string",
-      "documentTypeId": "string"
-    }
-  ]
+syntax = "proto3";
+
+package osplus.pkptuna.dispute.model;
+
+import "google/protobuf/timestamp.proto";
+
+option java_package = "osplus.pkptuna.dispute.model";
+option java_outer_classname = "DisputeCreateProto";
+option java_multiple_files = true;
+
+/* ===== Request (wrapper + body) ===== */
+
+message DisputeCreateRequestWrapperDto {
+  string correlationId = 1;
+  DisputeCreateRequestDto payload = 2;
+}
+
+message DisputeCreateRequestDto {
+  DisputeCreateRequestIboDto body = 1;
+  string issuerId = 2;
+}
+
+message DisputeCreateRequestIboDto {
+  string disputeReason = 1;
+  string refundRedebitIndicator = 2;   // consider enum later
+  AmountDto refundRedebitAmount = 3;
+
+  bool declareFraudIndicator = 4;
+
+  // ✅ present in your JSON request (top-level)
+  string issuerDisputeExternalReference = 5;
+
+  repeated DisputePostingRequestDto disputePostings = 6;
+  repeated DisputeEventRequestDto disputeEvents = 7;
+  repeated DisputeDocumentRequestDto disputeDocuments = 8;
+}
+
+message AmountDto {
+  int64 value = 1;    // use int64 for money
+  int32 exponent = 2;
+  string isoCode = 3;
+}
+
+message DisputePostingRequestDto {
+  AmountDto postingAmount = 1;
+  string message = 2;
+  bool immediateReimbursement = 3;
+  string postingTypeReference = 4;
+}
+
+message DisputeEventRequestDto {
+  string type = 1;
+  string message = 2;
+}
+
+// If `data` is Base64, prefer bytes (protobuf JSON renders Base64 automatically).
+// If it’s literal text, keep string. Pick one based on your backend.
+message DisputeDocumentRequestDto {
+  bytes data = 1;   // change to: string data = 1;  if server expects plain text
+  string type = 2;
+  string label = 3;
+  string fileName = 4;
+  string documentTypeId = 5;
 }
