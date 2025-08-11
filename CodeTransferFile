@@ -8,22 +8,11 @@ option java_package = "osplus.pkptuna.dispute.create.model";
 option java_outer_classname = "DisputeCreateProto";
 option java_multiple_files = true;
 
-// -----Vom Orchestrator gesendetes DTO
-message DisputeCreateRequestWrapperDto {
-  string correlationId = 1;
-  DisputeCreateRequestDto payload = 2;
-}
-
-message DisputeCreateRequestMetadataDto {
-  string requestedBy = 1;
-  string requestChannel = 2;
-  string messageType = 3;
-  string businessContext = 4;
-}
+// ============ Request DTO (no wrapper) ============
 
 message DisputeCreateRequestDto {
-  DisputeCreateRequestIboDto body = 1;
-  string issuerId = 2;
+  string issuerId = 1;
+  DisputeCreateRequestIboDto body = 2;
 }
 
 message DisputeCreateRequestIboDto {
@@ -56,6 +45,7 @@ message DisputeEventRequestDto {
   string message = 2;
 }
 
+// Keep string if server expects raw text, change to bytes if Base64
 message DisputeDocumentRequestDto {
   string data = 1;
   string type = 2;
@@ -64,13 +54,11 @@ message DisputeDocumentRequestDto {
   string documentTypeId = 5;
 }
 
+// ============ Response DTO (no wrapper) ============
 
-// Rest dto wird für IBO-Call verwendet
-
-message DisputeCreateResponseWrapperDto {
-  string correlationId = 1;
-  ResponseMetadataDto responseMetadata = 2;
-  DisputeCreateResponseDto response = 3;
+message DisputeCreateResponseDto {
+  ResponseMetadataDto responseMetadata = 1;
+  DisputeCreateDataDto data = 2;
 }
 
 message ResponseMetadataDto {
@@ -85,11 +73,6 @@ message ResponseMetadataDto {
 message LinksDto {
   string self = 1;
   string next = 2;
-}
-
-// Business payload
-message DisputeCreateResponseDto {
-  DisputeCreateDataDto data = 1;
 }
 
 message DisputeCreateDataDto {
