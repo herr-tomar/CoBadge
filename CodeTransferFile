@@ -8,14 +8,10 @@ option java_package = "osplus.pkptuna.dispute.create.model";
 option java_outer_classname = "DisputeCreateProto";
 option java_multiple_files = true;
 
-// ============ Request DTO (no wrapper) ============
-
+/* =========================
+   Request (as sent to API)
+   ========================= */
 message DisputeCreateRequestDto {
-  string issuerId = 1;
-  DisputeCreateRequestIboDto body = 2;
-}
-
-message DisputeCreateRequestIboDto {
   string disputeReason = 1;
   string refundRedebitIndicator = 2;
   AmountDto refundRedebitAmount = 3;
@@ -28,7 +24,7 @@ message DisputeCreateRequestIboDto {
 }
 
 message AmountDto {
-  int64 value = 1;
+  int64 value = 1;     // use int64 for monetary values
   int32 exponent = 2;
   string isoCode = 3;
 }
@@ -45,17 +41,17 @@ message DisputeEventRequestDto {
   string message = 2;
 }
 
-// Keep string if server expects raw text, change to bytes if Base64
 message DisputeDocumentRequestDto {
-  string data = 1;
+  string data = 1;           // keep string per your sample; switch to bytes if Base64 wanted
   string type = 2;
   string label = 3;
   string fileName = 4;
   string documentTypeId = 5;
 }
 
-// ============ Response DTO (no wrapper) ============
-
+/* =========================
+   Response (as returned)
+   ========================= */
 message DisputeCreateResponseDto {
   ResponseMetadataDto responseMetadata = 1;
   DisputeCreateDataDto data = 2;
@@ -66,6 +62,7 @@ message ResponseMetadataDto {
   LinksDto links = 2;
   string statusMessage = 3;
   int32 statusCode = 4;
+  // Keep as string to preserve "yyyy-MM-dd'T'HH:mm:ss.SSSZ"
   string responseDateTime = 5;
   int64 timeTakenMs = 6;
 }
@@ -90,7 +87,7 @@ message DisputeFolderIdentifierDto {
 message DisputePostingResponseDto {
   AmountDto postingAmount = 1;
   string postingTypeReference = 2;
-  google.protobuf.Timestamp creationDate = 3;
+  google.protobuf.Timestamp creationDate = 3; // e.g., "2025-07-23T12:50:48Z"
 }
 
 message DisputeEventResponseDto {
