@@ -1,72 +1,19 @@
-  public static List<ProtoMessageModel> parse(File protoFile) {
-        List<ProtoMessageModel> messageModels = new ArrayList<>();
-
-        if (protoFile == null || !protoFile.exists()) {
-            LOGGER.warn("Datei existiert nicht oder ist null: {}", protoFile);
-            return messageModels;
+private static String toCamelCase(String snake) {
+    StringBuilder result = new StringBuilder();
+    boolean upperNext = false;
+    for (char c : snake.toCharArray()) {
+        if (c == '_') {
+            upperNext = true;
+        } else if (upperNext) {
+            result.append(Character.toUpperCase(c));
+            upperNext = false;
+        } else {
+            result.append(c);
         }
-
-        String protoFileName = protoFile.getName();
-
-        try (BufferedReader reader = new BufferedReader(new FileReader(protoFile))) {
-            String packageName = null;
-            ProtoMessageModel currentMessage = null;
-            String line = reader.readLine();
-
-            while (line != null) {
-                line = line.trim();
-
-                if (line.startsWith(PACKAGE_KEYWORD)) {
-                    String[] parts = line.split("\\s+");
-                    if (parts.length >= 2) {
-                        packageName = parts[1].replace(SEMICOLON, "").trim();
-                    }
-                } else if (line.startsWith(MESSAGE_KEYWORD)) {
-                    String messageName = line.split("\\s+")[1].replace("{", "").trim();
-                    currentMessage = new ProtoMessageModel(messageName);
-                    currentMessage.setProtoPackageName(packageName);
-                    currentMessage.setPackageName(packageName);
-                } else if (line.startsWith(BLOCK_END)) {
-                    if (currentMessage != null) {
-                        messageModels.add(currentMessage);
-                        currentMessage = null;
-                    }
-                } else if (currentMessage != null && !line.isEmpty() && line.contains(SEMICOLON)) {
-                    boolean repeated = line.startsWith(REPEATED_PREFIX);
-                    String cleanedLine = line.replaceAll(CLEANED_LINE_REGEX, "");
-                    String[] parts = cleanedLine.split("\\s+");
-
-                    if (parts.length >= 2) {
-                        String type = parts[0];
-                        String name = parts[1];
-                        if (name.contains(EQUAL_SIGN)) {
-                            name = name.substring(0, name.indexOf(EQUAL_SIGN)).trim();
-                        }
-                        name = name.replace(SEMICOLON, "").trim();
-                        currentMessage.addField(new ProtoFieldModel(type, name, repeated));
-                    }
-                }
-
-                line = reader.readLine(); // nächste Zeile
-            }
-
-        } catch (IOException e) {
-            LOGGER.error("Fehler beim Lesen der Proto-Datei '{}': {}", protoFileName, e.getMessage(), e);
-        }
-
-        return messageModels;
     }
-
-
------
-
-
-The above is the parse method...where i parse the proto file to generate the rest dto.
-
-The issue is if the message field is written like the following 
-
-string issuer_id = 1; 
-
-then issuer id is not connverted to issuerId....which is similar to protobuf behaviour and due to which ...i get wrong gettter aand setter generated 
-
-Can you please fix my code 
+    // Lowercase the first letter
+    if (result.length() > 0) {
+        result.setCharAt(0, Character.toLowerCase(result.charAt(0)));
+    }
+    return result.toString();
+}
