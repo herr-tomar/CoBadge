@@ -1,33 +1,60 @@
-// -----Vom Orchestrator gesendetes DTO
+syntax = "proto3";
 
-message DisputeDetailRequestWrapperDto {
-  string correlationId = 1;
-  DisputeDetailRequestMetadataDto metadata = 2;
-  DisputeDetailRequestDto payload = 3;
+package idm.create.v1;
+
+option java_package = "idm.create.v1";
+option java_outer_classname = "IdmCreateProto";
+option java_multiple_files = true;
+
+// ------------------------ Request Wrapper ------------------------
+message CreateDisputeRequestWrapperDto {
+  string correlationId = 1;                          // Trace correlation across services
+  CreateDisputeRequestMetadataDto metadata = 2;
+  CreateDisputeRequestDto payload = 3;               // The actual 19-field request
 }
 
-message DisputeDetailRequestDto {
-  string issuerId = 1;
-  string disputeFolderReference = 2;
-  repeated string embed = 3;
+message CreateDisputeRequestMetadataDto {
+  string requestedBy = 1;                            // Wer hat es ausgelöst
+  string requestChannel = 2;                         // Kanalname (API, Batch, etc.)
+  string messageType = 3;                            // Logischer Nachrichtentyp
+  string businessContext = 4;                        // Geschäftskontext
 }
 
-message DisputeDetailRequestMetadataDto {
-  string requestedBy = 1;
-  string requestChannel = 2;
-  string messageType = 3;
-  string businessContext = 4;
+message CreateDisputeRequestDto {
+  string impulsOId = 1;                 // IMPM_IMPS_OID
+  string umsatzId = 2;                   // UMSATZ_ID
+  string empfKontoId = 3;                // EMPF_KONTO_ID
+  string empfBlz = 4;                    // EMPF_BLZ
+  string reklaGrundKat1 = 5;             // REKLA_GRUND_KAT_1
+  string reklaBetrag = 6;                // TEILBETRAG oder UMSATZ_BETRAG
+  string reklaBetragWs = 7;              // CRD_VFGG_ORIG_WS oder EUR
+  string reklaTeilbetragKz = 8;          // J/N
+  string karteSperren = 9;               // J/N
+  string autoErstattungKz = 10;          // J/N
+  string crdVfggOrigWs = 11;             // CRD_VFGG_ORIG_WS
+  string crdVfggOrigBtrg = 12;           // CRD_VFGG_ORIG_BTRG
+  string crdVfggOrigKurs = 13;           // CRD_VFGG_ORIG_KURS
+  string crdVerfallMon = 14;             // CRD_VERFALL_MON
+  string crdTaTraceNr = 15;              // CRD_TA_TRACE_NR
+  string primaryAccountNumber = 16;      // CRD_PAN
+  string acquiringReferenceNumber = 17;  // SEP_UTMT_CRED_ID (ARN)
+  string transactionDateAndTime = 18;    // CRD_TA_DATE_TIME
+  string issuerId = 19;                  // IDM Mandanten-ID
 }
 
-// -----Umgewandelte DTO für die Rückkehr zum Orchestrator vorgesehen
-
-message DisputeDetailResponseWrapperDto {
-  string correlationId = 1;
-  DisputeDetailResponseMetadataDto metaData = 2;
-  DisputeResponseDto response = 3;
+// ------------------------ Response Wrapper ------------------------
+message CreateDisputeResponseWrapperDto {
+  string correlationId = 1;                              // Same correlationId from request
+  CreateDisputeResponseMetadataDto metadata = 2;
+  CreateDisputeResponseDto response = 3;                 // The actual 2-field response
 }
 
-message DisputeDetailResponseMetadataDto {
-  string statusMessage = 1;
-  int32 statusCode = 2;
+message CreateDisputeResponseMetadataDto {
+  string statusMessage = 1;                              // Erfolgs-/Fehlerbeschreibung
+  int32 statusCode = 2;                                  // HTTP oder interner Code
+}
+
+message CreateDisputeResponseDto {
+  string reklVgngIntnNr = 1;     // REKL_VGNG_INTN_NR (ID des Dispute Folders im IDM)
+  string cbdUmsErstAutoKz = 2;   // CBD_UMS_ERST_AUTO_KZ (J/N)
 }
