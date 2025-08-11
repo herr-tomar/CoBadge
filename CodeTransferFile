@@ -1,15 +1,1 @@
-import org.mapstruct.CollectionMappingStrategy;
-import org.mapstruct.Mapper;
-import org.mapstruct.Builder;
-
-@Mapper(
-  componentModel = "spring",
-  collectionMappingStrategy = CollectionMappingStrategy.ADDER_PREFERRED,
-  builder = @Builder(disableBuilder = true),           // MapStruct will use protobuf builders
-  nullValuePropertyMappingStrategy = org.mapstruct.NullValuePropertyMappingStrategy.IGNORE
-)
-public interface DisputeCreateMapper {
-  // keep your one-liners:
-  CreateDisputeRequestWrapperDto toProto(CreateDisputeRequestWrapperJson in);
-  CreateDisputeResponseWrapperJson toRest(CreateDisputeResponseWrapperDto in);
-}
+ Optional.ofNullable(responseMetadataDto).isPresent(()-> new RuntimeException("Exception in fetching transaction identifier"));
