@@ -19,31 +19,38 @@ import osplus.pkptuna.protobuf.util.TimestampMapper;
 </#list>
 
 @AplComponent
-@Mapper(componentModel="spring",
-collectionMappingStrategy = CollectionMappingStrategy.ADDER_PREFERRED,
-nullValuePropertyMappingStrategy = org.mapstruct.NullValuePropertyMappingStrategy.IGNORE,
-uses = {
-TimestampMapper.class
-<#list customMapperSimpleNames as mapper>
-    , ${mapper}.class
-</#list>
-}
+@Mapper(
+    componentModel = "spring",
+    collectionMappingStrategy = CollectionMappingStrategy.ADDER_PREFERRED,
+    nullValuePropertyMappingStrategy = org.mapstruct.NullValuePropertyMappingStrategy.IGNORE,
+    uses = {
+        TimestampMapper.class
+        <#list customMapperSimpleNames as mapper>
+            , ${mapper}.class
+        </#list>
+    }
 )
 public interface ${mapperInterfaceName} {
 
-${mapperInterfaceName} INSTANCE = Mappers.getMapper(${mapperInterfaceName}.class);
+    ${mapperInterfaceName} INSTANCE = Mappers.getMapper(${mapperInterfaceName}.class);
 
-<#-- Generate @Mapping entries for repeated fields -->
-<#list repeatedFieldMappings as mapping>
-    @Mapping(source = "${mapping.source}", target = "${mapping.target}")
-</#list>
-${restDtoPackage}.${restDtoClassName} toRestDto(${protoDtoPackage}.${protoDtoClassName} proto);
+    <#-- Mapping proto → rest -->
+    @BeanMapping(ignoreByDefault = true)
+    <#list normalFieldMappings as mapping>
+        @Mapping(source = "${mapping.source}", target = "${mapping.target}")
+    </#list>
+    <#list repeatedFieldMappings as mapping>
+        @Mapping(source = "${mapping.source}", target = "${mapping.target}")
+    </#list>
+    ${restDtoPackage}.${restDtoClassName} toRestDto(${protoDtoPackage}.${protoDtoClassName} proto);
 
-@BeanMapping(ignoreByDefault = true)
-<#list repeatedFieldMappings as mapping>
-    @Mapping(source = "${mapping.target}", target = "${mapping.source}")
-</#list>
-${protoDtoPackage}.${protoDtoClassName} toProtoDto(${restDtoPackage}.${restDtoClassName} restDto);
-
-
+    <#-- Mapping rest → proto -->
+    @BeanMapping(ignoreByDefault = true)
+    <#list normalFieldMappings as mapping>
+        @Mapping(source = "${mapping.target}", target = "${mapping.source}")
+    </#list>
+    <#list repeatedFieldMappings as mapping>
+        @Mapping(source = "${mapping.target}", target = "${mapping.source}")
+    </#list>
+    ${protoDtoPackage}.${protoDtoClassName} toProtoDto(${restDtoPackage}.${restDtoClassName} restDto);
 }
