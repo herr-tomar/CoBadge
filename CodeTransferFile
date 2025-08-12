@@ -1,311 +1,90 @@
-syntax = "proto3";
-
-package osplus.pkptuna.dispute.ibo.create.model;
-
-import "google/protobuf/timestamp.proto";
-
-option java_package = "osplus.pkptuna.dispute.ibo.create.model";
-option java_outer_classname = "DisputeIboCreateProto";
-option java_multiple_files = true;
-
-// -------------Request body-----------------
-
-message DisputeIboCreateRequestDto {
-  string disputeReason = 1;
-  string refundRedebitIndicator = 2;
-  AmountDto refundRedebitAmount = 3;
-  bool declareFraudIndicator = 4;
-  string issuerDisputeExternalReference = 5;
-
-  repeated DisputePostingRequestDto disputePostings = 6;
-  repeated DisputeEventRequestDto disputeEvents = 7;
-  repeated DisputeDocumentRequestDto disputeDocuments = 8;
-}
-
-message AmountDto {
-  int64 value = 1;
-  int32 exponent = 2;
-  string isoCode = 3;
-}
-
-message DisputePostingRequestDto {
-  AmountDto postingAmount = 1;
-  string message = 2;
-  bool immediateReimbursement = 3;
-  string postingTypeReference = 4;
-}
-
-message DisputeEventRequestDto {
-  string type = 1;
-  string message = 2;
-}
-
-message DisputeDocumentRequestDto {
-  string data = 1;
-  string type = 2;
-  string label = 3;
-  string fileName = 4;
-  string documentTypeId = 5;
-}
-
-// -------------Response body-----------------
-
-message DisputeIboCreateResponseDto {
-  ResponseMetadataDto responseMetadata = 1;
-  DisputeCreateDataDto data = 2;
-}
-
-message ResponseMetadataDto {
-  string correlationId = 1;
-  LinksDto links = 2;
-  string statusMessage = 3;
-  int32 statusCode = 4;
-  string responseDateTime = 5;
-  int64 timeTakenMs = 6;
-}
-
-message LinksDto {
-  string self = 1;
-  string next = 2;
-}
-
-message DisputeCreateDataDto {
-  DisputeFolderIdentifierDto disputeFolderIdentifier = 1;
-  repeated DisputePostingResponseDto disputePostings = 2;
-  repeated DisputeEventResponseDto disputeEvents = 3;
-  repeated DisputeDocumentResponseDto disputeDocuments = 4;
-}
-
-message DisputeFolderIdentifierDto {
-  string disputeFolderReference = 1;
-  string issuerDisputeExternalReference = 2;
-}
-
-message DisputePostingResponseDto {
-  AmountDto postingAmount = 1;
-  string postingTypeReference = 2;
-  google.protobuf.Timestamp creationDate = 3;
-}
-
-message DisputeEventResponseDto {
-  string type = 1;
-  google.protobuf.Timestamp creationDate = 2;
-}
-
-message DisputeDocumentResponseDto {
-  string fileName = 1;
-  google.protobuf.Timestamp creationDate = 2;
-  string documentTypeId = 3;
-}
-
-
----------
-
-{
-  "disputeReason": "SONSTIGE_GRÜNDE",
-  "refundRedebitIndicator": "PARTIAL",
-  "refundRedebitAmount": {
-    "value": 4400,
-    "exponent": 2,
-    "isoCode": "978"
-  },
-  "declareFraudIndicator": false,
-  "issuerDisputeExternalReference": "4-42146xxb-1r8",
-  "disputePostings": [
-    {
-      "postingAmount": {
-        "value": 10000,
-        "exponent": 2,
-        "isoCode": "978"
-      },
-      "immediateReimbursement": false,
-      "postingTypeReference": "ISSUER_ACCOUNT"
-    }
-  ],
-  "disputeEvents": [
-    {
-      "type": "COMMENT",
-      "message": "Reklamation mit Teilbetrag i.H.v. 44 EUR"
-    }
-  ]
-}
-
-------------------
-
-
-{
-  "disputeReason": "SONSTIGE_GRÜNDE",
-  "refundRedebitIndicator": "NONE",
-  "declareFraudIndicator": false,
-  "issuerDisputeExternalReference": "4-42146xzh-2p8",
-  "disputePostings": [
-    {
-      "postingAmount": {
-        "value": 10000,
-        "exponent": 2,
-        "isoCode": "978"
-      },
-      "immediateReimbursement": false
-    }
-  ]
-}
-
---------------------
-
-
 package osplus.pkptuna.dispute.service.mapping;
 
-import osplus.pkptuna.rest.dispute.ibo.create.model.AmountDto;
-import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeEventRequestDto;
-import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateRequestDto;
-import osplus.pkptuna.rest.dispute.ibo.create.model.DisputePostingRequestDto;
-import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
+import org.mapstruct.*;
+import java.util.*;
+import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto; // Dyns (19)
+import osplus.pkptuna.rest.dispute.ibo.create.model.*;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Currency;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.regex.Pattern;
+@Mapper(componentModel = "spring",
+        nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+public interface DynsToIboCreateAutoMapper {
 
-public final class DynsToIboCreateMapper {
+    @Mappings({
+        @Mapping(target = "disputeReason", source = "reklaGrundKat1"),
+        @Mapping(target = "issuerDisputeExternalReference", source = "impulsOid"),
+        @Mapping(target = "declareFraudIndicator", expression = "java(false)"),
 
-    private DynsToIboCreateMapper() {}
+        // computed / assembled fields
+        @Mapping(target = "refundRedebitIndicator", expression = "java(calcIndicator(src))"),
+        @Mapping(target = "refundRedebitAmount",  expression = "java(buildRefundAmount(src))"),
+        @Mapping(target = "disputePostings",      expression = "java(buildPostings(src))"),
+        @Mapping(target = "disputeEvents",        expression = "java(buildEvents(src))"),
+        @Mapping(target = "disputeDocuments",     expression = "java(java.util.Collections.emptyList())")
+    })
+    DisputeIboCreateRequestDto toIbo(DisputeCreateRequestDto src);
 
-    public static DisputeIboCreateRequestDto map(final DisputeCreateRequestDto src) {
-        Objects.requireNonNull(src, "src");
+    // -------- helpers (NO currency/amount conversions beyond parsing the strings) --------
 
-        final DisputeIboCreateRequestDto out = new DisputeIboCreateRequestDto();
-
-        out.setDisputeReason(nz(src.getReklaGrundKat1()));
-        out.setIssuerDisputeExternalReference(nz(src.getImpulsOid()));
-        out.setDeclareFraudIndicator(false);
-
-        // 2) Partial vs Full
-        final boolean isPartial = isJ(src.getReklaTeilbetragKz());
-        if (isPartial) {
-            out.setRefundRedebitIndicator("PARTIAL");
-            if (notBlank(src.getReklaBetrag()) && notBlank(src.getReklaBetragWs())) {
-                out.setRefundRedebitAmount(toAmount(nz(src.getReklaBetrag()), nz(src.getReklaBetragWs())));
-            }
-        } else {
-            out.setRefundRedebitIndicator("NONE");
-        }
-
-        AmountDto postingAmt = derivePostingAmount(src)
-                .orElseGet(() -> amount(0L, fractionDigitsOrDefault("EUR", 2), alphaToNumericOrAlpha("EUR")));
-        DisputePostingRequestDto posting = new DisputePostingRequestDto();
-        posting.setPostingAmount(postingAmt);
-        posting.setImmediateReimbursement(false);
-        posting.setPostingTypeReference("ISSUER_ACCOUNT");
-        out.setDisputePostings(Collections.singletonList(posting));
-
-        List<DisputeEventRequestDto> events = new ArrayList<>();
-        if (isPartial && notBlank(src.getReklaBetrag()) && notBlank(src.getReklaBetragWs())) {
-            String pretty = prettyAmount(src.getReklaBetrag(), src.getReklaBetragWs());
-            DisputeEventRequestDto ev = new DisputeEventRequestDto();
-            ev.setType("COMMENT");
-            ev.setMessage("Reklamation mit Teilbetrag i.H.v. " + pretty);
-            events.add(ev);
-        }
-        out.setDisputeEvents(events);
-
-        // 5) Documents: not specified in your samples → leave empty
-        out.setDisputeDocuments(new ArrayList<>());
-
-        return out;
+    default String calcIndicator(DisputeCreateRequestDto s) {
+        return isJ(s.getReklaTeilbetragKz()) ? "PARTIAL" : "NONE";
     }
 
-    /* ---------------- helpers ---------------- */
+    /**
+     * Builds refundRedebitAmount only for partial. Pass-through isoCode from src.getReklaWS().
+     * Exponent is fixed to 2 (matches your samples). Value is parsed directly from the string.
+     */
+    default AmountDto buildRefundAmount(DisputeCreateRequestDto s) {
+        if (!isJ(s.getReklaTeilbetragKz())) return null;
+        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaWS())) return null;
 
-    private static Optional<AmountDto> derivePostingAmount(DisputeCreateRequestDto src) {
-        // If you have UMSATZ_BETRAG (EUR), prefer that. If not, try original amount.
-        // Your table shows crdVfggOrigBtrg / crdVfggOrigWs; we use those if present.
-        if (notBlank(src.getCrdVfggOrigBtrg()) && notBlank(src.getCrdVfggOrigWs())) {
-            return Optional.of(toAmount(src.getCrdVfggOrigBtrg(), src.getCrdVfggOrigWs()));
-        }
-        return Optional.empty();
-    }
-
-    private static AmountDto toAmount(String textAmount, String isoAlphaOrNumeric) {
-        final String norm = textAmount.trim().replace(',', '.');
-        BigDecimal bd;
-        try { bd = new BigDecimal(norm); } catch (NumberFormatException ex) { bd = BigDecimal.ZERO; }
-
-        final String isoOut = alphaToNumericOrAlpha(isoAlphaOrNumeric);
-        final String isoAlpha = toAlpha(isoAlphaOrNumeric);
-        final int exponent = fractionDigitsOrDefault(isoAlpha, 2);
-
-        long minor = bd.movePointRight(exponent).setScale(0, RoundingMode.HALF_UP).longValue();
-        return amount(minor, exponent, isoOut);
-    }
-
-    private static AmountDto amount(long value, int exponent, String isoCodeOut) {
         AmountDto a = new AmountDto();
-        a.setValue(value);
-        a.setExponent(exponent);
-        a.setIsoCode(isoCodeOut);
+        a.setValue(parseLongSafe(s.getReklaBetrag(), 0L));
+        a.setExponent(2);
+        a.setIsoCode(s.getReklaWS()); // pass-through; put "978" in src if you need numeric
         return a;
-    }
-
-    private static String prettyAmount(String textAmount, String isoAlpha) {
-        String norm = textAmount.trim().replace(',', '.');
-        String alpha = toAlpha(isoAlpha);
-        try {
-            BigDecimal bd = new BigDecimal(norm);
-            int frac = fractionDigitsOrDefault(alpha, 2);
-            bd = bd.setScale(frac, RoundingMode.HALF_UP);
-            return bd.toPlainString() + " " + alpha;
-        } catch (Exception e) {
-            return textAmount + " " + alpha;
         }
-    }
 
-    private static String toAlpha(String iso) {
-        if (isNumeric(iso)) {
-            // map a few common numerics back to alpha; fallback EUR
-            return NUMERIC_TO_ALPHA.getOrDefault(iso, "EUR");
+    /**
+     * Creates a single posting using original amount fields if present.
+     * postingTypeReference = "ISSUER_ACCOUNT", immediateReimbursement = false (as per your sample).
+     */
+    default List<DisputePostingRequestDto> buildPostings(DisputeCreateRequestDto s) {
+        if (isBlank(s.getCrdVfggOrigBtrg()) || isBlank(s.getCrdVfggOrigWs())) {
+            return Collections.emptyList();
         }
-        return iso.toUpperCase(Locale.ROOT);
+        AmountDto amt = new AmountDto();
+        amt.setValue(parseLongSafe(s.getCrdVfggOrigBtrg(), 0L));
+        amt.setExponent(2);
+        amt.setIsoCode(s.getCrdVfggOrigWs()); // pass-through
+
+        DisputePostingRequestDto p = new DisputePostingRequestDto();
+        p.setPostingAmount(amt);
+        p.setImmediateReimbursement(false);
+        p.setPostingTypeReference("ISSUER_ACCOUNT");
+
+        return Collections.singletonList(p);
     }
 
-    private static String alphaToNumericOrAlpha(String iso) {
-        if (isNumeric(iso)) {
-            return iso;
-        }
-        return ALPHA_TO_NUMERIC.getOrDefault(iso.toUpperCase(Locale.ROOT), iso.toUpperCase(Locale.ROOT));
+    /**
+     * COMMENT event only for partial disputes.
+     */
+    default List<DisputeEventRequestDto> buildEvents(DisputeCreateRequestDto s) {
+        if (!isJ(s.getReklaTeilbetragKz())) return Collections.emptyList();
+        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaWS())) return Collections.emptyList();
+
+        DisputeEventRequestDto ev = new DisputeEventRequestDto();
+        ev.setType("COMMENT");
+        ev.setMessage("Reklamation mit Teilbetrag i.H.v. " + s.getReklaBetrag() + " " + s.getReklaWS());
+        return Collections.singletonList(ev);
     }
 
-    private static int fractionDigitsOrDefault(String isoAlpha, int def) {
-        try { return Currency.getInstance(isoAlpha).getDefaultFractionDigits(); }
-        catch (Exception e) { return def; }
+    // -------- tiny utils --------
+    default boolean isJ(String v) { return v != null && v.trim().equalsIgnoreCase("J"); }
+    default boolean isBlank(String v) { return v == null || v.trim().isEmpty(); }
+    default long parseLongSafe(String s, long def) {
+        try { return Long.parseLong(s.trim()); } catch (Exception e) { return def; }
     }
-
-    private static boolean isJ(String s) { return s != null && s.trim().equalsIgnoreCase("J"); }
-    private static boolean notBlank(String s) { return s != null && !s.trim().isEmpty(); }
-    private static String nz(String s) { return s == null ? "" : s; }
-
-    private static final Pattern NUMERIC = Pattern.compile("^\\d{3}$");
-    private static boolean isNumeric(String s) { return s != null && NUMERIC.matcher(s.trim()).matches(); }
-
-    // Minimal ISO 4217 alpha↔numeric map (extend as needed)
-    private static final Map<String,String> ALPHA_TO_NUMERIC = Map.ofEntries(
-            Map.entry("EUR", "978"),
-            Map.entry("USD", "840"),
-            Map.entry("GBP", "826"),
-            Map.entry("CHF", "756"),
-            Map.entry("JPY", "392")
-    );
-    private static final Map<String,String> NUMERIC_TO_ALPHA = Map.ofEntries(
-            Map.entry("978", "EUR"),
-            Map.entry("840", "USD"),
-            Map.entry("826", "GBP"),
-            Map.entry("756", "CHF"),
-            Map.entry("392", "JPY")
-    );
 }
+
+
+------------------
