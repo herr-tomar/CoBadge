@@ -1,157 +1,188 @@
-package osplus.pkptuna.dispute.mapping;
+  @Override
+    public DisputeCreateResponseDto createDispute(DisputeCreateRequestDto disputeCreateRequestDto) {
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.*;
-import java.util.regex.Pattern;
+        osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto disputeCreateRequestRestDto
+                = disputeCreateRequestDtoMapper.toRestDto(disputeCreateRequestDto);
 
-// === Source: Dyns (19 fields) ===
-// Replace with your actual class/package
-import your.pkg.DisputeCreateRequestDto;
+        // ----------------------Fetch the transaction identifier--------------------
+        String issuerId = Optional.of(disputeCreateRequestRestDto.getIssuerId()).orElseThrow(
+                () -> new RuntimeException("IssuerId is not present"));
+        String acquiringReferenceNumber = Optional.of(disputeCreateRequestRestDto.getAcquiringReferenceNumber()).orElseThrow(
+                () -> new RuntimeException("acquiringReferenceNumber is not present"));
 
-// === Target: IBO request DTOs (plain REST DTOs) ===
-import osplus.pkptuna.dispute.ibo.create.model.DisputeIboCreateRequestDto;
-import osplus.pkptuna.dispute.ibo.create.model.AmountDto;
-import osplus.pkptuna.dispute.ibo.create.model.DisputePostingRequestDto;
-import osplus.pkptuna.dispute.ibo.create.model.DisputeEventRequestDto;
+        List<String> acquiringReferenceNumberList = new ArrayList<>();
+        acquiringReferenceNumberList.add(acquiringReferenceNumber);
 
-public final class DynsToIboCreateMapper {
+        DisputeIboTransactionRequestDto disputeIboTransactionRequestDto = new DisputeIboTransactionRequestDto();
+        disputeIboTransactionRequestDto.setIssuerId(issuerId);
 
-    private DynsToIboCreateMapper() {}
+        disputeIboTransactionRequestDto.setAcquirerReferenceId(acquiringReferenceNumberList);
 
-    public static DisputeIboCreateRequestDto map(final DisputeCreateRequestDto src) {
-        Objects.requireNonNull(src, "src");
+        DisputeIboTransactionResponseDto disputeIboTransactionResponseDto = lookUpIboTransactionId(disputeIboTransactionRequestDto);
 
-        final DisputeIboCreateRequestDto out = new DisputeIboCreateRequestDto();
+        osplus.pkptuna.rest.dispute.ibo.transaction.identifier.model.ResponseMetadataDto responseMetadataDto =
+                disputeIboTransactionResponseDto.getResponseMetadata();
 
-        // 1) Straight mappings
-        out.setDisputeReason(nz(src.getReklaGrundKat1()));                 // "SONSTIGE_GRÜNDE"
-        out.setIssuerDisputeExternalReference(nz(src.getImpulsOId()));     // "4-42146xxb-1r8"
-        out.setDeclareFraudIndicator(false);                                // per sample
+        Optional.ofNullable(responseMetadataDto).ifPresent(dto -> new RuntimeException("Exception in fetching transaction identifier"));
 
-        // 2) Partial vs Full
-        final boolean isPartial = isJ(src.getReklaTeilbetragKz());
-        if (isPartial) {
-            out.setRefundRedebitIndicator("PARTIAL");
-            // refundRedebitAmount from reklaBetrag + reklaWS (alpha to numeric, exponent by currency)
-            if (notBlank(src.getReklaBetrag()) && notBlank(src.getReklaWS())) {
-                out.setRefundRedebitAmount(toAmount(nz(src.getReklaBetrag()), nz(src.getReklaWS())));
-            }
-        } else {
-            out.setRefundRedebitIndicator("NONE");
-            // omit refundRedebitAmount
+        // ----------------------Create the dispute--------------------
+
+        List<DataDto> dataList = disputeIboTransactionResponseDto.getData();
+        String transactionId = "";
+        if(!dataList.isEmpty()) {
+            Optional<String> optionalTransactionId = Optional.ofNullable(dataList.getFirst().getTransactionIdentifier().getTransactionId());
+            transactionId = optionalTransactionId.orElseThrow(() -> new RuntimeException("Transaction identifier not found"));
         }
 
-        // 3) Posting (one line, per examples)
-        // Prefer original (if provided). If not, default zero/EUR numeric (978).
-        AmountDto postingAmt = derivePostingAmount(src)
-                .orElseGet(() -> amount(0L, fractionDigitsOrDefault("EUR", 2), alphaToNumericOrAlpha("EUR")));
-        DisputePostingRequestDto posting = new DisputePostingRequestDto();
-        posting.setPostingAmount(postingAmt);
-        posting.setImmediateReimbursement(false);               // per sample
-        posting.setPostingTypeReference("ISSUER_ACCOUNT");      // per sample
-        out.setDisputePostings(Collections.singletonList(posting));
+        // Build DisputeIboCreateRequestDto Object
+        DisputeIboCreateRequestDto disputeIboCreateRequestDto = DynsToIboCreateMapper.map(disputeCreateRequestRestDto);
 
-        // 4) Events
-        List<DisputeEventRequestDto> events = new ArrayList<>();
-        if (isPartial && notBlank(src.getReklaBetrag()) && notBlank(src.getReklaWS())) {
-            String pretty = prettyAmount(src.getReklaBetrag(), src.getReklaWS());
-            DisputeEventRequestDto ev = new DisputeEventRequestDto();
-            ev.setType("COMMENT");
-            ev.setMessage("Reklamation mit Teilbetrag i.H.v. " + pretty);
-            events.add(ev);
-        }
-        out.setDisputeEvents(events);
+        // Create the dispute
+        DisputeIboCreateResponseDto disputeIboCreateResponseDto =
+                createIboDisputeFolder(issuerId, transactionId, disputeIboCreateRequestDto);
 
-        // 5) Documents: not specified in your samples → leave empty
-        out.setDisputeDocuments(new ArrayList<>());
+        String disputeFolderReference = disputeIboCreateResponseDto.getData().getDisputeFolderIdentifier().getDisputeFolderReference();
 
-        return out;
+        DisputeCreateResponseDto disputeCreateResponseDto = DisputeCreateResponseDto.newBuilder().
+                build();
+        
+        return disputeCreateResponseDto;
+
     }
 
-    /* ---------------- helpers ---------------- */
+    // Private --------------------------------
 
-    private static Optional<AmountDto> derivePostingAmount(DisputeCreateRequestDto src) {
-        // If you have UMSATZ_BETRAG (EUR), prefer that. If not, try original amount.
-        // Your table shows crdVfggOrigBtrg / crdVfggOrigWs; we use those if present.
-        if (notBlank(src.getCrdVfggOrigBtrg()) && notBlank(src.getCrdVfggOrigWs())) {
-            return Optional.of(toAmount(src.getCrdVfggOrigBtrg(), src.getCrdVfggOrigWs()));
-        }
-        return Optional.empty();
-    }
-
-    private static AmountDto toAmount(String textAmount, String isoAlphaOrNumeric) {
-        final String norm = textAmount.trim().replace(',', '.');
-        BigDecimal bd;
-        try { bd = new BigDecimal(norm); } catch (NumberFormatException ex) { bd = BigDecimal.ZERO; }
-
-        final String isoOut = alphaToNumericOrAlpha(isoAlphaOrNumeric);
-        final String isoAlpha = toAlpha(isoAlphaOrNumeric);
-        final int exponent = fractionDigitsOrDefault(isoAlpha, 2);
-
-        long minor = bd.movePointRight(exponent).setScale(0, RoundingMode.HALF_UP).longValue();
-        return amount(minor, exponent, isoOut);
-    }
-
-    private static AmountDto amount(long value, int exponent, String isoCodeOut) {
-        AmountDto a = new AmountDto();
-        a.setValue(value);
-        a.setExponent(exponent);
-        a.setIsoCode(isoCodeOut);
-        return a;
-    }
-
-    private static String prettyAmount(String textAmount, String isoAlpha) {
-        String norm = textAmount.trim().replace(',', '.');
-        String alpha = toAlpha(isoAlpha);
+    private DisputeIboCreateResponseDto createIboDisputeFolder(String issuerId,
+                                                               String transactionId,
+                                                               DisputeIboCreateRequestDto disputeIboCreateRequestDto) {
         try {
-            BigDecimal bd = new BigDecimal(norm);
-            int frac = fractionDigitsOrDefault(alpha, 2);
-            bd = bd.setScale(frac, RoundingMode.HALF_UP);
-            return bd.toPlainString() + " " + alpha;
+            // Basic Auth header
+            String basicAuth = Base64.getEncoder().encodeToString(
+                    (username + ":" + password).getBytes(StandardCharsets.UTF_8)
+            );
+
+            // POST call
+            DisputeIboCreateResponseDto disputeIboCreateResponseDto = webClient.post()
+                    .uri(uriBuilder -> {
+                        URI builder = uriBuilder
+                                .path(pathDisputeFolderCreate)
+                                .build(issuerId, transactionId);
+                        return builder;
+                    })
+                    .header("WL-Correlation-ID", "pkptuna-" + System.currentTimeMillis())
+                    .header("WL-Origin", "pkptuna-service")
+                    .header(HttpHeaders.AUTHORIZATION, "Basic " + basicAuth)
+                    .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                    .header(HttpHeaders.ACCEPT, "application/json")
+                    .bodyValue(disputeIboCreateRequestDto)
+                    .retrieve()
+                    .bodyToMono(DisputeIboCreateResponseDto.class)
+                    .block();
+
+            return disputeIboCreateResponseDto;
+
+        } catch (WebClientResponseException e) {
+
+            LOGGER.error("Exception during create dispute  (issuerId={}, transactionId={})", issuerId, transactionId, e);
+            osplus.pkptuna.rest.dispute.ibo.create.model.ResponseMetadataDto responseMetadataDto =
+                    new osplus.pkptuna.rest.dispute.ibo.create.model.ResponseMetadataDto();
+
+            responseMetadataDto.setCorrelationId(e.getHeaders() != null
+                            ? e.getHeaders().getFirst("WL-Correlation-ID")
+                            : "");
+            responseMetadataDto.setStatusMessage("HTTP " + e.getStatusCode().value() + " - " + e.getStatusText());
+            responseMetadataDto.setStatusCode(e.getStatusCode().value());
+            responseMetadataDto.setResponseDateTime(java.time.OffsetDateTime.now().toString());
+            responseMetadataDto.setTimeTakenMs(0L);
+
+            // Build a structured error response with metadata
+            DisputeIboCreateResponseDto disputeIboCreateResponseDto =  new DisputeIboCreateResponseDto();
+            disputeIboCreateResponseDto.setResponseMetadata(responseMetadataDto);
+            return disputeIboCreateResponseDto;
+
         } catch (Exception e) {
-            return textAmount + " " + alpha;
+
+            LOGGER.error("Exception during create dispute  (issuerId={}, transactionId={})", issuerId, transactionId, e);
+            osplus.pkptuna.rest.dispute.ibo.create.model.ResponseMetadataDto responseMetadataDto =
+                    new osplus.pkptuna.rest.dispute.ibo.create.model.ResponseMetadataDto();
+
+            responseMetadataDto.setCorrelationId("");
+            responseMetadataDto.setStatusMessage("ERROR - " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            responseMetadataDto.setStatusCode(500);
+            responseMetadataDto.setResponseDateTime(java.time.OffsetDateTime.now().toString());
+            responseMetadataDto.setTimeTakenMs(0L);
+
+            // Build a structured error response with metadata
+            DisputeIboCreateResponseDto disputeIboCreateResponseDto =  new DisputeIboCreateResponseDto();
+            disputeIboCreateResponseDto.setResponseMetadata(responseMetadataDto);
+            return disputeIboCreateResponseDto;
         }
     }
 
-    private static String toAlpha(String iso) {
-        if (isNumeric(iso)) {
-            // map a few common numerics back to alpha; fallback EUR
-            return NUMERIC_TO_ALPHA.getOrDefault(iso, "EUR");
+
+    private DisputeIboTransactionResponseDto lookUpIboTransactionId(DisputeIboTransactionRequestDto disputeIboTransactionRequestDto) {
+        try {
+            // Basic Auth header
+            String basicAuth = Base64.getEncoder().encodeToString(
+                    (username + ":" + password).getBytes(StandardCharsets.UTF_8)
+            );
+
+            // POST call
+            DisputeIboTransactionResponseDto disputeIboTransactionResponseDto = webClient.post()
+                    .uri(uriBuilder -> uriBuilder.path(pathLookupTransactionId).build())
+                    .header("WL-Correlation-ID", "pkptuna-" + System.currentTimeMillis())
+                    .header("WL-Origin", "pkptuna-service")
+                    .header(HttpHeaders.AUTHORIZATION, "Basic " + basicAuth)
+                    .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                    .header(HttpHeaders.ACCEPT, "application/json")
+                    .bodyValue(disputeIboTransactionRequestDto)
+                    .retrieve()
+                    .bodyToMono(DisputeIboTransactionResponseDto.class)
+                    .block();
+
+            return disputeIboTransactionResponseDto;
+
+        } catch (WebClientResponseException e) {
+            LOGGER.error("Exception during transactionId lookup (issuerId={}, arn={})",
+                    disputeIboTransactionRequestDto.getIssuerId(),
+                    disputeIboTransactionRequestDto.getAcquirerReferenceId().getFirst(),
+                    e);
+
+
+            osplus.pkptuna.rest.dispute.ibo.transaction.identifier.model.ResponseMetadataDto responseMetadataDto
+                    = new osplus.pkptuna.rest.dispute.ibo.transaction.identifier.model.ResponseMetadataDto();
+
+            responseMetadataDto.setCorrelationId(e.getHeaders() != null
+                    ? e.getHeaders().getFirst("WL-Correlation-ID")
+                    : "");
+            responseMetadataDto.setStatusMessage("HTTP " + e.getStatusCode().value() + " - " + e.getStatusText());
+            responseMetadataDto .setStatusCode(e.getStatusCode().value());
+            responseMetadataDto.setResponseDateTime(java.time.OffsetDateTime.now().toString());
+            responseMetadataDto.setTimeTakenMs(0L);
+
+            // Build a structured error response with metadata
+            DisputeIboTransactionResponseDto disputeIboTransactionResponseDto =  new DisputeIboTransactionResponseDto();
+            disputeIboTransactionResponseDto.setResponseMetadata(responseMetadataDto);
+            return disputeIboTransactionResponseDto;
+
+        } catch (Exception e) {
+            LOGGER.error("Exception during transactionId lookup (issuerId={}, arn={})",
+                    disputeIboTransactionRequestDto.getIssuerId(),
+                    disputeIboTransactionRequestDto.getAcquirerReferenceId().getFirst(),
+                    e);
+
+            osplus.pkptuna.rest.dispute.ibo.transaction.identifier.model.ResponseMetadataDto responseMetadataDto
+                    = new osplus.pkptuna.rest.dispute.ibo.transaction.identifier.model.ResponseMetadataDto();
+
+            responseMetadataDto.setCorrelationId("");
+            responseMetadataDto.setStatusMessage("ERROR - " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            responseMetadataDto .setStatusCode(500);
+            responseMetadataDto.setResponseDateTime(java.time.OffsetDateTime.now().toString());
+            responseMetadataDto.setTimeTakenMs(0L);
+
+            // Build a structured error response with metadata
+            DisputeIboTransactionResponseDto disputeIboTransactionResponseDto =  new DisputeIboTransactionResponseDto();
+            disputeIboTransactionResponseDto.setResponseMetadata(responseMetadataDto);
+            return disputeIboTransactionResponseDto;
         }
-        return iso.toUpperCase(Locale.ROOT);
     }
-
-    private static String alphaToNumericOrAlpha(String iso) {
-        if (isNumeric(iso)) return iso;
-        return ALPHA_TO_NUMERIC.getOrDefault(iso.toUpperCase(Locale.ROOT), iso.toUpperCase(Locale.ROOT));
-    }
-
-    private static int fractionDigitsOrDefault(String isoAlpha, int def) {
-        try { return Currency.getInstance(isoAlpha).getDefaultFractionDigits(); }
-        catch (Exception e) { return def; }
-    }
-
-    private static boolean isJ(String s) { return s != null && s.trim().equalsIgnoreCase("J"); }
-    private static boolean notBlank(String s) { return s != null && !s.trim().isEmpty(); }
-    private static String nz(String s) { return s == null ? "" : s; }
-
-    private static final Pattern NUMERIC = Pattern.compile("^\\d{3}$");
-    private static boolean isNumeric(String s) { return s != null && NUMERIC.matcher(s.trim()).matches(); }
-
-    // Minimal ISO 4217 alpha↔numeric map (extend as needed)
-    private static final Map<String,String> ALPHA_TO_NUMERIC = Map.ofEntries(
-        Map.entry("EUR", "978"),
-        Map.entry("USD", "840"),
-        Map.entry("GBP", "826"),
-        Map.entry("CHF", "756"),
-        Map.entry("JPY", "392")
-    );
-    private static final Map<String,String> NUMERIC_TO_ALPHA = Map.ofEntries(
-        Map.entry("978", "EUR"),
-        Map.entry("840", "USD"),
-        Map.entry("826", "GBP"),
-        Map.entry("756", "CHF"),
-        Map.entry("392", "JPY")
-    );
-}
