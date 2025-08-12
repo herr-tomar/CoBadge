@@ -1,27 +1,30 @@
-POST http://localhost:8080/pkptuna/service/dispute/v1/publishDisputeCreateRequest/v1
-Accept: application/apl.universal.ui.v1+json
-Cookie: SESSION=1e2386bb-8dfb-4f02-951d-b68834a574f4
+ lookup-transactionid: /api/v2/search-transactions?filter=transactionIdentifier.transactionId
 
-{
-  "payload":{
-      "impulsOid": "4-42146xxb-1r8",
-      "umsatzId": "2025-06-17-11.30.39.692979",
-      "empfKontoId": "7593-06-18-18-38-15-900724",
-      "empfBlz": "94059307",
-      "reklaGrundKat1": "SONSTIGE_GRÜNDE",
-      "reklaBetrag": "4400",
-      "reklaWS": "EUR",
-      "reklaTeilbetragKz": "J",
-      "karteSperren": "N",
-      "autoErstattungKz": "J",
-      "crdVfggOrigWs": "",
-      "crdVfggOrigBtrg": "",
-      "crdVfggOrigKurs": "0",
-      "crdVerfallMon": "12",
-      "crdTaTraceNr": "0/36/37/48/50/61/62",
-      "primaryAccountNumber": "5352990007882264",
-      "acquiringReferenceNumber": "22289313099013277550216",
-      "transactionDateAndTime": "2022-12-09T00:00:00",
-      "issuerId": "1004"
-   }
-}
+----
+
+
+org.springframework.web.reactive.function.client.WebClientResponseException$NotFound: 404 Not Found from POST http://4.239.136.13:43001/api/v2/search-transactions%3Ffilter=transactionIdentifier.transactionId
+	at org.springframework.web.reactive.function.client.WebClientResponseException.create(WebClientResponseException.java:324) ~[spring-webflux-6.2.8.jar:6.2.8]
+	Suppressed: reactor.core.publisher.FluxOnAssembly$OnAssemblyException: 
+Error has been observed at the following site(s):
+	*__checkpoint ⇢ 404 NOT_FOUND from POST http://4.239.136.13:43001/api/v2/search-transactions%3Ffilter=transactionIdentifier.transactionId [DefaultWebClient]
+Original Stack Trace:
+		at org.springframework.web.reactive.function.client.WebClientResponseException.create(WebClientResponseException.java:324) ~[spring-webflux-6.2.8.jar:6.2.8]
+		at org.springframework.web.reactive.function.client.DefaultClientResponse.lambda$createException$1(DefaultClientResponse.java:214) ~[spring-webflux-6.2.8.jar:6.2.8]
+		at reactor.core.publisher.FluxMap$MapSubscriber.onNext(FluxMap.java:106) ~[reactor-core-3.7.7.jar:3.7.7]
+		at reactor.core.publisher.FluxOnErrorReturn$ReturnSubscriber.onNext(FluxOnErrorReturn.java:162) ~[reactor-core-3.7.7.jar:3.7.7]
+		at reactor.core.publisher.FluxDefaultIfEmpty$DefaultIfEmptySubscriber.onNext(FluxDefaultIfEmpty.java:122) ~[reactor-core-3.7.7.jar:3.7.7]
+		at reactor.core.publisher.FluxMapFuseable$MapFuseableSubscriber.onNext(FluxMapFuseable.java:129) ~[reactor-core-3.7.7.jar:3.7.7]
+		at reactor.core.publisher.FluxContextWrite$ContextWriteSubscriber.onNext(FluxContextWrite.java:107) ~[reactor-core-3.7.7.jar:3.7.7]
+		at reactor.core.publisher.FluxMapFuseable$MapFuseableConditionalSubscriber.onNext(FluxMapFuseable.java:299) ~[reactor-core-3.7.7.jar:3.7.7]
+		at reactor.core.publisher.FluxFilterFuseable$FilterFuseableConditionalSubscriber.onNext(FluxFilterFuseable.java:337) ~[reactor-core-3.7.7.jar:3.7.7]
+		at reactor.core.publisher.Operators$BaseFluxToMonoOperator.completePossiblyEmpty(Operators.java:2096) ~[reactor-core-3.7.7.jar:3.7.7]
+		at reactor.core.publisher.MonoCollect$CollectSubscriber.onComplete(MonoCollect.java:145) ~[reactor-core-3.7.7.jar:3.7.7]
+		at reactor.core.publisher.FluxPublish$PublishSubscriber.checkTerminated(FluxPublish.java:634) ~[reactor-core-3.7.7.jar:3.7.7]
+		at reactor.core.publisher.FluxPublish$PublishSubscriber.drain(FluxPublish.java:494) ~[reactor-core-3.7.7.jar:3.7.7]
+		at reactor.core.publisher.FluxPublish$PublishSubscriber.onComplete(FluxPublish.java:355) ~[reactor-core-3.7.7.jar:3.7.7]
+		at reactor.core.publisher.FluxContextWrite$ContextWriteSubscriber.onComplete(FluxContextWrite.java:126) ~[reactor-core-3.7.7.jar:3.7.7]
+		at reactor.core.publisher.FluxMapFuseable$MapFuseableConditionalSubscriber.onComplete(FluxMapFuseable.java:350) ~[reactor-core-3.7.7.jar:3.7.7]
+		at reactor.core.publisher.FluxFlattenIterable$FlattenIterableSubscriber.drainAsync(FluxFlattenIterable.java:371) ~[reactor-core-3.7.7.jar:3.7.7]
+		at reactor.core.publisher.FluxFlattenIterable$FlattenIterableSubscriber.drain(FluxFlattenIterable.java:724) ~[reactor-core-3.7.7.jar:3.7.7]
+		at reactor.core.publisher.FluxFlattenIterable$FlattenIterableSubscriber.onComplete(FluxFlattenIterable.java:273) ~[reactor-core-3.7.7.jar:3.7.7]
