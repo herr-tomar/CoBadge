@@ -1,72 +1,157 @@
-Erklärung der Parameter befindet sich in der DynS Dokumentation.
+package osplus.pkptuna.dispute.mapping;
 
-impulsOid	4-42146xxb-1r8	
-umsatzId	2025-06-17-11.30.39.692979	
-empfKontoId	7593-06-18-18-38-15-900724	
-empfBlz	94059307	
-reklaGrundKat1	SONSTIGE_GRÜNDE	
-reklaBetrag	4400	Teilrekla Only
-reklaWS	EUR	Teilrekla Only
-reklaTeilbetragKz	J/N	
-karteSperren	J/N	
-autoErstattungKz	J/N	
-crdVfggOrigWs	EUR	Vollrekla Only
-crdVfggOrigBtrg	1000	Vollrekla Only
-crdVfggOrigKurs	0	
-crdVerfallMon	12	
-crdTaTraceNr	0/36/37/48/50/61/62	
-primaryAccountNumber	5352990007882264	PAN kann verwendet werden, um alle Transaktionen zu finden
-acquiringReferenceNumber	05204733058038000000010	ARN kann in IBO verwendet werden, um die Transaktion und Parent Issuer Id zu finden
-transactionDateAndTime	2022-12-09T00:00:00	
-IssuerId	1000	Funktioniert so mit der REST-API nicht mehr
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.*;
+import java.util.regex.Pattern;
 
------
+// === Source: Dyns (19 fields) ===
+// Replace with your actual class/package
+import your.pkg.DisputeCreateRequestDto;
 
-{
-  "disputeReason": "SONSTIGE_GRÜNDE",
-  "refundRedebitIndicator": "PARTIAL",
-  "refundRedebitAmount": {
-    "value": 4400,
-    "exponent": 2,
-    "isoCode": "978"
-  },
-  "declareFraudIndicator": false,
-  "issuerDisputeExternalReference": "4-42146xxb-1r8",
-  "disputePostings": [
-    {
-      "postingAmount": {
-        "value": 10000,
-        "exponent": 2,
-        "isoCode": "978"
-      },
-      "immediateReimbursement": false,
-      "postingTypeReference": "ISSUER_ACCOUNT"
+// === Target: IBO request DTOs (plain REST DTOs) ===
+import osplus.pkptuna.dispute.ibo.create.model.DisputeIboCreateRequestDto;
+import osplus.pkptuna.dispute.ibo.create.model.AmountDto;
+import osplus.pkptuna.dispute.ibo.create.model.DisputePostingRequestDto;
+import osplus.pkptuna.dispute.ibo.create.model.DisputeEventRequestDto;
+
+public final class DynsToIboCreateMapper {
+
+    private DynsToIboCreateMapper() {}
+
+    public static DisputeIboCreateRequestDto map(final DisputeCreateRequestDto src) {
+        Objects.requireNonNull(src, "src");
+
+        final DisputeIboCreateRequestDto out = new DisputeIboCreateRequestDto();
+
+        // 1) Straight mappings
+        out.setDisputeReason(nz(src.getReklaGrundKat1()));                 // "SONSTIGE_GRÜNDE"
+        out.setIssuerDisputeExternalReference(nz(src.getImpulsOId()));     // "4-42146xxb-1r8"
+        out.setDeclareFraudIndicator(false);                                // per sample
+
+        // 2) Partial vs Full
+        final boolean isPartial = isJ(src.getReklaTeilbetragKz());
+        if (isPartial) {
+            out.setRefundRedebitIndicator("PARTIAL");
+            // refundRedebitAmount from reklaBetrag + reklaWS (alpha to numeric, exponent by currency)
+            if (notBlank(src.getReklaBetrag()) && notBlank(src.getReklaWS())) {
+                out.setRefundRedebitAmount(toAmount(nz(src.getReklaBetrag()), nz(src.getReklaWS())));
+            }
+        } else {
+            out.setRefundRedebitIndicator("NONE");
+            // omit refundRedebitAmount
+        }
+
+        // 3) Posting (one line, per examples)
+        // Prefer original (if provided). If not, default zero/EUR numeric (978).
+        AmountDto postingAmt = derivePostingAmount(src)
+                .orElseGet(() -> amount(0L, fractionDigitsOrDefault("EUR", 2), alphaToNumericOrAlpha("EUR")));
+        DisputePostingRequestDto posting = new DisputePostingRequestDto();
+        posting.setPostingAmount(postingAmt);
+        posting.setImmediateReimbursement(false);               // per sample
+        posting.setPostingTypeReference("ISSUER_ACCOUNT");      // per sample
+        out.setDisputePostings(Collections.singletonList(posting));
+
+        // 4) Events
+        List<DisputeEventRequestDto> events = new ArrayList<>();
+        if (isPartial && notBlank(src.getReklaBetrag()) && notBlank(src.getReklaWS())) {
+            String pretty = prettyAmount(src.getReklaBetrag(), src.getReklaWS());
+            DisputeEventRequestDto ev = new DisputeEventRequestDto();
+            ev.setType("COMMENT");
+            ev.setMessage("Reklamation mit Teilbetrag i.H.v. " + pretty);
+            events.add(ev);
+        }
+        out.setDisputeEvents(events);
+
+        // 5) Documents: not specified in your samples → leave empty
+        out.setDisputeDocuments(new ArrayList<>());
+
+        return out;
     }
-  ],
-  "disputeEvents": [
-    {
-      "type": "COMMENT",
-      "message": "Reklamation mit Teilbetrag i.H.v. 44 EUR"
+
+    /* ---------------- helpers ---------------- */
+
+    private static Optional<AmountDto> derivePostingAmount(DisputeCreateRequestDto src) {
+        // If you have UMSATZ_BETRAG (EUR), prefer that. If not, try original amount.
+        // Your table shows crdVfggOrigBtrg / crdVfggOrigWs; we use those if present.
+        if (notBlank(src.getCrdVfggOrigBtrg()) && notBlank(src.getCrdVfggOrigWs())) {
+            return Optional.of(toAmount(src.getCrdVfggOrigBtrg(), src.getCrdVfggOrigWs()));
+        }
+        return Optional.empty();
     }
-  ]
-}
 
--------
+    private static AmountDto toAmount(String textAmount, String isoAlphaOrNumeric) {
+        final String norm = textAmount.trim().replace(',', '.');
+        BigDecimal bd;
+        try { bd = new BigDecimal(norm); } catch (NumberFormatException ex) { bd = BigDecimal.ZERO; }
 
+        final String isoOut = alphaToNumericOrAlpha(isoAlphaOrNumeric);
+        final String isoAlpha = toAlpha(isoAlphaOrNumeric);
+        final int exponent = fractionDigitsOrDefault(isoAlpha, 2);
 
-{
-  "disputeReason": "SONSTIGE_GRÜNDE",
-  "refundRedebitIndicator": "NONE",
-  "declareFraudIndicator": false,
-  "issuerDisputeExternalReference": "4-42146xzh-2p8",
-  "disputePostings": [
-    {
-      "postingAmount": {
-        "value": 10000,
-        "exponent": 2,
-        "isoCode": "978"
-      },
-      "immediateReimbursement": false
+        long minor = bd.movePointRight(exponent).setScale(0, RoundingMode.HALF_UP).longValue();
+        return amount(minor, exponent, isoOut);
     }
-  ]
+
+    private static AmountDto amount(long value, int exponent, String isoCodeOut) {
+        AmountDto a = new AmountDto();
+        a.setValue(value);
+        a.setExponent(exponent);
+        a.setIsoCode(isoCodeOut);
+        return a;
+    }
+
+    private static String prettyAmount(String textAmount, String isoAlpha) {
+        String norm = textAmount.trim().replace(',', '.');
+        String alpha = toAlpha(isoAlpha);
+        try {
+            BigDecimal bd = new BigDecimal(norm);
+            int frac = fractionDigitsOrDefault(alpha, 2);
+            bd = bd.setScale(frac, RoundingMode.HALF_UP);
+            return bd.toPlainString() + " " + alpha;
+        } catch (Exception e) {
+            return textAmount + " " + alpha;
+        }
+    }
+
+    private static String toAlpha(String iso) {
+        if (isNumeric(iso)) {
+            // map a few common numerics back to alpha; fallback EUR
+            return NUMERIC_TO_ALPHA.getOrDefault(iso, "EUR");
+        }
+        return iso.toUpperCase(Locale.ROOT);
+    }
+
+    private static String alphaToNumericOrAlpha(String iso) {
+        if (isNumeric(iso)) return iso;
+        return ALPHA_TO_NUMERIC.getOrDefault(iso.toUpperCase(Locale.ROOT), iso.toUpperCase(Locale.ROOT));
+    }
+
+    private static int fractionDigitsOrDefault(String isoAlpha, int def) {
+        try { return Currency.getInstance(isoAlpha).getDefaultFractionDigits(); }
+        catch (Exception e) { return def; }
+    }
+
+    private static boolean isJ(String s) { return s != null && s.trim().equalsIgnoreCase("J"); }
+    private static boolean notBlank(String s) { return s != null && !s.trim().isEmpty(); }
+    private static String nz(String s) { return s == null ? "" : s; }
+
+    private static final Pattern NUMERIC = Pattern.compile("^\\d{3}$");
+    private static boolean isNumeric(String s) { return s != null && NUMERIC.matcher(s.trim()).matches(); }
+
+    // Minimal ISO 4217 alpha↔numeric map (extend as needed)
+    private static final Map<String,String> ALPHA_TO_NUMERIC = Map.ofEntries(
+        Map.entry("EUR", "978"),
+        Map.entry("USD", "840"),
+        Map.entry("GBP", "826"),
+        Map.entry("CHF", "756"),
+        Map.entry("JPY", "392")
+    );
+    private static final Map<String,String> NUMERIC_TO_ALPHA = Map.ofEntries(
+        Map.entry("978", "EUR"),
+        Map.entry("840", "USD"),
+        Map.entry("826", "GBP"),
+        Map.entry("756", "CHF"),
+        Map.entry("392", "JPY")
+    );
 }
