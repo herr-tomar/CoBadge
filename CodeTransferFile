@@ -1,90 +1,69 @@
-package osplus.pkptuna.dispute.service.mapping;
+package osplus.pkptuna.dispute.service.impl;
 
-import org.mapstruct.*;
-import java.util.*;
-import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto; // Dyns (19)
-import osplus.pkptuna.rest.dispute.ibo.create.model.*;
+import org.apache.http.HttpHeaders;
+import org.mapstruct.factory.Mappers;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.reactive.function.client.WebClient;
+import osplus.pkptuna.dispute.config.DisputeServiceProperties;
+import osplus.pkptuna.rest.dispute.create.model.mapper.DisputeCreateRequestDtoMapper;
+import osplus.pkptuna.rest.dispute.ibo.create.model.mapper.AmountDtoMapper;
+import osplus.pkptuna.rest.dispute.ibo.create.model.mapper.DisputeDocumentRequestDtoMapper;
+import osplus.pkptuna.rest.dispute.ibo.create.model.mapper.DisputeEventRequestDtoMapper;
+import osplus.pkptuna.rest.dispute.ibo.create.model.mapper.DisputePostingRequestDtoMapper;
 
-@Mapper(componentModel = "spring",
-        nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
-public interface DynsToIboCreateAutoMapper {
+@Configuration
+@EnableConfigurationProperties(DisputeServiceProperties.class)
+public class ProjecteigeneTestConfiguration {
 
-    @Mappings({
-        @Mapping(target = "disputeReason", source = "reklaGrundKat1"),
-        @Mapping(target = "issuerDisputeExternalReference", source = "impulsOid"),
-        @Mapping(target = "declareFraudIndicator", expression = "java(false)"),
-
-        // computed / assembled fields
-        @Mapping(target = "refundRedebitIndicator", expression = "java(calcIndicator(src))"),
-        @Mapping(target = "refundRedebitAmount",  expression = "java(buildRefundAmount(src))"),
-        @Mapping(target = "disputePostings",      expression = "java(buildPostings(src))"),
-        @Mapping(target = "disputeEvents",        expression = "java(buildEvents(src))"),
-        @Mapping(target = "disputeDocuments",     expression = "java(java.util.Collections.emptyList())")
-    })
-    DisputeIboCreateRequestDto toIbo(DisputeCreateRequestDto src);
-
-    // -------- helpers (NO currency/amount conversions beyond parsing the strings) --------
-
-    default String calcIndicator(DisputeCreateRequestDto s) {
-        return isJ(s.getReklaTeilbetragKz()) ? "PARTIAL" : "NONE";
+    @Bean
+    public DisputeCreateRequestDtoMapper disputeCreateRequestDtoMapper() {
+        return Mappers.getMapper(DisputeCreateRequestDtoMapper.class);
     }
 
-    /**
-     * Builds refundRedebitAmount only for partial. Pass-through isoCode from src.getReklaWS().
-     * Exponent is fixed to 2 (matches your samples). Value is parsed directly from the string.
-     */
-    default AmountDto buildRefundAmount(DisputeCreateRequestDto s) {
-        if (!isJ(s.getReklaTeilbetragKz())) return null;
-        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaWS())) return null;
-
-        AmountDto a = new AmountDto();
-        a.setValue(parseLongSafe(s.getReklaBetrag(), 0L));
-        a.setExponent(2);
-        a.setIsoCode(s.getReklaWS()); // pass-through; put "978" in src if you need numeric
-        return a;
-        }
-
-    /**
-     * Creates a single posting using original amount fields if present.
-     * postingTypeReference = "ISSUER_ACCOUNT", immediateReimbursement = false (as per your sample).
-     */
-    default List<DisputePostingRequestDto> buildPostings(DisputeCreateRequestDto s) {
-        if (isBlank(s.getCrdVfggOrigBtrg()) || isBlank(s.getCrdVfggOrigWs())) {
-            return Collections.emptyList();
-        }
-        AmountDto amt = new AmountDto();
-        amt.setValue(parseLongSafe(s.getCrdVfggOrigBtrg(), 0L));
-        amt.setExponent(2);
-        amt.setIsoCode(s.getCrdVfggOrigWs()); // pass-through
-
-        DisputePostingRequestDto p = new DisputePostingRequestDto();
-        p.setPostingAmount(amt);
-        p.setImmediateReimbursement(false);
-        p.setPostingTypeReference("ISSUER_ACCOUNT");
-
-        return Collections.singletonList(p);
+    @Bean
+    public DisputeEventRequestDtoMapper disputeEventRequestDtoMapper() {
+        return Mappers.getMapper(DisputeEventRequestDtoMapper.class);
     }
 
-    /**
-     * COMMENT event only for partial disputes.
-     */
-    default List<DisputeEventRequestDto> buildEvents(DisputeCreateRequestDto s) {
-        if (!isJ(s.getReklaTeilbetragKz())) return Collections.emptyList();
-        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaWS())) return Collections.emptyList();
-
-        DisputeEventRequestDto ev = new DisputeEventRequestDto();
-        ev.setType("COMMENT");
-        ev.setMessage("Reklamation mit Teilbetrag i.H.v. " + s.getReklaBetrag() + " " + s.getReklaWS());
-        return Collections.singletonList(ev);
+    @Bean
+    public AmountDtoMapper amountDtoMapper() {
+        return Mappers.getMapper(AmountDtoMapper.class);
     }
 
-    // -------- tiny utils --------
-    default boolean isJ(String v) { return v != null && v.trim().equalsIgnoreCase("J"); }
-    default boolean isBlank(String v) { return v == null || v.trim().isEmpty(); }
-    default long parseLongSafe(String s, long def) {
-        try { return Long.parseLong(s.trim()); } catch (Exception e) { return def; }
+    @Bean
+    public DisputePostingRequestDtoMapper disputePostingRequestDtoMapper() {
+        return Mappers.getMapper(DisputePostingRequestDtoMapper.class);
+    }
+
+    @Bean
+    public DisputeDocumentRequestDtoMapper disputeDocumentRequestDtoMapper() {
+        return Mappers.getMapper(DisputeDocumentRequestDtoMapper.class);
+    }
+
+    @Bean
+    public WebClient webClient(@Value("${dispute.base-url}") String baseUrl) {
+        return WebClient.builder()
+                .baseUrl(baseUrl)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, "application/json")
+                .build();
+    }
+
+    @Bean
+    public DisputeDetailServiceImpl disputeDetailService(WebClient webClient, DisputeServiceProperties props) {
+        return new DisputeDetailServiceImpl(webClient, props);
+    }
+
+    @Bean
+    public DisputeServiceImpl disputeService(WebClient webClient,
+                                             DisputeServiceProperties props,
+                                             DisputeCreateRequestDtoMapper disputeCreateRequestDtoMapper
+                                             ) {
+        return new DisputeServiceImpl(
+                webClient,
+                props,
+                disputeCreateRequestDtoMapper);
     }
 }
-
-
-------------------
