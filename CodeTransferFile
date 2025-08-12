@@ -1,4 +1,27 @@
+POST http://localhost:8080/pkptuna/service/dispute/v1/publishDisputeCreateRequest/v1
+Accept: application/apl.universal.ui.v1+json
+Cookie: SESSION=1e2386bb-8dfb-4f02-951d-b68834a574f4
 
-2025-08-12 14:44:07.764  WARN 37400 --- [omcat-handler-0] o.f.c.f.grid.HazelcastGridCaller        : Create anonymous user session, because no fi-Session ID found.
-2025-08-12 14:44:07.817  WARN 37400 --- [omcat-handler-0] o.apl.uui.exception.ErrorResponseHelper : Exception with HTTP-Status code: 415 UNSUPPORTED_MEDIA_TYPE, errorId: 87d23217-a3a8-4a03-97a4-8258b3455052, message: Content-Type '*/*;charset=UTF-8' is not supported, errorEntries: [ErrorEntry{message='org.springframework.web.servlet.mvc.method.RequestMappin**********erMappin**********Match(RequestMappin**********erMappin**********)', important=null}, ErrorEntry{message='org.springframework.web.servlet.mvc.method.RequestMappin**********erMappin**********erInternal(RequestMappin**********erMappin**********)', important=null}, ErrorEntry{message='org.springframework.web.servlet.mvc.method.RequestMappin**********erMappin**********erInternal(RequestMappin**********erMappin**********', important=null}]
-2025-08-12 14:55:39.033  WARN 37400 --- [omcat-handler-1] o.apl.uui.exception.ErrorResponseHelper : Exception with HTTP-Status code: 415 UNSUPPORTED_MEDIA_TYPE, errorId: 97a897d8-f22a-4e72-8b96-48a026819964, message: Content-Type '*/*;charset=UTF-8' is not supported, errorEntries: [ErrorEntry{message='org.springframework.web.servlet.mvc.method.RequestMappin**********erMappin**********Match(RequestMappin**********erMappin**********)', important=null}, ErrorEntry{message='org.springframework.web.servlet.mvc.method.RequestMappin**********erMappin**********erInternal(RequestMappin**********erMappin**********)', important=null}, ErrorEntry{message='org.springframework.web.servlet.mvc.method.RequestMappin**********erMappin**********erInternal(RequestMappin**********erMappin**********', important=null}]
+{
+  "payload":{
+      "impulsOid": "4-42146xxb-1r8",
+      "umsatzId": "2025-06-17-11.30.39.692979",
+      "empfKontoId": "7593-06-18-18-38-15-900724",
+      "empfBlz": "94059307",
+      "reklaGrundKat1": "SONSTIGE_GRÜNDE",
+      "reklaBetrag": "4400",
+      "reklaWS": "EUR",
+      "reklaTeilbetragKz": "J",
+      "karteSperren": "N",
+      "autoErstattungKz": "J",
+      "crdVfggOrigWs": "",
+      "crdVfggOrigBtrg": "",
+      "crdVfggOrigKurs": "0",
+      "crdVerfallMon": "12",
+      "crdTaTraceNr": "0/36/37/48/50/61/62",
+      "primaryAccountNumber": "5352990007882264",
+      "acquiringReferenceNumber": "22289313099013277550216",
+      "transactionDateAndTime": "2022-12-09T00:00:00",
+      "issuerId": "1004"
+   }
+}
