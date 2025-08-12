@@ -1,10 +1,35 @@
-POST http://4.239.136.13:43001/api/v2/search-transactions?filter=transactionIdentifier.transactionId
-Authorization: Basic V1NfT1NQTFVTX0lCTy9GSV9TVERfU0VSVklDRV9DT05UUkFDVC9ERUZBVUxUX01BTkRBVE9SOkRFRkFVTFRfTUFOREFUT1I=
-Content-Type: application/json
-Accept: application/json
+package osplus.pkptuna.rest.dispute.create.model.mapper;
 
-{
-    "issuerId":"1004",
-    "acquirerReferenceDataList": ["22222861306211102082665"]
+/**
+* Auto-generated mapper interface for DisputeCreateRequestDto
+*/
+
+import org.mapstruct.BeanMapping;
+import org.mapstruct.Builder;
+import org.mapstruct.CollectionMappingStrategy;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.factory.Mappers;
+import osplus.apl.core.api.AplComponent;
+import osplus.pkptuna.protobuf.util.TimestampMapper;
+
+
+@AplComponent
+@Mapper(componentModel="spring",
+collectionMappingStrategy = CollectionMappingStrategy.ADDER_PREFERRED,
+nullValuePropertyMappingStrategy = org.mapstruct.NullValuePropertyMappingStrategy.IGNORE,
+uses = {
+TimestampMapper.class
 }
+)
+public interface DisputeCreateRequestDtoMapper {
 
+DisputeCreateRequestDtoMapper INSTANCE = Mappers.getMapper(DisputeCreateRequestDtoMapper.class);
+
+osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto toRestDto(osplus.pkptuna.dispute.create.model.DisputeCreateRequestDto proto);
+
+@BeanMapping(ignoreByDefault = true)
+osplus.pkptuna.dispute.create.model.DisputeCreateRequestDto toProtoDto(osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto restDto);
+
+
+}
