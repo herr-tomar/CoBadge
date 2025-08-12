@@ -1,52 +1,72 @@
-Der Service dient dazu, eine Reklamation zu einem Cobadge-Umsatz im IDM anzulegen.
-IBO-IDM ist ein CoBadge-System, indem der DMC/VID Teil der Spk-Card CoBadge DMC/VID verwaltet und durch die qards (Service-Prozessor der Sparkassen) prozessiert wird.
-Zusätzlich zu den übergebenen Daten lädt der Service weitere Daten, die vom IDM benötigt werden.
-Die Kommunikation mit dem IDM erfolgt immer über ein Gateway.
-Das Ergebnis aus dem IDM wird dann vom Service zurückgeliefert.
-Der Service nimmt folgende Parameter entgegen, die zu einer Reklamation erfasst werden:
-- IMPM_IMPS_OID: Eindeutige Identifikation des Impulses im OSPlus
-- UMSATZ_ID: Eindeutige Identifikation eines Umsatzes eines Empfänger-Kontos
-- EMPF_KONTO_ID: Eindeutige Identifikation des Empfängerkontos der Transaktion
-- IMPS_KTGR: Grund der Reklamation (Kategorie Ebene 1)
-- ORIG_BTRG_TBTR: Nur bei einer Teilreklamation gefüllt. Enthält in dem Fall den zu reklamierenden Betrag in der verfügten Währung.
-- KARTEN_SPERR_KZ: Kennzeichen, ob Karte gesperrt werden soll
-- CBD_UMS_ERST_AUTO_ANZ: Anzahl der bereits erhaltenen automatischen Erstattungen eines KI im abgefragten Zeitraum
-Der Service bestimmt über einen Aufruf des Shared-Service UmsatzInternLesen weitere Daten zu dem Umsatz:
-- UMSATZ_BETRAG: Gesamtbetrag, mit dem das Karteninhaber-Konto belastet wurde. Währung ist die aus dem Zahlungsverkehr (EUR).
-- EMPF_BLZ: Bankleitzahl des Empfängerkontos
-- CRD_TA_TRACE_NR: Transaction Life Cycle ID
-- CRD_PAN: PrimaryAccountNumber
-- SEP_UTMT_CRED_ID: AcquiringReferenceNumber
-- CRD_TA_DATE_TIME: Zeitpunkt der Verfügung (Ortszeit)
-- CRD_VERFALL_MON: Verfall Jahr/ Monat der verwendeten Karte
-- CRD_VFGG_ORIG_KURS: Umrechnungskurs bei einer Transaktion in Fremdwährung
-- CRD_VFGG_ORIG_WS: Original-Währungsschlüssel
-- CRD_VFGG_ORIG_BTRG: verfügter Betrag in Original-Währung
-Der Service liest die Institutswerte:
-- DMC-MAXBT-AE: Maximaler Betrag für automatische Erstattung
-- DMC-MAXAZ-AE: Maximaler Anzahl automatischer Erstattungen im Zeitraum
-- DMC-SVPROC-I: Kurztext für den Kartenprozessor
-Der Service bestimmt dann anhand der gelesenen und übergebenen Daten, ob eine automatische Erstattung zulässig ist oder nicht.
-Alle für das Anlegen der Reklamation im IDM benötigten Daten werden anschließend in einem Aufruf an das Gateway übergeben:
-- impulsOId: IMPULS_OID
-- umsatzId: UMSATZ_ID
-- empfKontoId: EMPF_KONTO_ID
-- empfBlz: EMPF_BLZ
-- reklaGrundKat1: REKLA_GRUND_KAT_1
-- reklaBetrag: TEILBETRAG bei Teilreklamation, sonst UMSATZ_BETRAG
-- reklaBetragWs: CRD_VFGG_ORIG_WS bei Teilreklamation, sonst EUR
-- reklaTeilbetragKz: Kennzeichen, ob Voll- oder Teilreklamation (J/N)
-- karteSperren: KARTE_SPERREN_KZ
-- autoErstattungKz: Prüfergebnis, ob automatische Erstattung zulässig ist (J/N)
-- crdVfggOrigWs: CRD_VFGG_ORIG_WS
-- crdVfggOrigBtrg: CRD_VFGG_ORIG_BTRG
-- crdVfggOrigKurs: CRD_VFGG_ORIG_KURS
-- crdVerfallMon: CRD_VERFALL_MON
-- crdTaTraceNr: CRD_TA_TRACE_NR
-- primaryAccountNumber: CRD_PAN
-- acquiringReferenceNumber: SEP_UTMT_CRED_ID
-- transactionDateAndTime: CRD_TA_DATE_TIME
-- IssuerId: Eindeutige Id des Mandanten für das IDM, aus dem Kartenprozessor abgeleitet
-Der Service gibt zurück:
-- REKL_VGNG_INTN_NR: ID des dispute Folders im IDM
-- CBD_UMS_ERST_AUTO_KZ: Prüfergebnis, ob automatische Erstattung zulässig ist (J/N)	
+Erklärung der Parameter befindet sich in der DynS Dokumentation.
+
+impulsOid	4-42146xxb-1r8	
+umsatzId	2025-06-17-11.30.39.692979	
+empfKontoId	7593-06-18-18-38-15-900724	
+empfBlz	94059307	
+reklaGrundKat1	SONSTIGE_GRÜNDE	
+reklaBetrag	4400	Teilrekla Only
+reklaWS	EUR	Teilrekla Only
+reklaTeilbetragKz	J/N	
+karteSperren	J/N	
+autoErstattungKz	J/N	
+crdVfggOrigWs	EUR	Vollrekla Only
+crdVfggOrigBtrg	1000	Vollrekla Only
+crdVfggOrigKurs	0	
+crdVerfallMon	12	
+crdTaTraceNr	0/36/37/48/50/61/62	
+primaryAccountNumber	5352990007882264	PAN kann verwendet werden, um alle Transaktionen zu finden
+acquiringReferenceNumber	05204733058038000000010	ARN kann in IBO verwendet werden, um die Transaktion und Parent Issuer Id zu finden
+transactionDateAndTime	2022-12-09T00:00:00	
+IssuerId	1000	Funktioniert so mit der REST-API nicht mehr
+
+-----
+
+{
+  "disputeReason": "SONSTIGE_GRÜNDE",
+  "refundRedebitIndicator": "PARTIAL",
+  "refundRedebitAmount": {
+    "value": 4400,
+    "exponent": 2,
+    "isoCode": "978"
+  },
+  "declareFraudIndicator": false,
+  "issuerDisputeExternalReference": "4-42146xxb-1r8",
+  "disputePostings": [
+    {
+      "postingAmount": {
+        "value": 10000,
+        "exponent": 2,
+        "isoCode": "978"
+      },
+      "immediateReimbursement": false,
+      "postingTypeReference": "ISSUER_ACCOUNT"
+    }
+  ],
+  "disputeEvents": [
+    {
+      "type": "COMMENT",
+      "message": "Reklamation mit Teilbetrag i.H.v. 44 EUR"
+    }
+  ]
+}
+
+-------
+
+
+{
+  "disputeReason": "SONSTIGE_GRÜNDE",
+  "refundRedebitIndicator": "NONE",
+  "declareFraudIndicator": false,
+  "issuerDisputeExternalReference": "4-42146xzh-2p8",
+  "disputePostings": [
+    {
+      "postingAmount": {
+        "value": 10000,
+        "exponent": 2,
+        "isoCode": "978"
+      },
+      "immediateReimbursement": false
+    }
+  ]
+}
