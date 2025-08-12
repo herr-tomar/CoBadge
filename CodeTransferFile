@@ -1,50 +1,49 @@
-private static void generateMapper(Template mapperTemplate, File outputDir, ProtoMessageModel model) throws IOException {
-    String protoPackage = model.getProtoPackageName();
-    String restPackage = insertRestInPackage(protoPackage);
-    String mapperPackage = restPackage + ".mapper";
+package ${mapperPackage};
 
-    Set<String> fullMapperClassSet = new HashSet<>();
-    Set<String> simpleMapperClassSet = new HashSet<>();
+/**
+* Auto-generated mapper interface for ${protoDtoClassName}
+*/
 
-    // For mapping repeated fields
-    List<Map<String, String>> repeatedFieldMappings = new ArrayList<>();
-    // For mapping normal fields
-    List<Map<String, String>> normalFieldMappings = new ArrayList<>();
+import org.mapstruct.BeanMapping;
+import org.mapstruct.Builder;
+import org.mapstruct.CollectionMappingStrategy;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.factory.Mappers;
+import osplus.apl.core.api.AplComponent;
+import osplus.pkptuna.protobuf.util.TimestampMapper;
 
-    for (ProtoFieldModel field : model.getFields()) {
-        if (field.isCustomType()) {
-            fullMapperClassSet.add(mapperPackage + "." + field.getProtoType() + "Mapper");
-            simpleMapperClassSet.add(field.getProtoType() + "Mapper");
-        }
+<#-- Import custom mapper classes -->
+<#list customMapperImports as imp>
+    import ${imp};
+</#list>
 
-        if (field.isRepeated()) {
-            Map<String, String> mapping = new HashMap<>();
-            mapping.put("source", field.getName() + "List");
-            mapping.put("target", field.getName());
-            repeatedFieldMappings.add(mapping);
-        } else {
-            Map<String, String> mapping = new HashMap<>();
-            mapping.put("source", field.getName());
-            mapping.put("target", field.getName());
-            normalFieldMappings.add(mapping);
-        }
-    }
+@AplComponent
+@Mapper(componentModel="spring",
+collectionMappingStrategy = CollectionMappingStrategy.ADDER_PREFERRED,
+nullValuePropertyMappingStrategy = org.mapstruct.NullValuePropertyMappingStrategy.IGNORE,
+uses = {
+TimestampMapper.class
+<#list customMapperSimpleNames as mapper>
+    , ${mapper}.class
+</#list>
+}
+)
+public interface ${mapperInterfaceName} {
 
-    Map<String, Object> mapperData = new HashMap<>();
-    mapperData.put(KEY_MAPPER_PACKAGE, mapperPackage);
-    mapperData.put(KEY_PROTO_DTO_PACKAGE, protoPackage);
-    mapperData.put(KEY_PROTO_DTO_CLASS_NAME, model.getClassName());
-    mapperData.put(KEY_REST_DTO_PACKAGE, restPackage);
-    mapperData.put(KEY_REST_DTO_CLASS_NAME, model.getClassName());
-    mapperData.put(KEY_MAPPER_INTERFACE_NAME, model.getClassName() + "Mapper");
-    mapperData.put(KEY_CUSTOM_IMPORTS, new ArrayList<>(fullMapperClassSet));
-    mapperData.put(KEY_CUSTOM_SIMPLE_NAMES, new ArrayList<>(simpleMapperClassSet));
-    mapperData.put(KEY_REPEATED_MAPPINGS, repeatedFieldMappings);
-    mapperData.put("normalFieldMappings", normalFieldMappings); // <-- new
+${mapperInterfaceName} INSTANCE = Mappers.getMapper(${mapperInterfaceName}.class);
 
-    File mapperDir = new File(outputDir, mapperPackage.replace('.', '/'));
-    mapperDir.mkdirs();
+<#-- Generate @Mapping entries for repeated fields -->
+<#list repeatedFieldMappings as mapping>
+    @Mapping(source = "${mapping.source}", target = "${mapping.target}")
+</#list>
+${restDtoPackage}.${restDtoClassName} toRestDto(${protoDtoPackage}.${protoDtoClassName} proto);
 
-    File mapperFile = new File(mapperDir, model.getClassName() + "Mapper.java");
-    TemplateWriterUtil.writeTemplate(mapperTemplate, mapperData, mapperFile);
+@BeanMapping(ignoreByDefault = true)
+<#list repeatedFieldMappings as mapping>
+    @Mapping(source = "${mapping.target}", target = "${mapping.source}")
+</#list>
+${protoDtoPackage}.${protoDtoClassName} toProtoDto(${restDtoPackage}.${restDtoClassName} restDto);
+
+
 }
