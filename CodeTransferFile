@@ -1,22 +1,106 @@
-Mapping DynS → IBO (Dispute Create)
-#	DynS Feld	IBO Feld	Transformation / Geschäftslogik	Bedingungen / Anmerkungen
-1	reklaTeilbetragKz (J/N)	refundRedebitIndicator	Wenn J ⇒ "PARTIAL", sonst "NONE"	Steuert gleichzeitig, ob refundRedebitAmount gesetzt wird und ob Dispute Events angelegt werden
-2	reklaBetrag, reklaWS	refundRedebitAmount.value, .isoCode, .exponent	Betrag und Währung übernehmen; Währung normalisieren (Numeric→Alpha z. B. 978→EUR) und Exponent aus ISO-Standard ableiten (z. B. EUR = 2 Nachkommastellen)	Nur bei "PARTIAL" gesetzt
-3	reklaGrundKat1	disputeReason	Mapping von internen DynS-Codes zu IBO-unterstützten Werten (Legacy: hart codierte Liste; Jetzt: englische Service-konforme Werte)	Pflichtfeld in IBO, sonst Fehler
-4	impulsOid	issuerDisputeExternalReference	1:1 Übernahme	Muss eindeutig sein
-5	crdVfggOrigBtrg, crdVfggOrigWs (falls leer → Fallback auf reklaBetrag/reklaWS)	disputePostings[].postingAmount	Währung normalisieren wie bei refundRedebitAmount, Exponent bestimmen	Gilt für Partial und Full; bevorzugt crdVfggOrig…, sonst Fallback
-6	(kein DynS-Feld, Systemwert)	disputePostings[].postingTypeReference	Immer "ISSUER_ACCOUNT"	Festwert
-7	(kein DynS-Feld, Systemwert)	disputePostings[].immediateReimbursement	Immer false	Festwert
-8	reklaBetrag + reklaWS	disputeEvents[].message	Nur bei "PARTIAL": Text "Reklamation mit Teilbetrag i.H.v. <Betrag> <Währung>"	type = "COMMENT"
-9	—	disputeDocuments[]	Legacy: immer leer bei Create	Dokumente werden nur später angehängt
-10	Currency-Normalisierung	.isoCode Felder in refundRedebitAmount und postingAmount	Falls numeric (z. B. "978") → Mapping auf Alpha (EUR); falls Alpha bereits vorhanden → Uppercase; Exponent aus ISO 4217 bestimmen	Legacy verhält sich gleich
-11	—	Alle Betragsfelder	Komma in Beträgen → Punkt konvertieren; Rundung auf Exponent-Anzahl Nachkommastellen	Wie in Legacy C-Code
-Zusätzliche festgestellte Geschäftslogik aus Legacy
+package osplus.pkptuna.dispute.service.mapping;
 
-    Fallback-Regeln: Wenn crdVfggOrigBtrg leer, wird der Wert aus reklaBetrag genommen.
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.Mappings;
+import org.mapstruct.NullValuePropertyMappingStrategy;
+import osplus.apl.core.api.AplComponent;
+import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.AmountDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeEventRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputePostingRequestDto;
 
-    Currency-Default: Wenn keine Währung angegeben ist, wird automatisch EUR gesetzt (Exponent 2).
+import java.util.Collections;
+import java.util.List;
 
-    Teil vs. Voll Rekla: Nur bei Teilreklamation (J) wird der refundRedebitAmount gesetzt und Dispute Events angelegt.
+@AplComponent
+@Mapper(componentModel = "spring",
+        nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+public interface DynsToIboCreateMapper {
 
-    Währungs-Codes: Legacy unterstützt sowohl Alpha (EUR) als auch Numeric (978), wandelt Numeric aber immer in Alpha für IBO um.
+    @Mappings({
+            @Mapping(target = "disputeReason", source = "reklaGrundKat1"),
+            @Mapping(target = "issuerDisputeExternalReference", source = "impulsOid"),
+            @Mapping(target = "declareFraudIndicator", expression = "java(false)"),
+
+            // computed / assembled fields
+            @Mapping(target = "refundRedebitIndicator", expression = "java(calcIndicator(src))"),
+            @Mapping(target = "refundRedebitAmount",  expression = "java(buildRefundAmount(src))"),
+            @Mapping(target = "disputePostings",      expression = "java(buildPostings(src))"),
+            @Mapping(target = "disputeEvents",        expression = "java(buildEvents(src))"),
+            @Mapping(target = "disputeDocuments",     expression = "java(java.util.Collections.emptyList())")
+    })
+    DisputeIboCreateRequestDto toIbo(DisputeCreateRequestDto src);
+
+    // -------- helpers (NO currency/amount conversions beyond parsing the strings) --------
+
+    default String calcIndicator(DisputeCreateRequestDto s) {
+        return isJ(s.getReklaTeilbetragKz()) ? "PARTIAL" : "NONE";
+    }
+
+    /**
+     * Builds refundRedebitAmount only for partial. Pass-through isoCode from src.getReklaWS().
+     * Exponent is fixed to 2 (matches your samples). Value is parsed directly from the string.
+     */
+    default AmountDto buildRefundAmount(DisputeCreateRequestDto s) {
+        if (!isJ(s.getReklaTeilbetragKz())) {
+            return null;
+        }
+        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaBetragWs())) {
+            return null;
+        }
+
+        AmountDto a = new AmountDto();
+        a.setValue(parseLongSafe(s.getReklaBetrag(), 0L));
+        a.setExponent(2);
+        a.setIsoCode(s.getReklaBetragWs()); // pass-through; put "978" in src if you need numeric
+        return a;
+    }
+
+    /**
+     * Creates a single posting using original amount fields if present.
+     * postingTypeReference = "ISSUER_ACCOUNT", immediateReimbursement = false (as per your sample).
+     */
+    default List<DisputePostingRequestDto> buildPostings(DisputeCreateRequestDto s) {
+        if (isBlank(s.getCrdVfggOrigBtrg()) || isBlank(s.getCrdVfggOrigWs())) {
+            return Collections.emptyList();
+        }
+        AmountDto amt = new AmountDto();
+        amt.setValue(parseLongSafe(s.getCrdVfggOrigBtrg(), 0L));
+        amt.setExponent(2);
+        amt.setIsoCode(s.getCrdVfggOrigWs()); // pass-through
+
+        DisputePostingRequestDto p = new DisputePostingRequestDto();
+        p.setPostingAmount(amt);
+        p.setImmediateReimbursement(false);
+        p.setPostingTypeReference("ISSUER_ACCOUNT");
+
+        return Collections.singletonList(p);
+    }
+
+    /**
+     * COMMENT event only for partial disputes.
+     */
+    default List<DisputeEventRequestDto> buildEvents(DisputeCreateRequestDto s) {
+        if (!isJ(s.getReklaTeilbetragKz())) {
+            return Collections.emptyList();
+        }
+        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaBetragWs())) {
+            return Collections.emptyList();
+        }
+
+        DisputeEventRequestDto ev = new DisputeEventRequestDto();
+        ev.setType("COMMENT");
+        ev.setMessage("Reklamation mit Teilbetrag i.H.v. " + s.getReklaBetrag() + " " + s.getReklaBetragWs());
+        return Collections.singletonList(ev);
+    }
+
+    // -------- tiny utils --------
+    default boolean isJ(String v) { return v != null && v.trim().equalsIgnoreCase("J"); }
+    default boolean isBlank(String v) { return v == null || v.trim().isEmpty(); }
+    default long parseLongSafe(String s, long def) {
+        try { return Long.parseLong(s.trim()); } catch (Exception e) { return def; }
+    }
+}
+
