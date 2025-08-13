@@ -11,6 +11,7 @@ import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeEventRequestDto;
 import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateRequestDto;
 import osplus.pkptuna.rest.dispute.ibo.create.model.DisputePostingRequestDto;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -33,62 +34,71 @@ public interface DynsToIboCreateMapper {
     })
     DisputeIboCreateRequestDto toIbo(DisputeCreateRequestDto src);
 
-    // -------- helpers (NO currency/amount conversions beyond parsing the strings) --------
+    // -------- helpers (currency + reason strictly pass-through) --------
 
+    /** PARTIAL if reklaTeilbetragKz == 'J' else NONE */
     default String calcIndicator(DisputeCreateRequestDto s) {
         return isJ(s.getReklaTeilbetragKz()) ? "PARTIAL" : "NONE";
     }
 
-    /**
-     * Builds refundRedebitAmount only for partial. Pass-through isoCode from src.getReklaWS().
-     * Exponent is fixed to 2 (matches your samples). Value is parsed directly from the string.
-     */
+    /** refundRedebitAmount only for partial; isoCode/exponent pass-through (fixed 2) */
     default AmountDto buildRefundAmount(DisputeCreateRequestDto s) {
-        if (!isJ(s.getReklaTeilbetragKz())) {
-            return null;
-        }
-        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaBetragWs())) {
-            return null;
-        }
+        if (!isJ(s.getReklaTeilbetragKz())) return null;
+        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaBetragWs())) return null;
 
         AmountDto a = new AmountDto();
         a.setValue(parseLongSafe(s.getReklaBetrag(), 0L));
         a.setExponent(2);
-        a.setIsoCode(s.getReklaBetragWs()); // pass-through; put "978" in src if you need numeric
+        a.setIsoCode(s.getReklaBetragWs());
         return a;
     }
 
     /**
-     * Creates a single posting using original amount fields if present.
-     * postingTypeReference = "ISSUER_ACCOUNT", immediateReimbursement = false (as per your sample).
+     * Build postings:
+     *  1) prefer original amount (crdVfggOrigBtrg / crdVfggOrigWs)
+     *  2) else, if PARTIAL and refund fields exist, fallback to (reklaBetrag / reklaWS)
+     *  3) else, no posting
+     *  postingTypeReference = "ISSUER_ACCOUNT", immediateReimbursement = false
+     *  exponent = 2 (per your current samples)
      */
     default List<DisputePostingRequestDto> buildPostings(DisputeCreateRequestDto s) {
-        if (isBlank(s.getCrdVfggOrigBtrg()) || isBlank(s.getCrdVfggOrigWs())) {
+        AmountDto amt = null;
+
+        // preferred source: original amount
+        if (!isBlank(s.getCrdVfggOrigBtrg()) && !isBlank(s.getCrdVfggOrigWs())) {
+            amt = new AmountDto();
+            amt.setValue(parseLongSafe(s.getCrdVfggOrigBtrg(), 0L));
+            amt.setExponent(2);
+            amt.setIsoCode(s.getCrdVfggOrigWs());
+        }
+        // fallback for partial: refund amount fields
+        else if (isJ(s.getReklaTeilbetragKz())
+                && !isBlank(s.getReklaBetrag())
+                && !isBlank(s.getReklaBetragWs())) {
+            amt = new AmountDto();
+            amt.setValue(parseLongSafe(s.getReklaBetrag(), 0L));
+            amt.setExponent(2);
+            amt.setIsoCode(s.getReklaBetragWs());
+        }
+
+        if (amt == null) {
             return Collections.emptyList();
         }
-        AmountDto amt = new AmountDto();
-        amt.setValue(parseLongSafe(s.getCrdVfggOrigBtrg(), 0L));
-        amt.setExponent(2);
-        amt.setIsoCode(s.getCrdVfggOrigWs()); // pass-through
 
         DisputePostingRequestDto p = new DisputePostingRequestDto();
         p.setPostingAmount(amt);
         p.setImmediateReimbursement(false);
         p.setPostingTypeReference("ISSUER_ACCOUNT");
 
-        return Collections.singletonList(p);
+        List<DisputePostingRequestDto> out = new ArrayList<>(1);
+        out.add(p);
+        return out;
     }
 
-    /**
-     * COMMENT event only for partial disputes.
-     */
+    /** Create COMMENT event only for partial (simple pass-through text) */
     default List<DisputeEventRequestDto> buildEvents(DisputeCreateRequestDto s) {
-        if (!isJ(s.getReklaTeilbetragKz())) {
-            return Collections.emptyList();
-        }
-        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaBetragWs())) {
-            return Collections.emptyList();
-        }
+        if (!isJ(s.getReklaTeilbetragKz())) return Collections.emptyList();
+        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaBetragWs())) return Collections.emptyList();
 
         DisputeEventRequestDto ev = new DisputeEventRequestDto();
         ev.setType("COMMENT");
@@ -103,4 +113,3 @@ public interface DynsToIboCreateMapper {
         try { return Long.parseLong(s.trim()); } catch (Exception e) { return def; }
     }
 }
-
