@@ -1,106 +1,109 @@
-package osplus.pkptuna.dispute.service.mapping;
+// src/main/java/osplus/pkptuna/dispute/service/validation/Violation.java
+package osplus.pkptuna.dispute.service.validation;
 
-import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
-import org.mapstruct.Mappings;
-import org.mapstruct.NullValuePropertyMappingStrategy;
-import osplus.apl.core.api.AplComponent;
-import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
-import osplus.pkptuna.rest.dispute.ibo.create.model.AmountDto;
-import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeEventRequestDto;
-import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateRequestDto;
-import osplus.pkptuna.rest.dispute.ibo.create.model.DisputePostingRequestDto;
+public record Violation(String field, String message) {}
 
-import java.util.Collections;
+
+------------
+
+// src/main/java/osplus/pkptuna/dispute/service/validation/FunctionalValidationException.java
+package osplus.pkptuna.dispute.service.validation;
+
 import java.util.List;
 
-@AplComponent
-@Mapper(componentModel = "spring",
-        nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
-public interface DynsToIboCreateMapper {
+public class FunctionalValidationException extends RuntimeException {
+    private final List<Violation> violations;
 
-    @Mappings({
-            @Mapping(target = "disputeReason", source = "reklaGrundKat1"),
-            @Mapping(target = "issuerDisputeExternalReference", source = "impulsOid"),
-            @Mapping(target = "declareFraudIndicator", expression = "java(false)"),
-
-            // computed / assembled fields
-            @Mapping(target = "refundRedebitIndicator", expression = "java(calcIndicator(src))"),
-            @Mapping(target = "refundRedebitAmount",  expression = "java(buildRefundAmount(src))"),
-            @Mapping(target = "disputePostings",      expression = "java(buildPostings(src))"),
-            @Mapping(target = "disputeEvents",        expression = "java(buildEvents(src))"),
-            @Mapping(target = "disputeDocuments",     expression = "java(java.util.Collections.emptyList())")
-    })
-    DisputeIboCreateRequestDto toIbo(DisputeCreateRequestDto src);
-
-    // -------- helpers (NO currency/amount conversions beyond parsing the strings) --------
-
-    default String calcIndicator(DisputeCreateRequestDto s) {
-        return isJ(s.getReklaTeilbetragKz()) ? "PARTIAL" : "NONE";
+    public FunctionalValidationException(List<Violation> violations) {
+        super("Functional validation failed");
+        this.violations = List.copyOf(violations);
     }
 
-    /**
-     * Builds refundRedebitAmount only for partial. Pass-through isoCode from src.getReklaWS().
-     * Exponent is fixed to 2 (matches your samples). Value is parsed directly from the string.
-     */
-    default AmountDto buildRefundAmount(DisputeCreateRequestDto s) {
-        if (!isJ(s.getReklaTeilbetragKz())) {
-            return null;
-        }
-        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaBetragWs())) {
-            return null;
-        }
-
-        AmountDto a = new AmountDto();
-        a.setValue(parseLongSafe(s.getReklaBetrag(), 0L));
-        a.setExponent(2);
-        a.setIsoCode(s.getReklaBetragWs()); // pass-through; put "978" in src if you need numeric
-        return a;
-    }
-
-    /**
-     * Creates a single posting using original amount fields if present.
-     * postingTypeReference = "ISSUER_ACCOUNT", immediateReimbursement = false (as per your sample).
-     */
-    default List<DisputePostingRequestDto> buildPostings(DisputeCreateRequestDto s) {
-        if (isBlank(s.getCrdVfggOrigBtrg()) || isBlank(s.getCrdVfggOrigWs())) {
-            return Collections.emptyList();
-        }
-        AmountDto amt = new AmountDto();
-        amt.setValue(parseLongSafe(s.getCrdVfggOrigBtrg(), 0L));
-        amt.setExponent(2);
-        amt.setIsoCode(s.getCrdVfggOrigWs()); // pass-through
-
-        DisputePostingRequestDto p = new DisputePostingRequestDto();
-        p.setPostingAmount(amt);
-        p.setImmediateReimbursement(false);
-        p.setPostingTypeReference("ISSUER_ACCOUNT");
-
-        return Collections.singletonList(p);
-    }
-
-    /**
-     * COMMENT event only for partial disputes.
-     */
-    default List<DisputeEventRequestDto> buildEvents(DisputeCreateRequestDto s) {
-        if (!isJ(s.getReklaTeilbetragKz())) {
-            return Collections.emptyList();
-        }
-        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaBetragWs())) {
-            return Collections.emptyList();
-        }
-
-        DisputeEventRequestDto ev = new DisputeEventRequestDto();
-        ev.setType("COMMENT");
-        ev.setMessage("Reklamation mit Teilbetrag i.H.v. " + s.getReklaBetrag() + " " + s.getReklaBetragWs());
-        return Collections.singletonList(ev);
-    }
-
-    // -------- tiny utils --------
-    default boolean isJ(String v) { return v != null && v.trim().equalsIgnoreCase("J"); }
-    default boolean isBlank(String v) { return v == null || v.trim().isEmpty(); }
-    default long parseLongSafe(String s, long def) {
-        try { return Long.parseLong(s.trim()); } catch (Exception e) { return def; }
+    public List<Violation> getViolations() {
+        return violations;
     }
 }
+
+
+-----------
+
+// src/main/java/osplus/pkptuna/dispute/service/validation/DisputeCreateValidator.java
+package osplus.pkptuna.dispute.service.validation;
+
+import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public final class DisputeCreateValidator {
+
+    private DisputeCreateValidator() {}
+
+    public static List<Violation> validate(DisputeCreateRequestDto s) {
+        List<Violation> v = new ArrayList<>();
+
+        // Pflichtfelder
+        req(v, s.getImpulsOid(), "impulsOid");
+        req(v, s.getReklaGrundKat1(), "reklaGrundKat1");
+
+        // Teil/Voll-Logik
+        boolean isPartial = isJ(s.getReklaTeilbetragKz());
+        if (isPartial) {
+            // refundRedebitAmount benötigt Betrag + Währung
+            req(v, s.getReklaBetrag(), "reklaBetrag");
+            req(v, s.getReklaBetragWs(), "reklaBetragWs");
+            numeric(v, s.getReklaBetrag(), "reklaBetrag");
+        }
+
+        // Posting-Quelle (Originalbetrag/-währung) – paarig
+        pairIfPresentMustBeBoth(v, s.getCrdVfggOrigBtrg(), s.getCrdVfggOrigWs(),
+                "crdVfggOrigBtrg", "crdVfggOrigWs");
+        if (notBlank(s.getCrdVfggOrigBtrg())) numeric(v, s.getCrdVfggOrigBtrg(), "crdVfggOrigBtrg");
+
+        return v;
+    }
+
+    private static void req(List<Violation> v, String val, String field) {
+        if (val == null || val.trim().isEmpty()) v.add(new Violation(field, "Pflichtfeld fehlt"));
+    }
+
+    private static void numeric(List<Violation> v, String val, String field) {
+        if (val == null) return;
+        try { Long.parseLong(val.trim()); }
+        catch (Exception e) { v.add(new Violation(field, "Muss numerisch (Ganzzahl in Minor Units) sein")); }
+    }
+
+    private static void pairIfPresentMustBeBoth(List<Violation> v, String a, String b, String fa, String fb) {
+        boolean ha = notBlank(a), hb = notBlank(b);
+        if (ha ^ hb) v.add(new Violation(ha ? fb : fa, "Betrag/Währung müssen paarig vorkommen"));
+    }
+
+    private static boolean notBlank(String s) { return s != null && !s.trim().isEmpty(); }
+    private static boolean isJ(String v) { return v != null && v.trim().equalsIgnoreCase("J"); }
+}
+
+
+---------
+
+
+// src/main/java/osplus/pkptuna/dispute/service/normalization/DisputeCreateNormalizer.java
+package osplus.pkptuna.dispute.service.normalization;
+
+import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
+
+public final class DisputeCreateNormalizer {
+    private DisputeCreateNormalizer() {}
+
+    public static DisputeCreateRequestDto normalize(DisputeCreateRequestDto s) {
+        // Minimale Normalisierung; Währung & Reason bleiben "as-is".
+        if (s.getReklaBetrag() != null) s.setReklaBetrag(s.getReklaBetrag().trim());
+        if (s.getCrdVfggOrigBtrg() != null) s.setCrdVfggOrigBtrg(s.getCrdVfggOrigBtrg().trim());
+        if (s.getImpulsOid() != null) s.setImpulsOid(s.getImpulsOid().trim());
+        if (s.getReklaGrundKat1() != null) s.setReklaGrundKat1(s.getReklaGrundKat1().trim());
+        return s;
+    }
+}
+
+
+----------------
 
