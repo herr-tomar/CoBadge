@@ -1,69 +1,22 @@
-package osplus.pkptuna.dispute.service.impl;
+Mapping DynS → IBO (Dispute Create)
+#	DynS Feld	IBO Feld	Transformation / Geschäftslogik	Bedingungen / Anmerkungen
+1	reklaTeilbetragKz (J/N)	refundRedebitIndicator	Wenn J ⇒ "PARTIAL", sonst "NONE"	Steuert gleichzeitig, ob refundRedebitAmount gesetzt wird und ob Dispute Events angelegt werden
+2	reklaBetrag, reklaWS	refundRedebitAmount.value, .isoCode, .exponent	Betrag und Währung übernehmen; Währung normalisieren (Numeric→Alpha z. B. 978→EUR) und Exponent aus ISO-Standard ableiten (z. B. EUR = 2 Nachkommastellen)	Nur bei "PARTIAL" gesetzt
+3	reklaGrundKat1	disputeReason	Mapping von internen DynS-Codes zu IBO-unterstützten Werten (Legacy: hart codierte Liste; Jetzt: englische Service-konforme Werte)	Pflichtfeld in IBO, sonst Fehler
+4	impulsOid	issuerDisputeExternalReference	1:1 Übernahme	Muss eindeutig sein
+5	crdVfggOrigBtrg, crdVfggOrigWs (falls leer → Fallback auf reklaBetrag/reklaWS)	disputePostings[].postingAmount	Währung normalisieren wie bei refundRedebitAmount, Exponent bestimmen	Gilt für Partial und Full; bevorzugt crdVfggOrig…, sonst Fallback
+6	(kein DynS-Feld, Systemwert)	disputePostings[].postingTypeReference	Immer "ISSUER_ACCOUNT"	Festwert
+7	(kein DynS-Feld, Systemwert)	disputePostings[].immediateReimbursement	Immer false	Festwert
+8	reklaBetrag + reklaWS	disputeEvents[].message	Nur bei "PARTIAL": Text "Reklamation mit Teilbetrag i.H.v. <Betrag> <Währung>"	type = "COMMENT"
+9	—	disputeDocuments[]	Legacy: immer leer bei Create	Dokumente werden nur später angehängt
+10	Currency-Normalisierung	.isoCode Felder in refundRedebitAmount und postingAmount	Falls numeric (z. B. "978") → Mapping auf Alpha (EUR); falls Alpha bereits vorhanden → Uppercase; Exponent aus ISO 4217 bestimmen	Legacy verhält sich gleich
+11	—	Alle Betragsfelder	Komma in Beträgen → Punkt konvertieren; Rundung auf Exponent-Anzahl Nachkommastellen	Wie in Legacy C-Code
+Zusätzliche festgestellte Geschäftslogik aus Legacy
 
-import org.apache.http.HttpHeaders;
-import org.mapstruct.factory.Mappers;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.web.reactive.function.client.WebClient;
-import osplus.pkptuna.dispute.config.DisputeServiceProperties;
-import osplus.pkptuna.rest.dispute.create.model.mapper.DisputeCreateRequestDtoMapper;
-import osplus.pkptuna.rest.dispute.ibo.create.model.mapper.AmountDtoMapper;
-import osplus.pkptuna.rest.dispute.ibo.create.model.mapper.DisputeDocumentRequestDtoMapper;
-import osplus.pkptuna.rest.dispute.ibo.create.model.mapper.DisputeEventRequestDtoMapper;
-import osplus.pkptuna.rest.dispute.ibo.create.model.mapper.DisputePostingRequestDtoMapper;
+    Fallback-Regeln: Wenn crdVfggOrigBtrg leer, wird der Wert aus reklaBetrag genommen.
 
-@Configuration
-@EnableConfigurationProperties(DisputeServiceProperties.class)
-public class ProjecteigeneTestConfiguration {
+    Currency-Default: Wenn keine Währung angegeben ist, wird automatisch EUR gesetzt (Exponent 2).
 
-    @Bean
-    public DisputeCreateRequestDtoMapper disputeCreateRequestDtoMapper() {
-        return Mappers.getMapper(DisputeCreateRequestDtoMapper.class);
-    }
+    Teil vs. Voll Rekla: Nur bei Teilreklamation (J) wird der refundRedebitAmount gesetzt und Dispute Events angelegt.
 
-    @Bean
-    public DisputeEventRequestDtoMapper disputeEventRequestDtoMapper() {
-        return Mappers.getMapper(DisputeEventRequestDtoMapper.class);
-    }
-
-    @Bean
-    public AmountDtoMapper amountDtoMapper() {
-        return Mappers.getMapper(AmountDtoMapper.class);
-    }
-
-    @Bean
-    public DisputePostingRequestDtoMapper disputePostingRequestDtoMapper() {
-        return Mappers.getMapper(DisputePostingRequestDtoMapper.class);
-    }
-
-    @Bean
-    public DisputeDocumentRequestDtoMapper disputeDocumentRequestDtoMapper() {
-        return Mappers.getMapper(DisputeDocumentRequestDtoMapper.class);
-    }
-
-    @Bean
-    public WebClient webClient(@Value("${dispute.base-url}") String baseUrl) {
-        return WebClient.builder()
-                .baseUrl(baseUrl)
-                .defaultHeader(HttpHeaders.CONTENT_TYPE, "application/json")
-                .build();
-    }
-
-    @Bean
-    public DisputeDetailServiceImpl disputeDetailService(WebClient webClient, DisputeServiceProperties props) {
-        return new DisputeDetailServiceImpl(webClient, props);
-    }
-
-    @Bean
-    public DisputeServiceImpl disputeService(WebClient webClient,
-                                             DisputeServiceProperties props,
-                                             DisputeCreateRequestDtoMapper disputeCreateRequestDtoMapper
-                                             ) {
-        return new DisputeServiceImpl(
-                webClient,
-                props,
-                disputeCreateRequestDtoMapper);
-    }
-}
+    Währungs-Codes: Legacy unterstützt sowohl Alpha (EUR) als auch Numeric (978), wandelt Numeric aber immer in Alpha für IBO um.
