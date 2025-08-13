@@ -1,109 +1,366 @@
-// src/main/java/osplus/pkptuna/dispute/service/validation/Violation.java
-package osplus.pkptuna.dispute.service.validation;
+package osplus.pkptuna.dispute.service.impl;
 
-public record Violation(String field, String message) {}
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.http.HttpHeaders;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import osplus.fi.core.logging.api.Logger;
+import osplus.fi.core.logging.api.LoggerFactory;
+import osplus.pkptuna.dispute.config.DisputeServiceProperties;
+import osplus.pkptuna.dispute.create.model.DisputeCreateRequestDto;
+import osplus.pkptuna.dispute.create.model.DisputeCreateResponseDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeFolderEntryDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
+import osplus.pkptuna.dispute.lookup.model.FullDisputeLookupResponseDto;
+import osplus.pkptuna.dispute.service.DisputeService;
+import osplus.pkptuna.dispute.service.mapping.DynsToIboCreateMapper;
+import osplus.pkptuna.dispute.service.normalization.DisputeCreateNormalizer;
+import osplus.pkptuna.dispute.service.validation.DisputeCreateValidator;
+import osplus.pkptuna.dispute.service.validation.FunctionalValidationException;
+import osplus.pkptuna.dispute.service.validation.Violation;
+import osplus.pkptuna.protobuf.util.ProtobufJsonUtil;
+import osplus.pkptuna.rest.dispute.create.model.mapper.DisputeCreateRequestDtoMapper;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateResponseDto;
+import osplus.pkptuna.rest.dispute.ibo.transaction.identifier.model.DisputeIboTransactionRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.transaction.identifier.model.DisputeIboTransactionResponseDto;
 
-
-------------
-
-// src/main/java/osplus/pkptuna/dispute/service/validation/FunctionalValidationException.java
-package osplus.pkptuna.dispute.service.validation;
-
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
-public class FunctionalValidationException extends RuntimeException {
-    private final List<Violation> violations;
+/**
+ * Implementierung des {@link DisputeService} zur Abfrage von Dispute-Ordnern
+ * über eine externe Issuer-API mithilfe von WebClient (Spring WebFlux).
+ */
+public class DisputeServiceImpl implements DisputeService {
 
-    public FunctionalValidationException(List<Violation> violations) {
-        super("Functional validation failed");
-        this.violations = List.copyOf(violations);
+    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeServiceImpl.class);
+    private final WebClient webClient;
+    private final String username;
+    private final String password;
+    private final String pathDisputeLookup;
+    private final String pathDisputeFolderCreate;
+    private final String pathLookupTransactionId;
+    private final DisputeCreateRequestDtoMapper disputeCreateRequestDtoMapper;
+    private DynsToIboCreateMapper dynsToIboCreateMapper;
+
+    /**
+     * Konstruktor für {@code DisputeServiceImpl}.
+     *
+     * @param webClient WebClient zur Erstellung des REST-Clients
+     * @param props     Konfigurationseigenschaften für Authentifizierung und Endpunkte
+     */
+    public DisputeServiceImpl(final WebClient webClient,
+                              final DisputeServiceProperties props,
+                              DisputeCreateRequestDtoMapper disputeCreateRequestDtoMapper,
+                              DynsToIboCreateMapper dynsToIboCreateMapper) {
+        this.username = props.auth().username();
+        this.password = props.auth().password();
+        this.pathDisputeLookup = props.paths().lookupDisputes();
+        this.pathDisputeFolderCreate = props.paths().disputeCreate();
+        this.pathLookupTransactionId = props.paths().lookupTransactionid();
+        this.webClient = webClient;
+        this.disputeCreateRequestDtoMapper = disputeCreateRequestDtoMapper;
+        this.dynsToIboCreateMapper = dynsToIboCreateMapper;
     }
 
-    public List<Violation> getViolations() {
-        return violations;
-    }
-}
+    /**
+     * {@inheritDoc}
+     * Führt eine Abfrage eines Dispute-Ordners anhand der übergebenen Issuer-ID und Kartenreferenz durch.
+     */
+    @Override
+    public DisputeLookupResponseDto lookupDisputeFolder(String issuerId, String cardReference) {
 
+        try {
+            String basicAuth = Base64.getEncoder().encodeToString(
+                    (username + ":" + password).getBytes(StandardCharsets.UTF_8)
+            );
 
------------
+            String json = webClient.get()
+                    .uri(uriBuilder -> {
+                        URI builder = uriBuilder
+                                .path(pathDisputeLookup)
+                                .build(issuerId, cardReference);
+                        return builder;
+                    })
+                    .header("WL-Correlation-ID", "pkptuna-" + System.currentTimeMillis())
+                    .header("WL-Origin", "pkptuna-service")
+                    .header(HttpHeaders.AUTHORIZATION, "Basic " + basicAuth)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
 
-// src/main/java/osplus/pkptuna/dispute/service/validation/DisputeCreateValidator.java
-package osplus.pkptuna.dispute.service.validation;
+            FullDisputeLookupResponseDto.Builder fullBuilder = FullDisputeLookupResponseDto.newBuilder();
+            ProtobufJsonUtil.parseJsonToProto(json, fullBuilder);
 
-import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
+            List<DisputeFolderEntryDto> folderEntries = fullBuilder.getDataList().stream()
+                    .map(data -> DisputeFolderEntryDto.newBuilder()
+                            .setDisputeFolderReference(data.getDisputeFolderIdentifier().getDisputeFolderReference())
+                            .setStatusCode(data.getStatusCode())
+                            .build())
+                    .collect(Collectors.toList());
 
-import java.util.ArrayList;
-import java.util.List;
+            return DisputeLookupResponseDto.newBuilder()
+                    .setDisputeFolderExists(!folderEntries.isEmpty())
+                    .addAllDisputeFolders(folderEntries)
+                    .build();
 
-public final class DisputeCreateValidator {
-
-    private DisputeCreateValidator() {}
-
-    public static List<Violation> validate(DisputeCreateRequestDto s) {
-        List<Violation> v = new ArrayList<>();
-
-        // Pflichtfelder
-        req(v, s.getImpulsOid(), "impulsOid");
-        req(v, s.getReklaGrundKat1(), "reklaGrundKat1");
-
-        // Teil/Voll-Logik
-        boolean isPartial = isJ(s.getReklaTeilbetragKz());
-        if (isPartial) {
-            // refundRedebitAmount benötigt Betrag + Währung
-            req(v, s.getReklaBetrag(), "reklaBetrag");
-            req(v, s.getReklaBetragWs(), "reklaBetragWs");
-            numeric(v, s.getReklaBetrag(), "reklaBetrag");
+        } catch (WebClientResponseException e) {
+            LOGGER.warn("External API returned error: {}", e.getStatusCode());
+        } catch (Exception e) {
+            LOGGER.error("Exception during dispute lookup", e);
         }
 
-        // Posting-Quelle (Originalbetrag/-währung) – paarig
-        pairIfPresentMustBeBoth(v, s.getCrdVfggOrigBtrg(), s.getCrdVfggOrigWs(),
-                "crdVfggOrigBtrg", "crdVfggOrigWs");
-        if (notBlank(s.getCrdVfggOrigBtrg())) numeric(v, s.getCrdVfggOrigBtrg(), "crdVfggOrigBtrg");
-
-        return v;
+        return DisputeLookupResponseDto.newBuilder()
+                .setDisputeFolderExists(false)
+                .build();
     }
 
-    private static void req(List<Violation> v, String val, String field) {
-        if (val == null || val.trim().isEmpty()) v.add(new Violation(field, "Pflichtfeld fehlt"));
+    @Override
+    public DisputeCreateResponseDto createDispute(DisputeCreateRequestDto disputeCreateRequestDto) {
+
+        // Proto -> REST for the external REST contract
+
+        LOGGER.info(disputeCreateRequestDto.getIssuerId() + "+++++++++" + disputeCreateRequestDto.getAcquiringReferenceNumber());
+
+        osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto disputeCreateRequestDtoMapperRestDto =
+                disputeCreateRequestDtoMapper.toRestDto(disputeCreateRequestDto);
+
+        try {
+            LOGGER.info("{}", new ObjectMapper().writeValueAsString(disputeCreateRequestDtoMapperRestDto));
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
+
+        // ---------------------- 1) Lookup transactionId from ARN ----------------------
+        String issuerId = Optional.ofNullable(disputeCreateRequestDtoMapperRestDto.getIssuerId())
+                .orElseThrow(() -> new RuntimeException("IssuerId is not present"));
+        String arn = Optional.ofNullable(disputeCreateRequestDtoMapperRestDto.getAcquiringReferenceNumber())
+                .orElseThrow(() -> new RuntimeException("acquiringReferenceNumber is not present"));
+
+        LOGGER.info(issuerId + ".........." + arn);
+
+        DisputeIboTransactionRequestDto txReq = new DisputeIboTransactionRequestDto();
+        txReq.setIssuerId(issuerId);
+        txReq.setAcquirerReferenceDataList(java.util.List.of(arn));
+
+        DisputeIboTransactionResponseDto txResp = lookUpIboTransactionId(txReq);
+
+        ensureOk(txResp.getResponseMetadata(), "Exception in fetching transaction identifier");
+
+        // Extract transactionId
+        String transactionId = Optional.ofNullable(txResp.getData())
+                .filter(list -> !list.isEmpty())
+                .map(list -> list.get(0))
+                .map(d -> d.getTransactionIdentifier())
+                .map(ti -> ti.getTransactionId())
+                .filter(id -> id != null && !id.isBlank())
+                .orElseThrow(() -> new RuntimeException("Transaction identifier not found"));
+
+        // ---------------------- 2) Build IBO create request body ----------------------
+        List<Violation> violations = DisputeCreateValidator.validate(disputeCreateRequestDtoMapperRestDto);
+        if(!violations.isEmpty()) {
+            throw new FunctionalValidationException(violations);
+        }
+
+        osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto normalizedDisputeCreateRequestRestDto = DisputeCreateNormalizer.normalize(disputeCreateRequestDtoMapperRestDto);
+
+        DisputeIboCreateRequestDto iboCreateBody = dynsToIboCreateMapper.toIbo(normalizedDisputeCreateRequestRestDto);
+
+        try {
+            LOGGER.info("{}", new ObjectMapper().writeValueAsString(iboCreateBody));
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
+
+        // ---------------------- 3) Create the dispute in IBO ----------------------
+        DisputeIboCreateResponseDto createResp =  createIboDispute(issuerId, transactionId, iboCreateBody);
+
+        ensureOk(createResp.getResponseMetadata(), "Create dispute failed");
+
+        // Extract disputeFolderReference
+        String disputeFolderReference = Optional.ofNullable(createResp.getData())
+                .map(d -> d.getDisputeFolderIdentifier())
+                .map(id -> id.getDisputeFolderReference())
+                .filter(ref -> ref != null && !ref.isBlank())
+                .orElseThrow(() -> new RuntimeException("Missing disputeFolderReference in create response"));
+
+        // ---------------------- 4) Build service response ----------------------
+        DisputeCreateResponseDto.Builder out = DisputeCreateResponseDto.newBuilder()
+                .setReklVgngIntnNr(disputeFolderReference);
+
+        return out.build();
     }
 
-    private static void numeric(List<Violation> v, String val, String field) {
-        if (val == null) return;
-        try { Long.parseLong(val.trim()); }
-        catch (Exception e) { v.add(new Violation(field, "Muss numerisch (Ganzzahl in Minor Units) sein")); }
+    // Private --------------------------------
+
+    private DisputeIboCreateResponseDto createIboDispute(String issuerId,
+                                                         String transactionId,
+                                                         DisputeIboCreateRequestDto disputeIboCreateRequestDto) {
+        try {
+            // Basic Auth header
+            String basicAuth = Base64.getEncoder().encodeToString(
+                    (username + ":" + password).getBytes(StandardCharsets.UTF_8)
+            );
+
+            // POST call
+            return webClient.post()
+                    .uri(uriBuilder -> {
+                        URI builder = uriBuilder
+                                .path(pathDisputeFolderCreate)
+                                .build(issuerId, transactionId);
+                        return builder;
+                    })
+                    .header("WL-Correlation-ID", "pkptuna-" + System.currentTimeMillis())
+                    .header("WL-Origin", "pkptuna-service")
+                    .header(HttpHeaders.AUTHORIZATION, "Basic " + basicAuth)
+                    .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                    .header(HttpHeaders.ACCEPT, "application/json")
+                    .bodyValue(disputeIboCreateRequestDto)
+                    .retrieve()
+                    .bodyToMono(DisputeIboCreateResponseDto.class)
+                    .block();
+
+        } catch (WebClientResponseException e) {
+
+            LOGGER.error("Exception during create dispute  (issuerId={}, transactionId={})", issuerId, transactionId, e);
+            osplus.pkptuna.rest.dispute.ibo.create.model.ResponseMetadataDto responseMetadataDto =
+                    new osplus.pkptuna.rest.dispute.ibo.create.model.ResponseMetadataDto();
+
+            responseMetadataDto.setCorrelationId(e.getHeaders() != null
+                            ? e.getHeaders().getFirst("WL-Correlation-ID")
+                            : "");
+            responseMetadataDto.setStatusMessage("HTTP " + e.getStatusCode().value() + " - " + e.getStatusText());
+            responseMetadataDto.setStatusCode(e.getStatusCode().value());
+            responseMetadataDto.setResponseDateTime(java.time.OffsetDateTime.now().toString());
+            responseMetadataDto.setTimeTakenMs(0L);
+
+            // Build a structured error response with metadata
+            DisputeIboCreateResponseDto disputeIboCreateResponseDto =  new DisputeIboCreateResponseDto();
+            disputeIboCreateResponseDto.setResponseMetadata(responseMetadataDto);
+            return disputeIboCreateResponseDto;
+
+        } catch (Exception e) {
+
+            LOGGER.error("Exception during create dispute  (issuerId={}, transactionId={})", issuerId, transactionId, e);
+            osplus.pkptuna.rest.dispute.ibo.create.model.ResponseMetadataDto responseMetadataDto =
+                    new osplus.pkptuna.rest.dispute.ibo.create.model.ResponseMetadataDto();
+
+            responseMetadataDto.setCorrelationId("");
+            responseMetadataDto.setStatusMessage("ERROR - " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            responseMetadataDto.setStatusCode(500);
+            responseMetadataDto.setResponseDateTime(java.time.OffsetDateTime.now().toString());
+            responseMetadataDto.setTimeTakenMs(0L);
+
+            // Build a structured error response with metadata
+            DisputeIboCreateResponseDto disputeIboCreateResponseDto =  new DisputeIboCreateResponseDto();
+            disputeIboCreateResponseDto.setResponseMetadata(responseMetadataDto);
+            return disputeIboCreateResponseDto;
+        }
     }
 
-    private static void pairIfPresentMustBeBoth(List<Violation> v, String a, String b, String fa, String fb) {
-        boolean ha = notBlank(a), hb = notBlank(b);
-        if (ha ^ hb) v.add(new Violation(ha ? fb : fa, "Betrag/Währung müssen paarig vorkommen"));
+
+    private DisputeIboTransactionResponseDto lookUpIboTransactionId(DisputeIboTransactionRequestDto disputeIboTransactionRequestDto) {
+        try {
+            // Basic Auth header
+            String basicAuth = Base64.getEncoder().encodeToString(
+                    (username + ":" + password).getBytes(StandardCharsets.UTF_8)
+            );
+
+            // POST call
+            return webClient.post()
+                    .uri(uriBuilder -> uriBuilder.path(pathLookupTransactionId)
+                            .queryParam("filter","transactionIdentifier.transactionId")
+                            .build())
+                    .header("WL-Correlation-ID", "pkptuna-" + System.currentTimeMillis())
+                    .header("WL-Origin", "pkptuna-service")
+                    .header(HttpHeaders.AUTHORIZATION, "Basic " + basicAuth)
+                    .header(HttpHeaders.CONTENT_TYPE, "application/json")
+                    .header(HttpHeaders.ACCEPT, "application/json")
+                    .bodyValue(disputeIboTransactionRequestDto)
+                    .retrieve()
+                    .bodyToMono(DisputeIboTransactionResponseDto.class)
+                    .block();
+
+
+        } catch (WebClientResponseException e) {
+            String arn = (disputeIboTransactionRequestDto.getAcquirerReferenceDataList() != null
+                    && !disputeIboTransactionRequestDto.getAcquirerReferenceDataList().isEmpty())
+                    ? disputeIboTransactionRequestDto.getAcquirerReferenceDataList().get(0) : "<none>";
+            LOGGER.error("Exception during transactionId lookup (issuerId={}, arn={})",
+                    disputeIboTransactionRequestDto.getIssuerId(), arn, e);
+
+
+            osplus.pkptuna.rest.dispute.ibo.transaction.identifier.model.ResponseMetadataDto responseMetadataDto
+                    = new osplus.pkptuna.rest.dispute.ibo.transaction.identifier.model.ResponseMetadataDto();
+
+            responseMetadataDto.setCorrelationId(e.getHeaders() != null
+                    ? e.getHeaders().getFirst("WL-Correlation-ID")
+                    : "");
+            responseMetadataDto.setStatusMessage("HTTP " + e.getStatusCode().value() + " - " + e.getStatusText());
+            responseMetadataDto .setStatusCode(e.getStatusCode().value());
+            responseMetadataDto.setResponseDateTime(java.time.OffsetDateTime.now().toString());
+            responseMetadataDto.setTimeTakenMs(0L);
+
+            // Build a structured error response with metadata
+            DisputeIboTransactionResponseDto disputeIboTransactionResponseDto =  new DisputeIboTransactionResponseDto();
+            disputeIboTransactionResponseDto.setResponseMetadata(responseMetadataDto);
+            return disputeIboTransactionResponseDto;
+
+        } catch (Exception e) {
+
+            String arn = (disputeIboTransactionRequestDto.getAcquirerReferenceDataList() != null
+                    && !disputeIboTransactionRequestDto.getAcquirerReferenceDataList().isEmpty())
+                    ? disputeIboTransactionRequestDto.getAcquirerReferenceDataList().get(0) : "<none>";
+            LOGGER.error("Exception during transactionId lookup (issuerId={}, arn={})",
+                    disputeIboTransactionRequestDto.getIssuerId(), arn, e);
+
+            osplus.pkptuna.rest.dispute.ibo.transaction.identifier.model.ResponseMetadataDto responseMetadataDto
+                    = new osplus.pkptuna.rest.dispute.ibo.transaction.identifier.model.ResponseMetadataDto();
+
+            responseMetadataDto.setCorrelationId("");
+            responseMetadataDto.setStatusMessage("ERROR - " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            responseMetadataDto .setStatusCode(500);
+            responseMetadataDto.setResponseDateTime(java.time.OffsetDateTime.now().toString());
+            responseMetadataDto.setTimeTakenMs(0L);
+
+            // Build a structured error response with metadata
+            DisputeIboTransactionResponseDto disputeIboTransactionResponseDto =  new DisputeIboTransactionResponseDto();
+            disputeIboTransactionResponseDto.setResponseMetadata(responseMetadataDto);
+            return disputeIboTransactionResponseDto;
+        }
     }
 
-    private static boolean notBlank(String s) { return s != null && !s.trim().isEmpty(); }
-    private static boolean isJ(String v) { return v != null && v.trim().equalsIgnoreCase("J"); }
+    private static void ensureOk(
+            osplus.pkptuna.rest.dispute.ibo.transaction.identifier.model.ResponseMetadataDto md,
+            String context
+    ) {
+        if (md == null) {
+            throw new RuntimeException(context + " (no response metadata)");
+        }
+        int code = md.getStatusCode();
+        if (code < 200 || code >= 300) {
+            String corr = md.getCorrelationId() == null ? "" : md.getCorrelationId();
+            throw new RuntimeException(context + " (status=" + code + ", corrId=" + corr + "): " + md.getStatusMessage());
+        }
+    }
+
+    private static void ensureOk(
+            osplus.pkptuna.rest.dispute.ibo.create.model.ResponseMetadataDto md,
+            String context
+    ) {
+        if (md == null) {
+            throw new RuntimeException(context + " (no response metadata)");
+        }
+        int code = md.getStatusCode();
+        if (code < 200 || code >= 300) {
+            String corr = md.getCorrelationId() == null ? "" : md.getCorrelationId();
+            throw new RuntimeException(context + " (status=" + code + ", corrId=" + corr + "): " + md.getStatusMessage());
+        }
+    }
 }
-
-
----------
-
-
-// src/main/java/osplus/pkptuna/dispute/service/normalization/DisputeCreateNormalizer.java
-package osplus.pkptuna.dispute.service.normalization;
-
-import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
-
-public final class DisputeCreateNormalizer {
-    private DisputeCreateNormalizer() {}
-
-    public static DisputeCreateRequestDto normalize(DisputeCreateRequestDto s) {
-        // Minimale Normalisierung; Währung & Reason bleiben "as-is".
-        if (s.getReklaBetrag() != null) s.setReklaBetrag(s.getReklaBetrag().trim());
-        if (s.getCrdVfggOrigBtrg() != null) s.setCrdVfggOrigBtrg(s.getCrdVfggOrigBtrg().trim());
-        if (s.getImpulsOid() != null) s.setImpulsOid(s.getImpulsOid().trim());
-        if (s.getReklaGrundKat1() != null) s.setReklaGrundKat1(s.getReklaGrundKat1().trim());
-        return s;
-    }
-}
-
-
-----------------
-
