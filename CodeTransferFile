@@ -1,20 +1,15 @@
-Hi Vivek, 
+Hallo [Name],
 
-auf folgendem Konto mit folgender Karte habe ich in den letzten Tagen eine große Menge an Reklamationen ausgeführt: 
+ich hätte zwei Punkte, die ich gerne mit Dir im Hinblick auf die von DynS gelieferten Daten klären möchte:
 
-40420739	4524720165778376
+    Währungsformat
+    Für meine Implementierung ist es wichtig zu wissen, ob die Währung von DynS immer als alphabetischer ISO-4217-Code (z. B. "EUR") oder als numerischer ISO-4217-Code (z. B. "978") geliefert wird. Kannst Du mir bitte das genaue Format bestätigen, das von DynS übermittelt wird?
 
-Beispielhaft hier ein paar Reklamationen: 
+    Dispute-Reason-Mapping
+    Auf der IBO-Service-Seite habe ich festgestellt, dass für das Feld disputeReason nur bestimmte Werte in englischer Sprache akzeptiert werden. Ich muss verstehen, ob zwischen den in Deutsch gelieferten Schlüsselwörtern von DynS und den englischen Werten, die IBO erwartet, eine gezielte Zuordnung oder Übersetzung erfolgt.
+    Meinem Eindruck nach existiert eine solche Übersetzung, aber ich bin mir nicht sicher, wo und wie diese Mapping-Logik umgesetzt wird. Kannst Du mir diesen Ablauf bitte genauer erläutern?
 
-EURO:                   Impulsnummer 2025-0002863                 Reklamationsnummer 1000000001036123
-
-USD:                      Impulsnummer 2025-0002916                   Reklamationsnummer 1000000001037008
-
-DKK:                      Impulsnummer 2025-0002974                   Reklamationsnummer 1000000001038035
-
-Wenn ihr weitere benötigt, schaut einfach selbst in die Impulsübersicht zu diesem Konto. 
-
-Bei Fragen meldet euch gerne.
+Deine Rückmeldung hilft mir, die Abbildung und Validierung korrekt umzusetzen.
 
 Viele Grüße
-Lucas 
+Vivek
