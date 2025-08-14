@@ -1,39 +1,40 @@
-Variante 1: Zentrale Steuerung durch CoBadge-Service Orca
-Eigenschaften:
+| Excel Column            | Source in Code                                   |
+| ----------------------- | ------------------------------------------------ |
+| IDM\_DISPU\_FOLDER\_ID  | `CHA_intReference` (via `KACHA110_getFieldMemo`) |
+| DMC\_LIFE\_CYCL\_ID     | `JSN_transactionLifeCycleId`                     |
+| DMC\_ARN\_ID            | `JSN_acquirerReferenceData`                      |
+| CRD\_PAN                | `JSN_primaryAccountNumber`                       |
+| DMC\_TA\_DTM\_TIME      | `JSN_transactionDateAndTime`                     |
+| DMC\_TA\_BTRG           | `JSN_transactionBetrag`                          |
+| OSP\_IMPS\_OID          | `JSN_impulsOId`                                  |
+| UMSATZ\_ID              | `JSN_umsatzId`                                   |
+| EMPF\_KONTO\_ID         | `JSN_empfKontoId`                                |
+| DMC\_CLAIM\_CBK\_ID     | (set to `" "`, no source)                        |
+| DMC\_REKL\_ID\_VWZ      | (set to `" "`, no source)                        |
+| DMC\_PRZS\_DTM          | (set to `"01.01.0001"`, no source)               |
+| DMC\_EMPF\_BLZ          | `JSN_empfBlz`                                    |
+| DMC\_REKL\_GRND         | `CHA_reklaGrundKatText`                          |
+| DMC\_REKL\_BTRG         | `JSN_reklaBetrag`                                |
+| DMC\_REKL\_WS           | `JSN_reklaBetragWs`                              |
+| DMC\_TA\_SIGN           | `JSN_transactionSign`                            |
+| DMC\_TEIL\_BTRG\_KZ     | `JSN_reklaTeilbetragKz`                          |
+| DMC\_SPER\_KZ           | `JSN_karteSperren`                               |
+| DMC\_REKL\_ORIG\_WS     | `JSN_crdVfggOrigWs`                              |
+| DMC\_REKL\_ORIG\_WHKS   | `JSN_crdVfggOrigKurs`                            |
+| DMC\_REKL\_ENTG\_BTRG   | `JSN_crdEntBtrg`                                 |
+| DMC\_REKL\_KVDT\_C7     | `JSN_crdVerfallMon`                              |
+| AUTO\_ERST\_ANZ         | `JSN_anzahlAutoErstattungen`                     |
+| AUTO\_ERST\_BTRG\_MAX   | `JSN_autoErstMaxBetrag`                          |
+| AUTO\_ERST\_ANZ\_MAX    | `JSN_autoErstMaxAnzahl`                          |
+| KRTN\_HGBR\_ID          | `JSN_issuerId`                                   |
+| IDM\_STAT\_CODE         | `" "` (blank, later filled in update functions)  |
+| IDM\_RESP\_CODE         | `" "` (blank, later filled in update functions)  |
+| IDM\_STAT\_INFO         | (blank, later filled)                            |
+| IDM\_EXT\_REF\_ID       | `" "` (blank, later filled in update)            |
+| AUTO\_ERST\_KZ          | calculated via `ermittelnAutoErst()`             |
+| AUTO\_ERST\_BTRG        | calculated via `ermittelnAutoErst()`             |
+| DMC\_AUSL\_ENTG\_PRD    | `JSN_sepTraExtPurp` + business logic             |
+| DMC\_PRZS\_STAT         | `"INIT"` (later updated)                         |
+| DISPU\_FLDR\_ETRY\_MODE | `"OSP_neo"` (constant)                           |
 
-Nur ein Service, der betroffen ist
-Konfiguration aller Feature-Flags am CoBadge-Service Orca, unabhängig vom Use-Case
-Deaktivierung der Rest-Endpunkte für deaktivierte Features
-Anfragen für deaktivierte Features erreichen die weiteren Use-Case-spezifischen Services gar nicht erst
-Trennung von Konfiguration und Implementierung
-Konfiguration über Umgebungsvariablen
-Technische Umsetzung:
 
-Setzen einer Umgebungsvariable pro deaktivierbarem Feature
-Bedingtes Deaktivieren der Beans für die Rest-Controller (auf Klassen-Ebene) über ConditinalOnProperty
-Kombination der Annotations @UiModule (APL-Framework) und @ConditionalOnProperty möglich
-Variante 2: Kombinierte Steuerung durch alle Services
-Eigenschaften:
-
-Betroffene Schnittstellen werden an allen Services deaktiviert
-Deaktivierung der Rest-Endpunkte am CoBadge-Service Orca und der Hazelcast-Flows in den weiteren CoBadge-Services
-...
-Technische Umsetzung:
-
-...
-Gegenüberstellung der Varianten
-Eigenschaft	Variante 1: zentral	Variante 2: kombiniert
-Definition eines Features	eine geschäftliche Fähigkeit, typischerweise eine Kombination aus mehreren technischen Endpunkten/Abläufen/Services
-Betroffene Services	CoBadge-Service Orca	alle CoBadge-Services, die Teil eines Feature-Flag-gesteuerten Features sind
-Sicherheit	Blockierung der Anfragen am "Einfallstor" Orca	Blockierung der Anfragen am "Einfallstor" Orca sowie zusätzliche Blockierung einzelner Schnittstellen an den anderen Services
-Komplexität	
-geringe Komplexität, da nur ein Service betroffen ist und die technischen Schnittstellen klar nach Use-Case getrennt sind
-
-höhere Komplexität, da alle CoBadge-Services betroffen sind und nicht alle Schnittstellen eins zu eins den einzelnen Features zuordenbar sind
-
-Entwicklungsaufwand	
-geringer, da nur Orca betroffen ist
-
-höher, da sowohl Orca betroffen ist, als auch die anderen Services über eine Shared-Libary
-
-es muss sichergestellt werden, dass bei der Deaktivierung der Schnittstellen keine anderen Features beeinträchtigt werden
