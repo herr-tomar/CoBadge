@@ -1,15 +1,39 @@
-Hallo [Name],
+Variante 1: Zentrale Steuerung durch CoBadge-Service Orca
+Eigenschaften:
 
-ich hätte zwei Punkte, die ich gerne mit Dir im Hinblick auf die von DynS gelieferten Daten klären möchte:
+Nur ein Service, der betroffen ist
+Konfiguration aller Feature-Flags am CoBadge-Service Orca, unabhängig vom Use-Case
+Deaktivierung der Rest-Endpunkte für deaktivierte Features
+Anfragen für deaktivierte Features erreichen die weiteren Use-Case-spezifischen Services gar nicht erst
+Trennung von Konfiguration und Implementierung
+Konfiguration über Umgebungsvariablen
+Technische Umsetzung:
 
-    Währungsformat
-    Für meine Implementierung ist es wichtig zu wissen, ob die Währung von DynS immer als alphabetischer ISO-4217-Code (z. B. "EUR") oder als numerischer ISO-4217-Code (z. B. "978") geliefert wird. Kannst Du mir bitte das genaue Format bestätigen, das von DynS übermittelt wird?
+Setzen einer Umgebungsvariable pro deaktivierbarem Feature
+Bedingtes Deaktivieren der Beans für die Rest-Controller (auf Klassen-Ebene) über ConditinalOnProperty
+Kombination der Annotations @UiModule (APL-Framework) und @ConditionalOnProperty möglich
+Variante 2: Kombinierte Steuerung durch alle Services
+Eigenschaften:
 
-    Dispute-Reason-Mapping
-    Auf der IBO-Service-Seite habe ich festgestellt, dass für das Feld disputeReason nur bestimmte Werte in englischer Sprache akzeptiert werden. Ich muss verstehen, ob zwischen den in Deutsch gelieferten Schlüsselwörtern von DynS und den englischen Werten, die IBO erwartet, eine gezielte Zuordnung oder Übersetzung erfolgt.
-    Meinem Eindruck nach existiert eine solche Übersetzung, aber ich bin mir nicht sicher, wo und wie diese Mapping-Logik umgesetzt wird. Kannst Du mir diesen Ablauf bitte genauer erläutern?
+Betroffene Schnittstellen werden an allen Services deaktiviert
+Deaktivierung der Rest-Endpunkte am CoBadge-Service Orca und der Hazelcast-Flows in den weiteren CoBadge-Services
+...
+Technische Umsetzung:
 
-Deine Rückmeldung hilft mir, die Abbildung und Validierung korrekt umzusetzen.
+...
+Gegenüberstellung der Varianten
+Eigenschaft	Variante 1: zentral	Variante 2: kombiniert
+Definition eines Features	eine geschäftliche Fähigkeit, typischerweise eine Kombination aus mehreren technischen Endpunkten/Abläufen/Services
+Betroffene Services	CoBadge-Service Orca	alle CoBadge-Services, die Teil eines Feature-Flag-gesteuerten Features sind
+Sicherheit	Blockierung der Anfragen am "Einfallstor" Orca	Blockierung der Anfragen am "Einfallstor" Orca sowie zusätzliche Blockierung einzelner Schnittstellen an den anderen Services
+Komplexität	
+geringe Komplexität, da nur ein Service betroffen ist und die technischen Schnittstellen klar nach Use-Case getrennt sind
 
-Viele Grüße
-Vivek
+höhere Komplexität, da alle CoBadge-Services betroffen sind und nicht alle Schnittstellen eins zu eins den einzelnen Features zuordenbar sind
+
+Entwicklungsaufwand	
+geringer, da nur Orca betroffen ist
+
+höher, da sowohl Orca betroffen ist, als auch die anderen Services über eine Shared-Libary
+
+es muss sichergestellt werden, dass bei der Deaktivierung der Schnittstellen keine anderen Features beeinträchtigt werden
