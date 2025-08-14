@@ -1,160 +1,20 @@
-private final ObjectMapper objectMapper;
+Hi Vivek, 
 
-public DisputeServiceImpl(final WebClient webClient,
-                          final DisputeServiceProperties props,
-                          DisputeCreateRequestDtoMapper disputeCreateRequestDtoMapper,
-                          DynsToIboCreateMapper dynsToIboCreateMapper,
-                          ObjectMapper objectMapper) {
-    // ...
-    this.objectMapper = objectMapper;
-}
+auf folgendem Konto mit folgender Karte habe ich in den letzten Tagen eine große Menge an Reklamationen ausgeführt: 
 
-----------
+40420739	4524720165778376
 
-private static String headerOrEmpty(org.springframework.http.HttpHeaders h, String name) {
-    return (h != null) ? Optional.ofNullable(h.getFirst(name)).orElse("") : "";
-}
+Beispielhaft hier ein paar Reklamationen: 
 
-----------
+EURO:                   Impulsnummer 2025-0002863                 Reklamationsnummer 1000000001036123
 
-private DisputeIboCreateResponseDto createIboDispute(String issuerId,
-                                                     String transactionId,
-                                                     DisputeIboCreateRequestDto body) {
-    String basicAuth = Base64.getEncoder().encodeToString((username + ":" + password).getBytes(StandardCharsets.UTF_8));
+USD:                      Impulsnummer 2025-0002916                   Reklamationsnummer 1000000001037008
 
-    return webClient.post()
-            .uri(uriBuilder -> uriBuilder.path(pathDisputeFolderCreate).build(issuerId, transactionId))
-            .header("WL-Correlation-ID", "pkptuna-" + System.currentTimeMillis())
-            .header("WL-Origin", "pkptuna-service")
-            .header(HttpHeaders.AUTHORIZATION, "Basic " + basicAuth)
-            .header(HttpHeaders.CONTENT_TYPE, "application/json")
-            .header(HttpHeaders.ACCEPT, "application/json")
-            .bodyValue(body)
-            .exchangeToMono(resp -> resp.bodyToMono(String.class).defaultIfEmpty("")
-                    .map(raw -> {
-                        final int sc = resp.statusCode().value();
-                        final String corr = headerOrEmpty(resp.headers().asHttpHeaders(), "WL-Correlation-ID");
+DKK:                      Impulsnummer 2025-0002974                   Reklamationsnummer 1000000001038035
 
-                        try {
-                            // Try full parse of body (works for both 2xx and non-2xx if server returns JSON)
-                            if (!raw.isBlank()) {
-                                DisputeIboCreateResponseDto parsed =
-                                        objectMapper.readValue(raw, DisputeIboCreateResponseDto.class);
+Wenn ihr weitere benötigt, schaut einfach selbst in die Impulsübersicht zu diesem Konto. 
 
-                                // ensure metadata at least contains HTTP status/corr if server left them empty
-                                if (parsed.getResponseMetadata() != null) {
-                                    if (parsed.getResponseMetadata().getStatusCode() == 0) {
-                                        parsed.getResponseMetadata().setStatusCode(sc);
-                                    }
-                                    if (parsed.getResponseMetadata().getCorrelationId() == null
-                                            || parsed.getResponseMetadata().getCorrelationId().isBlank()) {
-                                        parsed.getResponseMetadata().setCorrelationId(corr);
-                                    }
-                                    return parsed;
-                                }
-                            }
-                        } catch (Exception parseErr) {
-                            LOGGER.debug("Could not parse IBO create response body as DTO. status={}, corrId={}, body={}",
-                                    sc, corr, raw);
-                        }
+Bei Fragen meldet euch gerne.
 
-                        // Fallback: synthesize a minimal response with metadata
-                        osplus.pkptuna.rest.dispute.ibo.create.model.ResponseMetadataDto md =
-                                new osplus.pkptuna.rest.dispute.ibo.create.model.ResponseMetadataDto();
-                        md.setCorrelationId(corr);
-                        md.setStatusCode(sc);
-                        md.setStatusMessage(raw.isBlank() ? "No body" : raw);
-                        md.setResponseDateTime(java.time.OffsetDateTime.now().toString());
-                        md.setTimeTakenMs(0L);
-
-                        DisputeIboCreateResponseDto fallback = new DisputeIboCreateResponseDto();
-                        fallback.setResponseMetadata(md);
-                        return fallback;
-                    }))
-            .block();
-}
-
-
-
---------
-
-private DisputeIboTransactionResponseDto lookUpIboTransactionId(DisputeIboTransactionRequestDto req) {
-    String basicAuth = Base64.getEncoder().encodeToString((username + ":" + password).getBytes(StandardCharsets.UTF_8));
-
-    return webClient.post()
-            .uri(uriBuilder -> uriBuilder.path(pathLookupTransactionId)
-                    .queryParam("filter", "transactionIdentifier.transactionId")
-                    .build())
-            .header("WL-Correlation-ID", "pkptuna-" + System.currentTimeMillis())
-            .header("WL-Origin", "pkptuna-service")
-            .header(HttpHeaders.AUTHORIZATION, "Basic " + basicAuth)
-            .header(HttpHeaders.CONTENT_TYPE, "application/json")
-            .header(HttpHeaders.ACCEPT, "application/json")
-            .bodyValue(req)
-            .exchangeToMono(resp -> resp.bodyToMono(String.class).defaultIfEmpty("")
-                    .map(raw -> {
-                        final int sc = resp.statusCode().value();
-                        final String corr = headerOrEmpty(resp.headers().asHttpHeaders(), "WL-Correlation-ID");
-
-                        try {
-                            if (!raw.isBlank()) {
-                                DisputeIboTransactionResponseDto parsed =
-                                        objectMapper.readValue(raw, DisputeIboTransactionResponseDto.class);
-
-                                if (parsed.getResponseMetadata() != null) {
-                                    if (parsed.getResponseMetadata().getStatusCode() == 0) {
-                                        parsed.getResponseMetadata().setStatusCode(sc);
-                                    }
-                                    if (parsed.getResponseMetadata().getCorrelationId() == null
-                                            || parsed.getResponseMetadata().getCorrelationId().isBlank()) {
-                                        parsed.getResponseMetadata().setCorrelationId(corr);
-                                    }
-                                    return parsed;
-                                }
-                            }
-                        } catch (Exception parseErr) {
-                            String arn = (req.getAcquirerReferenceDataList() != null
-                                    && !req.getAcquirerReferenceDataList().isEmpty())
-                                    ? req.getAcquirerReferenceDataList().get(0) : "<none>";
-                            LOGGER.debug("Could not parse IBO tx lookup body. status={}, corrId={}, issuerId={}, arn={}, body={}",
-                                    sc, corr, req.getIssuerId(), arn, raw);
-                        }
-
-                        osplus.pkptuna.rest.dispute.ibo.transaction.identifier.model.ResponseMetadataDto md =
-                                new osplus.pkptuna.rest.dispute.ibo.transaction.identifier.model.ResponseMetadataDto();
-                        md.setCorrelationId(corr);
-                        md.setStatusCode(sc);
-                        md.setStatusMessage(raw.isBlank() ? "No body" : raw);
-                        md.setResponseDateTime(java.time.OffsetDateTime.now().toString());
-                        md.setTimeTakenMs(0L);
-
-                        DisputeIboTransactionResponseDto fallback = new DisputeIboTransactionResponseDto();
-                        fallback.setResponseMetadata(md);
-                        return fallback;
-                    }))
-            .block();
-}
-
-
------
-
-
-
-private static void ensureOk(osplus.pkptuna.rest.dispute.ibo.create.model.ResponseMetadataDto md, String ctx) {
-    if (md == null) throw new RuntimeException(ctx + " (no response metadata)");
-    int code = md.getStatusCode();
-    if (code < 200 || code >= 300) {
-        LoggerFactory.getLogger(DisputeServiceImpl.class)
-                .error("{} – IBO metadata: status={}, corrId={}, msg={}",
-                        ctx, code, (md.getCorrelationId()==null?"":md.getCorrelationId()), md.getStatusMessage());
-        throw new RuntimeException(ctx + " (status=" + code + ", corrId=" + (md.getCorrelationId()==null?"":md.getCorrelationId()) + "): " + md.getStatusMessage());
-    }
-}
-
-
-------
-
-
-
-
-
+Viele Grüße
+Lucas 
