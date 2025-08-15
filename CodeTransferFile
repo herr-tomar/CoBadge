@@ -1,64 +1,5 @@
 package osplus.pkptuna.flows.handlers;
 
-import jakarta.annotation.PostConstruct;
-import osplus.apl.core.api.AplComponent;
-import osplus.fi.core.logging.api.Logger;
-import osplus.fi.core.logging.api.LoggerFactory;
-import osplus.pkptuna.dispute.create.model.DisputeCreateRequestDto;
-import osplus.pkptuna.dispute.create.model.DisputeCreateRequestWrapperDto;
-import osplus.pkptuna.dispute.create.model.DisputeCreateResponseDto;
-import osplus.pkptuna.dispute.create.model.DisputeCreateResponseWrapperDto;
-import osplus.pkptuna.dispute.service.DisputeService;
-import osplus.pkptuna.hazelcast.flows.AbstractFlowHandler;
-import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
-import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
-
-@AplComponent("dispute-create")
-public class DisputeCreateFlowHandler extends
-        AbstractFlowHandler<DisputeCreateRequestWrapperDto, DisputeCreateResponseDto, DisputeCreateResponseWrapperDto> {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(DisputeCreateFlowHandler.class);
-    private static final String FLOW_NAME = "dispute-create";
-    private static final String TRACE_CODE = "DISPUTE-CREATE";
-    private final DisputeService disputeService;
-
-    public DisputeCreateFlowHandler(ReliableTopicPublisher<DisputeCreateResponseWrapperDto> reliableTopicPublisher, ProtobufDeserializer<DisputeCreateRequestWrapperDto> deserializer, DisputeService disputeService) {
-        super(FLOW_NAME, TRACE_CODE, reliableTopicPublisher, deserializer);
-        this.disputeService = disputeService;
-    }
-
-    @Override
-    public String extractCorrelationId(DisputeCreateRequestWrapperDto request) {
-        return request.getCorrelationId();
-    }
-
-    @Override
-    public DisputeCreateResponseDto handleRequest(DisputeCreateRequestWrapperDto request) {
-        DisputeCreateRequestDto dto = request.getPayload();
-        return disputeService.createDispute(dto);
-    }
-
-    @Override
-    public DisputeCreateResponseWrapperDto wrapResponse(String correlationId, DisputeCreateResponseDto result) {
-        return DisputeCreateResponseWrapperDto.newBuilder()
-                .setCorrelationId(correlationId)
-                .setResponse(result)
-                .build();
-    }
-
-    @PostConstruct
-    void init() {
-        LOGGER.info("DisputeCreateFlowHandler loaded and initialised.");
-    }
-}
-
-
-
-------
-
-
-package osplus.pkptuna.flows.handlers;
-
 import com.hazelcast.core.HazelcastInstance;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -68,10 +9,10 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import osplus.apl.core.test.utils.AplTestRunner;
 import osplus.apl.core.test.utils.BaseAplTest;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupRequestWrapperDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
-import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseWrapperDto;
+import osplus.pkptuna.dispute.create.model.DisputeCreateRequestDto;
+import osplus.pkptuna.dispute.create.model.DisputeCreateRequestWrapperDto;
+import osplus.pkptuna.dispute.create.model.DisputeCreateResponseDto;
+import osplus.pkptuna.dispute.create.model.DisputeCreateResponseWrapperDto;
 import osplus.pkptuna.dispute.service.DisputeService;
 import osplus.pkptuna.hazelcast.protobuf.impl.ProtobufDeserializer;
 import osplus.pkptuna.hazelcast.pubsub.ReliableTopicPublisher;
@@ -83,7 +24,7 @@ import static org.mockito.Mockito.when;
 
 @SpringBootTest(classes = {
         AplTestRunner.class,
-        DisputeLookupFlowHandlerTest.TestConfig.class
+        DisputeCreateFlowHandlerTest.TestConfig.class
 },
         properties = {
                 "spring.main.allow-bean-definition-overriding=true",
@@ -92,71 +33,73 @@ import static org.mockito.Mockito.when;
         }
 )
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class DisputeLookupFlowHandlerTest extends BaseAplTest {
+class DisputeCreateFlowHandlerTest extends BaseAplTest {
 
     @Autowired
-    private DisputeLookupFlowHandler handler;
+    private DisputeCreateFlowHandler handler;
 
     @Autowired
     private DisputeService disputeService;
 
     /**
-     * Testet die Extraktion der Korrelation-ID aus dem Wrapper.
+     * Verifies extraction of correlation ID from the wrapper.
      */
     @Test
     void shouldExtractCorrelationId() {
-        DisputeLookupRequestWrapperDto request = DisputeLookupRequestWrapperDto.newBuilder()
-                .setCorrelationId("lookup-001")
+        DisputeCreateRequestWrapperDto request = DisputeCreateRequestWrapperDto.newBuilder()
+                .setCorrelationId("create-001")
                 .build();
 
         String result = handler.extractCorrelationId(request);
 
-        assertEquals("lookup-001", result);
+        assertEquals("create-001", result);
     }
 
     /**
-     * Testet, ob der Lookup-Service korrekt aufgerufen wird.
+     * Verifies that the create service is invoked with the payload.
      */
     @Test
-    void shouldCallLookupService() {
-        DisputeLookupRequestDto dto = DisputeLookupRequestDto.newBuilder()
-                .setIssuerId("issuer")
-                .setCardReference("cardRef")
+    void shouldCallCreateService() {
+        DisputeCreateRequestDto dto = DisputeCreateRequestDto.newBuilder()
+                // populate fields as needed for your DTO; left minimal on purpose
                 .build();
 
-        DisputeLookupRequestWrapperDto request = DisputeLookupRequestWrapperDto.newBuilder()
+        DisputeCreateRequestWrapperDto request = DisputeCreateRequestWrapperDto.newBuilder()
                 .setPayload(dto)
                 .build();
 
-        DisputeLookupResponseDto expected = DisputeLookupResponseDto.newBuilder().build();
-        when(disputeService.lookupDisputeFolder("issuer", "cardRef")).thenReturn(expected);
+        DisputeCreateResponseDto expected = DisputeCreateResponseDto.newBuilder().build();
+        when(disputeService.createDispute(dto)).thenReturn(expected);
 
-        DisputeLookupResponseDto actual = handler.handleRequest(request);
+        DisputeCreateResponseDto actual = handler.handleRequest(request);
 
         assertEquals(expected, actual);
     }
 
     /**
-     * Testet das korrekte Verpacken des Lookup-Antwortobjekts.
+     * Verifies correct wrapping of the response object.
      */
     @Test
     void shouldWrapResponseCorrectly() {
-        DisputeLookupResponseDto response = DisputeLookupResponseDto.newBuilder().build();
+        DisputeCreateResponseDto response = DisputeCreateResponseDto.newBuilder().build();
+
         Object wrapped = handler.wrapResponse("corr-id", response);
 
-        assertTrue(wrapped instanceof DisputeLookupResponseWrapperDto);
-        assertEquals("corr-id", ((DisputeLookupResponseWrapperDto) wrapped).getCorrelationId());
+        assertTrue(wrapped instanceof DisputeCreateResponseWrapperDto);
+        DisputeCreateResponseWrapperDto wrapper = (DisputeCreateResponseWrapperDto) wrapped;
+        assertEquals("corr-id", wrapper.getCorrelationId());
+        assertEquals(response, wrapper.getResponse());
     }
 
     @TestConfiguration
     static class TestConfig {
         @Bean
-        public DisputeLookupFlowHandler disputeLookupFlowHandler(
-                DisputeService disputeService,
-                ReliableTopicPublisher reliableTopicPublisher,
-                ProtobufDeserializer<DisputeLookupRequestWrapperDto> deserializer
+        public DisputeCreateFlowHandler disputeCreateFlowHandler(
+                ReliableTopicPublisher<DisputeCreateResponseWrapperDto> reliableTopicPublisher,
+                ProtobufDeserializer<DisputeCreateRequestWrapperDto> deserializer,
+                DisputeService disputeService
         ) {
-            return new DisputeLookupFlowHandler(reliableTopicPublisher, deserializer,disputeService);
+            return new DisputeCreateFlowHandler(reliableTopicPublisher, deserializer, disputeService);
         }
 
         @Bean
@@ -165,12 +108,14 @@ class DisputeLookupFlowHandlerTest extends BaseAplTest {
         }
 
         @Bean
-        public ReliableTopicPublisher reliableTopicPublisher() {
+        @SuppressWarnings("unchecked")
+        public ReliableTopicPublisher<DisputeCreateResponseWrapperDto> reliableTopicPublisher() {
             return mock(ReliableTopicPublisher.class);
         }
 
         @Bean
-        public ProtobufDeserializer<DisputeLookupRequestWrapperDto> deserializer() {
+        @SuppressWarnings("unchecked")
+        public ProtobufDeserializer<DisputeCreateRequestWrapperDto> deserializer() {
             return mock(ProtobufDeserializer.class);
         }
 
@@ -180,5 +125,3 @@ class DisputeLookupFlowHandlerTest extends BaseAplTest {
         }
     }
 }
-
-
