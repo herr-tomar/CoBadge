@@ -1,34 +1,47 @@
-@Test
-void createDispute_whenValidationFails_throwsFunctionalValidationException() {
-    DisputeCreateRequestDto in = DisputeCreateRequestDto.newBuilder().build();
+package osplus.pkptuna.dispute.service;
 
-    // mapper returns issuerId + ARN so the service proceeds to TX lookup
-    var restDto = new osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto();
-    restDto.setIssuerId("1001");
-    restDto.setAcquiringReferenceNumber("ARN-123");
-    when(requestMapper.toRestDto(in)).thenReturn(restDto);
+import osplus.pkptuna.dispute.create.model.DisputeCreateRequestDto;
+import osplus.pkptuna.dispute.create.model.DisputeCreateResponseDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
 
-    // enqueue TX lookup (200 OK with a transactionId) so the code reaches validation
-    enqueueJson(200, """
-        {
-          "responseMetadata": { "statusCode": 200, "correlationId": "corr-tx" },
-          "data": [ { "transactionIdentifier": { "transactionId": "TX-999" } } ]
-        }
-        """);
+/**
+ * Schnittstelle für die Durchführung von Abfragen auf Dispute-Ordner.
+ */
+public interface DisputeService {
 
-    // validator returns violations -> should throw FVE; no need to enqueue "create" API
-    Violation v = new Violation("field", "must not be null");
-    try (MockedStatic<DisputeCreateValidator> validator = mockStatic(DisputeCreateValidator.class)) {
-        validator.when(() -> DisputeCreateValidator.validate(restDto))
-                 .thenReturn(List.of(v));
+    /**
+     * Führt eine Suche nach einem Dispute-Ordner basierend auf Issuer-ID und Kartenreferenz durch.
+     *
+     * @param issuerId die ID des Issuers
+     * @param cardReference die Kartenreferenznummer
+     * @return ein {@link DisputeLookupResponseDto} mit den Ergebnissen der Suche
+     */
+    DisputeLookupResponseDto lookupDisputeFolder(String issuerId, String cardReference);
 
-        FunctionalValidationException ex = assertThrows(
-                FunctionalValidationException.class,
-                () -> service.createDispute(in)
-        );
-        assertEquals(List.of(v), ex.getViolations());
-    }
+    DisputeCreateResponseDto createDispute(DisputeCreateRequestDto disputeCreateRequestDto);
+}
 
-    // Optional: prove only the TX lookup happened; no create call made
-    assertEquals(1, server.getRequestCount());
+-----
+
+package osplus.pkptuna.dispute.service;
+
+import osplus.pkptuna.dispute.create.model.DisputeCreateRequestDto;
+import osplus.pkptuna.dispute.create.model.DisputeCreateResponseDto;
+import osplus.pkptuna.dispute.lookup.model.DisputeLookupResponseDto;
+
+/**
+ * Schnittstelle für die Durchführung von Abfragen auf Dispute-Ordner.
+ */
+public interface DisputeService {
+
+    /**
+     * Führt eine Suche nach einem Dispute-Ordner basierend auf Issuer-ID und Kartenreferenz durch.
+     *
+     * @param issuerId die ID des Issuers
+     * @param cardReference die Kartenreferenznummer
+     * @return ein {@link DisputeLookupResponseDto} mit den Ergebnissen der Suche
+     */
+    DisputeLookupResponseDto lookupDisputeFolder(String issuerId, String cardReference);
+
+    DisputeCreateResponseDto createDispute(DisputeCreateRequestDto disputeCreateRequestDto);
 }
