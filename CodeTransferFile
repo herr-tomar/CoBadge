@@ -1,34 +1,68 @@
 /**
- * Erstellt einen neuen Dispute-Ordner basierend auf den übergebenen Dispute-Daten.
+ * Führt den HTTP-Aufruf an den IBO-Service zum Erstellen eines neuen Dispute-Ordners durch.
  *
- * @param disputeCreateRequestDto die zur Erstellung notwendigen Dispute-Daten
- * @return ein {@link DisputeCreateResponseDto} mit der Referenz auf den neu erstellten Dispute-Ordner
- * @throws osplus.pkptuna.dispute.service.validation.FunctionalValidationException
- *         wenn die fachliche Validierung fehlschlägt
- * @throws RuntimeException wenn Pflichtdaten fehlen oder externe Aufrufe fehlschlagen
+ * @param issuerId       die ID des Issuers
+ * @param transactionId  die zuvor ermittelte Transaktions-ID
+ * @param body           das IBO-spezifische Create-Request-DTO mit den Dispute-Daten
+ * @return die vom IBO-Service gelieferte Antwort als {@link DisputeIboCreateResponseDto}
+ *
+ * @throws RuntimeException wenn der HTTP-Aufruf fehlschlägt oder die Antwort ungültig ist
  */
-DisputeCreateResponseDto createDispute(DisputeCreateRequestDto disputeCreateRequestDto);
+private DisputeIboCreateResponseDto createIboDispute(String issuerId,
+                                                     String transactionId,
+                                                     DisputeIboCreateRequestDto body) { ... }
 
 
---------
+-----
+
+/**
+ * Führt den HTTP-Aufruf an den IBO-Service durch, um anhand der übergebenen ARN (Acquirer Reference Number)
+ * die zugehörige Transaktions-ID zu ermitteln.
+ *
+ * @param req das {@link DisputeIboTransactionRequestDto} mit Issuer-ID und ARN-Liste
+ * @return die vom IBO-Service gelieferte Antwort als {@link DisputeIboTransactionResponseDto}
+ *
+ * @throws RuntimeException wenn der HTTP-Aufruf fehlschlägt oder die Antwort ungültig ist
+ */
+private DisputeIboTransactionResponseDto lookUpIboTransactionId(DisputeIboTransactionRequestDto req) { ... }
+
+
+----
 
 
 /**
- * {@inheritDoc}
- * <p>
- * Implementierungsschritte:
- * <ol>
- *   <li>Wandelt das eingehende Protobuf-DTO in das REST-DTO für den IBO-Service um.</li>
- *   <li>Ermittelt über die Acquirer Reference Number (ARN) die zugehörige Transaktions-ID
- *       durch einen Lookup beim externen Service.</li>
- *   <li>Führt eine fachliche Validierung der Eingabedaten durch und normalisiert diese ggf.</li>
- *   <li>Mappt die normalisierten Daten auf das IBO-spezifische Create-Request-DTO.</li>
- *   <li>Sendet die Create-Anfrage an den IBO-Service und prüft die Antwort auf Erfolg.</li>
- *   <li>Extrahiert und liefert die vom IBO-System vergebene DisputeFolderReference zurück.</li>
- * </ol>
+ * Prüft, ob die in der Antwort enthaltenen Metadaten einen erfolgreichen HTTP-Statuscode enthalten.
  *
- * @throws osplus.pkptuna.dispute.service.validation.FunctionalValidationException
- *         wenn die fachliche Validierung fehlschlägt
- * @throws RuntimeException wenn Pflichtdaten fehlen, externe Aufrufe fehlschlagen
- *         oder die Antwort ungültig ist
+ * @param md  das Response-Metadatenobjekt der Transaktions-Lookup-Antwort
+ * @param ctx zusätzlicher Kontexttext für Logging und Fehlermeldungen
+ * @throws RuntimeException wenn {@code md} {@code null} ist oder der Statuscode kein 2xx-Code ist
  */
+private static void ensureOk(osplus.pkptuna.rest.dispute.ibo.transaction.identifier.model.ResponseMetadataDto md,
+                              String ctx) { ... }
+
+
+-----
+
+
+/**
+ * Prüft, ob die in der Antwort enthaltenen Metadaten einen erfolgreichen HTTP-Statuscode enthalten.
+ *
+ * @param md  das Response-Metadatenobjekt der Dispute-Create-Antwort
+ * @param ctx zusätzlicher Kontexttext für Logging und Fehlermeldungen
+ * @throws RuntimeException wenn {@code md} {@code null} ist oder der Statuscode kein 2xx-Code ist
+ */
+private static void ensureOk(osplus.pkptuna.rest.dispute.ibo.create.model.ResponseMetadataDto md,
+                              String ctx) { ... }
+
+
+----
+
+/**
+ * Liest den angegebenen HTTP-Headerwert aus oder gibt einen leeren String zurück,
+ * falls der Header nicht vorhanden oder {@code null} ist.
+ *
+ * @param h    die HttpHeaders-Instanz
+ * @param name der Name des gesuchten Headers
+ * @return der erste gefundene Headerwert oder ein leerer String, wenn nicht vorhanden
+ */
+private static String headerOrEmpty(org.springframework.http.HttpHeaders h, String name) { ... }
