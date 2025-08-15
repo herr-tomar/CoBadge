@@ -117,3 +117,7 @@ Alle Betragsfelder
 Komma in Beträgen → Punkt konvertieren; Rundung auf Exponent-Anzahl Nachkommastellen
 
 Wie in Legacy C-Code
+
+-----------------------------------------------------------------
+
+Wird der Betrag sonst über die reklamierte Position gesetzt oder doch immer?
