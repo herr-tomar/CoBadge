@@ -1,35 +1,76 @@
+package osplus.pkptuna.dispute.service.impl;
+
+import okhttp3.mockwebserver.MockResponse;
+import okhttp3.mockwebserver.MockWebServer;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.MockedStatic;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.io.IOException;
 import java.net.http.HttpClient;
+import java.time.Duration;
+import java.util.Collections;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+
 import org.springframework.http.client.reactive.JdkClientHttpConnector;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
 class DisputeServiceImplCreateDisputeUnitTest {
 
   private MockWebServer server;
+  private ExecutorService httpExecutor;
+
+  @Mock osplus.pkptuna.dispute.config.DisputeServiceProperties props;
+  @Mock osplus.pkptuna.dispute.config.DisputeServiceProperties.Auth auth;
+  @Mock osplus.pkptuna.dispute.config.DisputeServiceProperties.Paths paths;
+  @Mock osplus.pkptuna.rest.dispute.create.model.mapper.DisputeCreateRequestDtoMapper requestMapper;
+  @Mock osplus.pkptuna.dispute.service.mapping.DynsToIboCreateMapper dynsToIboCreateMapper;
+
   private DisputeServiceImpl service;
-  private HttpClient jdkClient;
 
   @BeforeEach
   void setUp() throws IOException {
     server = new MockWebServer();
     server.start();
 
-    jdkClient = HttpClient.newBuilder()
-        // optional: provide your own executor to control threads in tests
-        //.executor(Executors.newCachedThreadPool())
-        .build();
+    ThreadFactory tf = r -> { Thread t = new Thread(r, "jdk-http-test"); t.setDaemon(true); return t; };
+    httpExecutor = Executors.newSingleThreadExecutor(tf);
+    HttpClient jdk = HttpClient.newBuilder().executor(httpExecutor).connectTimeout(Duration.ofSeconds(2)).build();
 
     WebClient webClient = WebClient.builder()
         .baseUrl(server.url("/").toString())
-        .clientConnector(new JdkClientHttpConnector(jdkClient))
+        .clientConnector(new JdkClientHttpConnector(jdk))
         .build();
 
-    // ... your existing props/mappers/objectMapper mocks ...
-    service = new DisputeServiceImpl(webClient, props, requestMapper, dynsToIboCreateMapper, new ObjectMapper());
+    when(props.auth()).thenReturn(auth);
+    when(props.paths()).thenReturn(paths);
+    when(auth.username()).thenReturn("testuser");
+    when(auth.password()).thenReturn("testpass");
+    when(paths.lookupTransactionid()).thenReturn("/tx/lookup");
+    when(paths.disputeCreate()).thenReturn("/issuers/{issuerId}/transactions/{transactionId}/disputes");
+    when(paths.lookupDisputes()).thenReturn("/unused");
+
+    service = new DisputeServiceImpl(webClient, props, requestMapper, dynsToIboCreateMapper,
+            new com.fasterxml.jackson.databind.ObjectMapper());
   }
 
   @AfterEach
-  void tearDown() throws IOException {
+  void tearDown() throws Exception {
     server.shutdown();
-    // If you supplied a custom Executor above, shut it down here.
+    httpExecutor.shutdownNow();
+  }
+
+  @Test
+  void sanity() {
+    assertTrue(true);
   }
 }
