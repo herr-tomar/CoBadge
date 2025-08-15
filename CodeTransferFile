@@ -1,124 +1,173 @@
-
 package osplus.pkptuna.dispute.service.mapping;
 
-import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
-import org.mapstruct.Mappings;
-import org.mapstruct.NullValuePropertyMappingStrategy;
-import osplus.apl.core.api.AplComponent;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mapstruct.factory.Mappers;
 import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
 import osplus.pkptuna.rest.dispute.ibo.create.model.AmountDto;
 import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeEventRequestDto;
 import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateRequestDto;
 import osplus.pkptuna.rest.dispute.ibo.create.model.DisputePostingRequestDto;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
-@AplComponent
-@Mapper(componentModel = "spring",
-        nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
-public interface DynsToIboCreateMapper {
+import static org.assertj.core.api.Assertions.assertThat;
 
-    @Mappings({
-            @Mapping(target = "disputeReason", source = "reklaGrundKat1"),
-            @Mapping(target = "issuerDisputeExternalReference", source = "impulsOid"),
-            @Mapping(target = "declareFraudIndicator", expression = "java(false)"),
+class DynsToIboCreateMapperTest {
 
-            // computed / assembled fields
-            @Mapping(target = "refundRedebitIndicator", expression = "java(calcIndicator(src))"),
-            @Mapping(target = "refundRedebitAmount",  expression = "java(buildRefundAmount(src))"),
-            @Mapping(target = "disputePostings",      expression = "java(buildPostings(src))"),
-            @Mapping(target = "disputeEvents",        expression = "java(buildEvents(src))"),
-            @Mapping(target = "disputeDocuments",     expression = "java(java.util.Collections.emptyList())")
-    })
-    DisputeIboCreateRequestDto toIbo(DisputeCreateRequestDto src);
+    private DynsToIboCreateMapper mapper;
 
-    // -------- helpers (currency + reason strictly pass-through) --------
-
-    /** PARTIAL if reklaTeilbetragKz == 'J' else NONE */
-    default String calcIndicator(DisputeCreateRequestDto s) {
-        return isJ(s.getReklaTeilbetragKz()) ? "PARTIAL" : "NONE";
+    @BeforeEach
+    void setUp() {
+        mapper = Mappers.getMapper(DynsToIboCreateMapper.class);
     }
 
-    /** refundRedebitAmount only for partial; isoCode/exponent pass-through (fixed 2) */
-    default AmountDto buildRefundAmount(DisputeCreateRequestDto s) {
-        if (!isJ(s.getReklaTeilbetragKz())) {
-            return null;
-        }
-        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaBetragWs())) {
-            return null;
-        }
+    @Test
+    void toIbo_mapsBasicFieldsAndComputedValues() {
+        DisputeCreateRequestDto src = new DisputeCreateRequestDto();
+        src.setReklaGrundKat1("reason1");
+        src.setImpulsOid("impulse123");
+        src.setReklaTeilbetragKz("J");
+        src.setReklaBetrag("1000");
+        src.setReklaBetragWs("EUR");
 
-        AmountDto a = new AmountDto();
-        a.setValue(parseLongSafe(s.getReklaBetrag(), 0L));
-        a.setExponent(2);
-        a.setIsoCode(s.getReklaBetragWs());
-        return a;
+        DisputeIboCreateRequestDto out = mapper.toIbo(src);
+
+        assertThat(out.getDisputeReason()).isEqualTo("reason1");
+        assertThat(out.getIssuerDisputeExternalReference()).isEqualTo("impulse123");
+        assertThat(out.getDeclareFraudIndicator()).isFalse();
+        assertThat(out.getRefundRedebitIndicator()).isEqualTo("PARTIAL");
+        assertThat(out.getRefundRedebitAmount()).isNotNull();
+        assertThat(out.getDisputePostings()).isNotEmpty();
+        assertThat(out.getDisputeEvents()).isNotEmpty();
+        assertThat(out.getDisputeDocuments()).isEmpty();
     }
 
-    /**
-     * Build postings:
-     *  1) prefer original amount (crdVfggOrigBtrg / crdVfggOrigWs)
-     *  2) else, if PARTIAL and refund fields exist, fallback to (reklaBetrag / reklaWS)
-     *  3) else, no posting
-     *  postingTypeReference = "ISSUER_ACCOUNT", immediateReimbursement = false
-     *  exponent = 2 (per your current samples)
-     */
-    default List<DisputePostingRequestDto> buildPostings(DisputeCreateRequestDto s) {
-        AmountDto amt = null;
+    @Test
+    void calcIndicator_returnsPartialForJOtherwiseNone() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setReklaTeilbetragKz("J");
+        assertThat(mapper.calcIndicator(dto)).isEqualTo("PARTIAL");
 
-        // preferred source: original amount
-        if (!isBlank(s.getCrdVfggOrigBtrg()) && !isBlank(s.getCrdVfggOrigWs())) {
-            amt = new AmountDto();
-            amt.setValue(parseLongSafe(s.getCrdVfggOrigBtrg(), 0L));
-            amt.setExponent(2);
-            amt.setIsoCode(s.getCrdVfggOrigWs());
-        }
-        // fallback for partial: refund amount fields
-        else if (isJ(s.getReklaTeilbetragKz())
-                && !isBlank(s.getReklaBetrag())
-                && !isBlank(s.getReklaBetragWs())) {
-            amt = new AmountDto();
-            amt.setValue(parseLongSafe(s.getReklaBetrag(), 0L));
-            amt.setExponent(2);
-            amt.setIsoCode(s.getReklaBetragWs());
-        }
-
-        if (amt == null) {
-            return Collections.emptyList();
-        }
-
-        DisputePostingRequestDto p = new DisputePostingRequestDto();
-        p.setPostingAmount(amt);
-        p.setImmediateReimbursement(false);
-        p.setPostingTypeReference("ISSUER_ACCOUNT");
-
-        List<DisputePostingRequestDto> out = new ArrayList<>(1);
-        out.add(p);
-        return out;
+        dto.setReklaTeilbetragKz("N");
+        assertThat(mapper.calcIndicator(dto)).isEqualTo("NONE");
     }
 
-    /** Create COMMENT event only for partial (simple pass-through text) */
-    default List<DisputeEventRequestDto> buildEvents(DisputeCreateRequestDto s) {
-        if (!isJ(s.getReklaTeilbetragKz())){
-            return Collections.emptyList();
-        }
-        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaBetragWs())) {
-            return Collections.emptyList();
-        }
+    @Test
+    void buildRefundAmount_returnsNullWhenNotPartialOrMissingValues() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setReklaTeilbetragKz("N");
+        assertThat(mapper.buildRefundAmount(dto)).isNull();
 
-        DisputeEventRequestDto ev = new DisputeEventRequestDto();
-        ev.setType("COMMENT");
-        ev.setMessage("Reklamation mit Teilbetrag i.H.v. " + s.getReklaBetrag() + " " + s.getReklaBetragWs());
-        return Collections.singletonList(ev);
+        dto.setReklaTeilbetragKz("J");
+        dto.setReklaBetrag(null);
+        assertThat(mapper.buildRefundAmount(dto)).isNull();
     }
 
-    // -------- tiny utils --------
-    default boolean isJ(String v) { return v != null && v.trim().equalsIgnoreCase("J"); }
-    default boolean isBlank(String v) { return v == null || v.trim().isEmpty(); }
-    default long parseLongSafe(String s, long def) {
-        try { return Long.parseLong(s.trim()); } catch (Exception e) { return def; }
+    @Test
+    void buildRefundAmount_returnsAmountForPartialWithValues() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setReklaTeilbetragKz("J");
+        dto.setReklaBetrag("500");
+        dto.setReklaBetragWs("USD");
+
+        AmountDto amt = mapper.buildRefundAmount(dto);
+        assertThat(amt).isNotNull();
+        assertThat(amt.getValue()).isEqualTo(500);
+        assertThat(amt.getIsoCode()).isEqualTo("USD");
+        assertThat(amt.getExponent()).isEqualTo(2);
+    }
+
+    @Test
+    void buildPostings_prefersOriginalAmountOverRefund() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setCrdVfggOrigBtrg("2000");
+        dto.setCrdVfggOrigWs("CHF");
+        dto.setReklaTeilbetragKz("J");
+        dto.setReklaBetrag("500");
+        dto.setReklaBetragWs("USD");
+
+        List<DisputePostingRequestDto> postings = mapper.buildPostings(dto);
+        assertThat(postings).hasSize(1);
+        assertThat(postings.get(0).getPostingAmount().getIsoCode()).isEqualTo("CHF");
+    }
+
+    @Test
+    void buildPostings_fallsBackToRefundAmountWhenPartialAndNoOriginal() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setReklaTeilbetragKz("J");
+        dto.setReklaBetrag("500");
+        dto.setReklaBetragWs("USD");
+
+        List<DisputePostingRequestDto> postings = mapper.buildPostings(dto);
+        assertThat(postings).hasSize(1);
+        assertThat(postings.get(0).getPostingAmount().getIsoCode()).isEqualTo("USD");
+    }
+
+    @Test
+    void buildPostings_returnsEmptyListWhenNoAmountsAvailable() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        assertThat(mapper.buildPostings(dto)).isEmpty();
+    }
+
+    @Test
+    void buildEvents_returnsEventOnlyForPartialWithValues() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setReklaTeilbetragKz("J");
+        dto.setReklaBetrag("500");
+        dto.setReklaBetragWs("USD");
+
+        List<DisputeEventRequestDto> events = mapper.buildEvents(dto);
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0).getType()).isEqualTo("COMMENT");
+        assertThat(events.get(0).getMessage()).contains("500 USD");
+    }
+
+    @Test
+    void buildEvents_returnsEmptyWhenNotPartialOrMissingValues() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setReklaTeilbetragKz("N");
+        assertThat(mapper.buildEvents(dto)).isEmpty();
+
+        dto.setReklaTeilbetragKz("J");
+        dto.setReklaBetrag(null);
+        dto.setReklaBetragWs(null);
+        assertThat(mapper.buildEvents(dto)).isEmpty();
+    }
+
+    @Test
+    void isJ_and_isBlank_and_parseLongSafe_workAsExpected() {
+        assertThat(mapper.isJ("J")).isTrue();
+        assertThat(mapper.isJ("j")).isTrue();
+        assertThat(mapper.isJ("N")).isFalse();
+
+        assertThat(mapper.isBlank(null)).isTrue();
+        assertThat(mapper.isBlank("")).isTrue();
+        assertThat(mapper.isBlank(" ")).isTrue();
+        assertThat(mapper.isBlank("x")).isFalse();
+
+        assertThat(mapper.parseLongSafe("123", 0L)).isEqualTo(123L);
+        assertThat(mapper.parseLongSafe("abc", 42L)).isEqualTo(42L);
     }
 }
+
+
+-------
+
+
+/**
+ * MapStruct-Mapper zur Umwandlung eines {@link osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto}
+ * in ein {@link osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateRequestDto}
+ * für den Aufruf des externen IBO-Dispute-Create-Services.
+ * <p>
+ * Neben der direkten Feldzuordnung werden hier auch mehrere berechnete bzw. zusammengesetzte Felder
+ * erzeugt, wie z.B.:
+ * <ul>
+ *   <li>Ermittlung des Refund/Redebit-Indikators abhängig vom Teilbetrags-Kennzeichen</li>
+ *   <li>Aufbau von Betragsobjekten (Refund-Betrag, Originalbetrag) mit Währungs- und Exponentenangaben</li>
+ *   <li>Erstellung von Posting- und Event-Listen je nach Vorhandensein relevanter Daten</li>
+ * </ul>
+ * Nicht gesetzte oder leere Quellwerte werden gemäß
+ * {@link org.mapstruct.NullValuePropertyMappingStrategy#IGNORE} nicht gemappt.
+ */
+
