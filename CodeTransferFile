@@ -1,28 +1,54 @@
-POST http://4.239.136.13:43001/api/v2/issuers/1004/transactions/1000000000150297/dispute
+KA_DMC_REKLA D/B Table	Source in Legacy Code (KACHOAF.c)	Dyns/IBO Request JSON Key 	Source Dyns/IBO 	Dyns Parameter
+IDM_DISPU_FOLDER_ID	CHA_intReference (via KACHA110_getFieldMemo)	disputeFolderIdentifier.disputeFolderReference	IBO REST Response	
+DMC_LIFE_CYCL_ID	JSN_transactionLifeCycleId	transactionLifeCycleId	Mapped in Dyns Request	CRD_TA_TRACE_NR
+DMC_ARN_ID	JSN_acquirerReferenceData	acquirerReferenceData	Mapped in Dyns	SEP_UTMT_CRED_ID
+CRD_PAN	JSN_primaryAccountNumber	primaryAccountNumber	Mapped in Dyns	CRD_PAN
+DMC_TA_DTM_TIME	JSN_transactionDateAndTime	transactionDateAndTime	Mapped in Dyns	CRD_TA_DATE_TIME
+DMC_TA_BTRG	JSN_transactionBetrag	transactionBetrag	Mapped in Dyns	UMSATZ_BETRAG
+OSP_IMPS_OID	JSN_impulsOId	impulsOId	Mapped in Dyns	IMPULS_OID
+UMSATZ_ID	JSN_umsatzId	umsatzId	Mapped in Dyns	UMSATZ_ID
+EMPF_KONTO_ID	JSN_empfKontoId	empfKontoId	Mapped in Dyns	EMPF_KONTO_ID
+DMC_CLAIM_CBK_ID	(set to " ", no source)	
+Constant	
+DMC_REKL_ID_VWZ	(set to " ", no source)	disputeFolderIdentifier.disputeFolderReference	IBO REST Response	
+DMC_PRZS_DTM	(set to "01.01.0001", no source)	
+Constant	
+DMC_EMPF_BLZ	JSN_empfBlz	empBlz	Mapped in Dyns	empBlz
+DMC_REKL_GRND	CHA_reklaGrundKatText	reklaGrundKat1	Mapped in Dyns	reklaGrundKat1
+DMC_REKL_BTRG	JSN_reklaBetrag	reklaBetrag	Mapped in Dyns	reklaBetrag
+DMC_REKL_WS	JSN_reklaBetragWs	reklaBetragWs	Mapped in Dyns	reklaBetragWs
+DMC_TA_SIGN	JSN_transactionSign	transactionSign	Mapped in Dyns	IMPS_KTGR
+DMC_TEIL_BTRG_KZ	JSN_reklaTeilbetragKz	reklaTeilbetragKz	Mapped in Dyns	reklaTeilBetragKz
+DMC_SPER_KZ	JSN_karteSperren	karteSperren	Mapped in Dyns	karteSperren
+DMC_REKL_ORIG_WS	JSN_crdVfggOrigWs	crdVfggOrigWs	Mapped in Dyns	CRD_VFGG_ORIG_WS
+DMC_REKL_ORIG_WHKS	JSN_crdVfggOrigKurs	crdVfggOrigKurs	Mapped in Dyns	CRD_VFGG_ORIG_BTRG
+DMC_REKL_ENTG_BTRG	JSN_crdEntBtrg	crdEntBtrg	Mapped in Dyns	ORIG_BTRG_TBTR
+DMC_REKL_KVDT_C7	JSN_crdVerfallMon	crdVerfallMon	Mapped in Dyns	CRD_VERFALL_MON
+AUTO_ERST_ANZ	JSN_anzahlAutoErstattungen	anzahlAutoErstattungen	Mapped in Dyns	CBD_UMS_ERST_AUTO_ANZ
+AUTO_ERST_BTRG_MAX	JSN_autoErstMaxBetrag	autoErstMaxBetrag	Mapped in Dyns	DMC-MAXBT-AE
+AUTO_ERST_ANZ_MAX	JSN_autoErstMaxAnzahl	autoErstMaxAnzahl	Mapped in Dyns	DMC-MAXAZ-AE
+KRTN_HGBR_ID	JSN_issuerId	issuerId	Mapped in Dyns	IssuerId
+IDM_STAT_CODE	" " (blank, later filled in update functions)
+http status code + business logic	statusCode	IBO REST Response	
+IDM_RESP_CODE	" " (blank, later filled in update functions) + business logic	SOAP FAULT contained responseCode but not present in the REST response.  Ask IBO ? 	IBO REST Response	
+IDM_STAT_INFO	" " (blank, later filled in update functions)
+statusMessage + business logic	statusMessage	IBO REST Response	
+IDM_EXT_REF_ID	" " (blank, later filled in update)	SOAP  FAULT contained extReference field but it is not present anymore in the REST response.
+TODO Ask IBO guys this question  ? 	IBO REST Response	
+AUTO_ERST_KZ	calculated via ermittelnAutoErst()	
 
-HTTP/1.1 400 Bad Request
-Cache-Control: no-store
-Set-Cookie: JSESSIONID=HsDQPU7AHwD1ZKKbhv5Nabe0cvP0PvZkT-XFVgIB.d100stulxdmc161; path=/; HttpOnly
-X-XSS-Protection: 1; mode=block
-Pragma: no-cache
-X-Frame-Options: SAMEORIGIN
-Date: Fri, 15 Aug 2025 16:28:41 GMT
-Connection: keep-alive
-X-Content-Type-Options: nosniff
-Content-Type: application/json
-Content-Length: 249
-WL-Correlation-ID: ee3993bb-5411-4b2b-b101-fcadcf656afd
 
-{
-  "responseMetadata": {
-    "correlationId": "ee3993bb-5411-4b2b-b101-fcadcf656afd",
-    "statusMessage": "DisputeFolder already exists with transaction id : 1000000000150297",
-    "statusCode": 400,
-    "responseDateTime": "2025-08-15T18:28:41.501+0200",
-    "timeTakenMs": 1717
-  }
-}
-Response file saved.
-> 2025-08-15T182841.400.json
+AUTO_ERST_BTRG	calculated via ermittelnAutoErst()	
 
-Response code: 400 (Bad Request); Time: 1767ms (1 s 767 ms); Content length: 249 bytes (249 B)
+
+DMC_AUSL_ENTG_PRD	JSN_sepTraExtPurp + business logic	sepTraExtPurp	Mapped in Dyns	DMC-SVPROC-I
+DMC_PRZS_STAT	"INIT" (later updated)	
+IBO Rest Response	
+DISPU_FLDR_ETRY_MODE	"OSP_neo" (constant)	
+Constant	
+
+
+crdAfsgBtrg	Unmapped	
+
+
+osplusValuta	Unmapped	
