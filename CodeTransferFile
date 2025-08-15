@@ -1,36 +1,35 @@
-import reactor.netty.http.client.HttpClient;
-import reactor.netty.resources.ConnectionProvider;
-import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import java.net.http.HttpClient;
+import org.springframework.http.client.reactive.JdkClientHttpConnector;
+import org.springframework.web.reactive.function.client.WebClient;
 
 class DisputeServiceImplCreateDisputeUnitTest {
 
   private MockWebServer server;
   private DisputeServiceImpl service;
-
-  private ConnectionProvider provider; // keep a reference only if you want to dispose explicitly
+  private HttpClient jdkClient;
 
   @BeforeEach
   void setUp() throws IOException {
     server = new MockWebServer();
     server.start();
 
-    // no connection pool => no lingering threads
-    provider = ConnectionProvider.newConnection();
-    HttpClient httpClient = HttpClient.create(provider);
+    jdkClient = HttpClient.newBuilder()
+        // optional: provide your own executor to control threads in tests
+        //.executor(Executors.newCachedThreadPool())
+        .build();
 
     WebClient webClient = WebClient.builder()
         .baseUrl(server.url("/").toString())
-        .clientConnector(new ReactorClientHttpConnector(httpClient))
+        .clientConnector(new JdkClientHttpConnector(jdkClient))
         .build();
 
-    // ... construct props + mapper mocks as you already do ...
+    // ... your existing props/mappers/objectMapper mocks ...
     service = new DisputeServiceImpl(webClient, props, requestMapper, dynsToIboCreateMapper, new ObjectMapper());
   }
 
   @AfterEach
   void tearDown() throws IOException {
     server.shutdown();
-    // Not strictly necessary for newConnection(), but harmless:
-    provider.disposeLater().block();
+    // If you supplied a custom Executor above, shut it down here.
   }
 }
