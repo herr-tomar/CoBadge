@@ -1,22 +1,124 @@
-/**
- * Implementierung des {@link DisputeService}, die über einen konfigurierten {@link WebClient}
- * mit dem externen IBO-Service kommuniziert.
- * <p>
- * Diese Klasse bietet Funktionen zur:
- * <ul>
- *   <li>Abfrage bestehender Dispute-Ordner anhand von Issuer-ID und Kartenreferenz</li>
- *   <li>Erstellung neuer Dispute-Ordner im IBO-System inklusive Validierung und Normalisierung der Eingabedaten</li>
- * </ul>
- * <p>
- * Sie kapselt die komplette Ablaufsteuerung, inklusive:
- * <ol>
- *   <li>Mapping zwischen internen Protobuf-DTOs und den IBO-spezifischen REST-DTOs</li>
- *   <li>HTTP-Aufrufen an die jeweiligen Endpunkte des IBO-Services</li>
- *   <li>Prüfung der Antwortmetadaten auf Erfolg</li>
- *   <li>Extraktion der relevanten Rückgabewerte</li>
- * </ol>
- * </p>
- *
- * <strong>Thread-Sicherheit:</strong> Diese Implementierung ist threadsicher, sofern die übergebenen
- * abhängigen Komponenten (Mapper, {@code WebClient}, {@code ObjectMapper}) threadsicher sind.
- */
+
+package osplus.pkptuna.dispute.service.mapping;
+
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.Mappings;
+import org.mapstruct.NullValuePropertyMappingStrategy;
+import osplus.apl.core.api.AplComponent;
+import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.AmountDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeEventRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputePostingRequestDto;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+@AplComponent
+@Mapper(componentModel = "spring",
+        nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+public interface DynsToIboCreateMapper {
+
+    @Mappings({
+            @Mapping(target = "disputeReason", source = "reklaGrundKat1"),
+            @Mapping(target = "issuerDisputeExternalReference", source = "impulsOid"),
+            @Mapping(target = "declareFraudIndicator", expression = "java(false)"),
+
+            // computed / assembled fields
+            @Mapping(target = "refundRedebitIndicator", expression = "java(calcIndicator(src))"),
+            @Mapping(target = "refundRedebitAmount",  expression = "java(buildRefundAmount(src))"),
+            @Mapping(target = "disputePostings",      expression = "java(buildPostings(src))"),
+            @Mapping(target = "disputeEvents",        expression = "java(buildEvents(src))"),
+            @Mapping(target = "disputeDocuments",     expression = "java(java.util.Collections.emptyList())")
+    })
+    DisputeIboCreateRequestDto toIbo(DisputeCreateRequestDto src);
+
+    // -------- helpers (currency + reason strictly pass-through) --------
+
+    /** PARTIAL if reklaTeilbetragKz == 'J' else NONE */
+    default String calcIndicator(DisputeCreateRequestDto s) {
+        return isJ(s.getReklaTeilbetragKz()) ? "PARTIAL" : "NONE";
+    }
+
+    /** refundRedebitAmount only for partial; isoCode/exponent pass-through (fixed 2) */
+    default AmountDto buildRefundAmount(DisputeCreateRequestDto s) {
+        if (!isJ(s.getReklaTeilbetragKz())) {
+            return null;
+        }
+        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaBetragWs())) {
+            return null;
+        }
+
+        AmountDto a = new AmountDto();
+        a.setValue(parseLongSafe(s.getReklaBetrag(), 0L));
+        a.setExponent(2);
+        a.setIsoCode(s.getReklaBetragWs());
+        return a;
+    }
+
+    /**
+     * Build postings:
+     *  1) prefer original amount (crdVfggOrigBtrg / crdVfggOrigWs)
+     *  2) else, if PARTIAL and refund fields exist, fallback to (reklaBetrag / reklaWS)
+     *  3) else, no posting
+     *  postingTypeReference = "ISSUER_ACCOUNT", immediateReimbursement = false
+     *  exponent = 2 (per your current samples)
+     */
+    default List<DisputePostingRequestDto> buildPostings(DisputeCreateRequestDto s) {
+        AmountDto amt = null;
+
+        // preferred source: original amount
+        if (!isBlank(s.getCrdVfggOrigBtrg()) && !isBlank(s.getCrdVfggOrigWs())) {
+            amt = new AmountDto();
+            amt.setValue(parseLongSafe(s.getCrdVfggOrigBtrg(), 0L));
+            amt.setExponent(2);
+            amt.setIsoCode(s.getCrdVfggOrigWs());
+        }
+        // fallback for partial: refund amount fields
+        else if (isJ(s.getReklaTeilbetragKz())
+                && !isBlank(s.getReklaBetrag())
+                && !isBlank(s.getReklaBetragWs())) {
+            amt = new AmountDto();
+            amt.setValue(parseLongSafe(s.getReklaBetrag(), 0L));
+            amt.setExponent(2);
+            amt.setIsoCode(s.getReklaBetragWs());
+        }
+
+        if (amt == null) {
+            return Collections.emptyList();
+        }
+
+        DisputePostingRequestDto p = new DisputePostingRequestDto();
+        p.setPostingAmount(amt);
+        p.setImmediateReimbursement(false);
+        p.setPostingTypeReference("ISSUER_ACCOUNT");
+
+        List<DisputePostingRequestDto> out = new ArrayList<>(1);
+        out.add(p);
+        return out;
+    }
+
+    /** Create COMMENT event only for partial (simple pass-through text) */
+    default List<DisputeEventRequestDto> buildEvents(DisputeCreateRequestDto s) {
+        if (!isJ(s.getReklaTeilbetragKz())){
+            return Collections.emptyList();
+        }
+        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaBetragWs())) {
+            return Collections.emptyList();
+        }
+
+        DisputeEventRequestDto ev = new DisputeEventRequestDto();
+        ev.setType("COMMENT");
+        ev.setMessage("Reklamation mit Teilbetrag i.H.v. " + s.getReklaBetrag() + " " + s.getReklaBetragWs());
+        return Collections.singletonList(ev);
+    }
+
+    // -------- tiny utils --------
+    default boolean isJ(String v) { return v != null && v.trim().equalsIgnoreCase("J"); }
+    default boolean isBlank(String v) { return v == null || v.trim().isEmpty(); }
+    default long parseLongSafe(String s, long def) {
+        try { return Long.parseLong(s.trim()); } catch (Exception e) { return def; }
+    }
+}
