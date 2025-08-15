@@ -1,54 +1,45 @@
-KA_DMC_REKLA D/B Table	Source in Legacy Code (KACHOAF.c)	Dyns/IBO Request JSON Key 	Source Dyns/IBO 	Dyns Parameter
-IDM_DISPU_FOLDER_ID	CHA_intReference (via KACHA110_getFieldMemo)	disputeFolderIdentifier.disputeFolderReference	IBO REST Response	
-DMC_LIFE_CYCL_ID	JSN_transactionLifeCycleId	transactionLifeCycleId	Mapped in Dyns Request	CRD_TA_TRACE_NR
-DMC_ARN_ID	JSN_acquirerReferenceData	acquirerReferenceData	Mapped in Dyns	SEP_UTMT_CRED_ID
-CRD_PAN	JSN_primaryAccountNumber	primaryAccountNumber	Mapped in Dyns	CRD_PAN
-DMC_TA_DTM_TIME	JSN_transactionDateAndTime	transactionDateAndTime	Mapped in Dyns	CRD_TA_DATE_TIME
-DMC_TA_BTRG	JSN_transactionBetrag	transactionBetrag	Mapped in Dyns	UMSATZ_BETRAG
-OSP_IMPS_OID	JSN_impulsOId	impulsOId	Mapped in Dyns	IMPULS_OID
-UMSATZ_ID	JSN_umsatzId	umsatzId	Mapped in Dyns	UMSATZ_ID
-EMPF_KONTO_ID	JSN_empfKontoId	empfKontoId	Mapped in Dyns	EMPF_KONTO_ID
-DMC_CLAIM_CBK_ID	(set to " ", no source)	
-Constant	
-DMC_REKL_ID_VWZ	(set to " ", no source)	disputeFolderIdentifier.disputeFolderReference	IBO REST Response	
-DMC_PRZS_DTM	(set to "01.01.0001", no source)	
-Constant	
-DMC_EMPF_BLZ	JSN_empfBlz	empBlz	Mapped in Dyns	empBlz
-DMC_REKL_GRND	CHA_reklaGrundKatText	reklaGrundKat1	Mapped in Dyns	reklaGrundKat1
-DMC_REKL_BTRG	JSN_reklaBetrag	reklaBetrag	Mapped in Dyns	reklaBetrag
-DMC_REKL_WS	JSN_reklaBetragWs	reklaBetragWs	Mapped in Dyns	reklaBetragWs
-DMC_TA_SIGN	JSN_transactionSign	transactionSign	Mapped in Dyns	IMPS_KTGR
-DMC_TEIL_BTRG_KZ	JSN_reklaTeilbetragKz	reklaTeilbetragKz	Mapped in Dyns	reklaTeilBetragKz
-DMC_SPER_KZ	JSN_karteSperren	karteSperren	Mapped in Dyns	karteSperren
-DMC_REKL_ORIG_WS	JSN_crdVfggOrigWs	crdVfggOrigWs	Mapped in Dyns	CRD_VFGG_ORIG_WS
-DMC_REKL_ORIG_WHKS	JSN_crdVfggOrigKurs	crdVfggOrigKurs	Mapped in Dyns	CRD_VFGG_ORIG_BTRG
-DMC_REKL_ENTG_BTRG	JSN_crdEntBtrg	crdEntBtrg	Mapped in Dyns	ORIG_BTRG_TBTR
-DMC_REKL_KVDT_C7	JSN_crdVerfallMon	crdVerfallMon	Mapped in Dyns	CRD_VERFALL_MON
-AUTO_ERST_ANZ	JSN_anzahlAutoErstattungen	anzahlAutoErstattungen	Mapped in Dyns	CBD_UMS_ERST_AUTO_ANZ
-AUTO_ERST_BTRG_MAX	JSN_autoErstMaxBetrag	autoErstMaxBetrag	Mapped in Dyns	DMC-MAXBT-AE
-AUTO_ERST_ANZ_MAX	JSN_autoErstMaxAnzahl	autoErstMaxAnzahl	Mapped in Dyns	DMC-MAXAZ-AE
-KRTN_HGBR_ID	JSN_issuerId	issuerId	Mapped in Dyns	IssuerId
-IDM_STAT_CODE	" " (blank, later filled in update functions)
-http status code + business logic	statusCode	IBO REST Response	
-IDM_RESP_CODE	" " (blank, later filled in update functions) + business logic	SOAP FAULT contained responseCode but not present in the REST response.  Ask IBO ? 	IBO REST Response	
-IDM_STAT_INFO	" " (blank, later filled in update functions)
-statusMessage + business logic	statusMessage	IBO REST Response	
-IDM_EXT_REF_ID	" " (blank, later filled in update)	SOAP  FAULT contained extReference field but it is not present anymore in the REST response.
-TODO Ask IBO guys this question  ? 	IBO REST Response	
-AUTO_ERST_KZ	calculated via ermittelnAutoErst()	
+Hier ist die deutsche Version des Jira-Textes basierend auf deiner Tabelle und den zusätzlichen Informationen:
 
+---
 
-AUTO_ERST_BTRG	calculated via ermittelnAutoErst()	
+**Titel:** Erweiterung der Reklamationsanlage – Abbildung aller Dyns-Parameter für Speicherung im CoBadge Gateway
 
+**Beschreibung:**
+Derzeit werden bei der Anlage einer Reklamation nur die **erforderlichen Parameter** aus dem Dyns-Aufruf an IBO gemappt und gesendet.
+Im Rahmen der Integration mit dem CoBadge Gateway (CoBadge GW) müssen nun **alle verfügbaren Dyns-Parameter** in der Datenbanktabelle `KA_DMC_REKLA` gespeichert werden.
 
-DMC_AUSL_ENTG_PRD	JSN_sepTraExtPurp + business logic	sepTraExtPurp	Mapped in Dyns	DMC-SVPROC-I
-DMC_PRZS_STAT	"INIT" (later updated)	
-IBO Rest Response	
-DISPU_FLDR_ETRY_MODE	"OSP_neo" (constant)	
-Constant	
+Der angepasste Ablauf sieht vor:
 
+1. **Alle verfügbaren Parameter** aus dem Dyns-Request in eine JSON-Struktur mappen.
+2. Diese Parameter während der Reklamationsanlage **asynchron** in der Tabelle `KA_DMC_REKLA` speichern.
+3. Parallel dazu die Reklamation in IBO mit den erforderlichen gemappten Parametern anlegen.
 
-crdAfsgBtrg	Unmapped	
+**Details:**
+Die folgende Tabelle listet jede Spalte der Datenbank, ihre Quelle im Legacy-System (KACHOAF.c), den JSON-Key im neuen Dyns/IBO-Request sowie den ursprünglichen Quellparameter auf.
 
+| KA\_DMC\_REKLA D/B Tabelle        | Quelle im Legacy-Code                          | Dyns/IBO Request JSON Key                      | Quelle Dyns/IBO         | Dyns Parameter      |
+| --------------------------------- | ---------------------------------------------- | ---------------------------------------------- | ----------------------- | ------------------- |
+| IDM\_DISPU\_FOLDER\_ID            | CHA\_intReference (via KACHA110\_getFieldMemo) | disputeFolderIdentifier.disputeFolderReference | IBO REST Response       | —                   |
+| DMC\_LIFE\_CYCL\_ID               | JSN\_transactionLifeCycleId                    | transactionLifeCycleId                         | Gemappt im Dyns-Request | CRD\_TA\_TRACE\_NR  |
+| DMC\_ARN\_ID                      | JSN\_acquirerReferenceData                     | acquirerReferenceData                          | Gemappt in Dyns         | SEP\_UTMT\_CRED\_ID |
+| CRD\_PAN                          | JSN\_primaryAccountNumber                      | primaryAccountNumber                           | Gemappt in Dyns         | CRD\_PAN            |
+| … *(Rest der Tabelle wie oben)* … |                                                |                                                |                         |                     |
 
-osplusValuta	Unmapped	
+**Offene Punkte / Klärungsbedarf:**
+
+* **IDM\_RESP\_CODE:** Legacy-SOAP enthielt `responseCode` im Fault; REST liefert diesen nicht. Mit IBO klären, ob dies absichtlich fehlt oder ergänzt werden muss.
+* **IDM\_EXT\_REF\_ID:** Legacy-SOAP enthielt `extReference` (gemappt auf dieses Feld); REST enthält diesen nicht. Mit IBO abstimmen, ob es ein Äquivalent gibt.
+* **Währungsbehandlung:** Dyns liefert Währungen immer alphanumerisch (z. B. `EUR`), daher ist keine Konvertierung von numerisch nach alphanumerisch erforderlich.
+* **Mapping Reklamationsgrund:** Dyns liefert Kategoriewerte wie `FI-11` oder `FI-8`. Legacy hat diese in CoBatch Gateway auf deutsche Bezeichnungen gemappt. Die neue IBO-Schnittstelle erwartet englische Schlüsselwörter — prüfen, ob die aktuelle Implementierung korrekt ist oder angepasst werden muss.
+
+**Akzeptanzkriterien:**
+
+* Alle in der Tabelle genannten Dyns-Parameter werden während der Reklamationsanlage in `KA_DMC_REKLA` gemappt und gespeichert.
+* Die Reklamationsanlage in IBO erfolgt weiterhin parallel ohne Verzögerung durch die DB-Speicherung.
+* Nicht gemappte Parameter (z. B. `crdAfsgBtrg`, `osplusValuta`) bleiben ausgeschlossen, bis ein zukünftiger Bedarf entsteht.
+* Offene Punkte mit IBO zu fehlenden Feldern (`IDM_RESP_CODE`, `IDM_EXT_REF_ID`) sind geklärt und umgesetzt.
+
+---
+
+Wenn du möchtest, kann ich dir noch die **vollständig ausgefüllte Tabelle** im Jira-Format (Markdown oder Wiki-Syntax) einfügen, damit sie 1:1 kopierbar ist.
+Willst du, dass ich das ergänze?
