@@ -1,123 +1,13 @@
-#
+In der aktuellen Logik wird der Betrag nicht pauschal immer aus der reklamierten Position gesetzt, sondern hängt von den im Mapping definierten Bedingungen ab:
 
-DynS Feld
+Für refundRedebitAmount (Mapping-Zeile 2) gilt: Dieser wird nur gesetzt, wenn reklaTeilbetragKz = 'J' (also „PARTIAL“). In diesem Fall kommen die Werte aus reklaBetrag und reklaBetragWs (inkl. Währungsnormalisierung und Exponent). Bei „FULL“ bleibt dieses Feld leer.
 
-IBO Feld
+Für disputePostings[].postingAmount (Mapping-Zeile 5) gilt:
 
-Transformation / Geschäftslogik
+Primär wird versucht, crdVfggOrigBtrg + crdVfggOrigWs zu verwenden (immer – egal ob FULL oder PARTIAL).
 
-Bedingungen / Anmerkungen
+Falls diese leer sind und es sich um PARTIAL handelt, wird auf reklaBetrag + reklaBetragWs zurückgegriffen.
 
-1
+Gibt es weder Originalbetrag noch (bei PARTIAL) den Teilbetrag, wird kein Posting angelegt.
 
-reklaTeilbetragKz (e.g. Wert J/N)
-
-refundRedebitIndicator
-
-Wenn J ⇒ "PARTIAL", sonst "NONE"
-
-Steuert gleichzeitig, ob refundRedebitAmountgesetzt wird und ob Dispute Events angelegt werden
-
-2
-
-reklaBetrag, reklaBetragWs
-
-refundRedebitAmount.value, .isoCode, .exponent
-
-Betrag und Währung übernehmen; Währung normalisieren (Numeric→Alpha z. B. 978→EUR) und Exponent aus ISO-Standard ableiten (z. B. EUR = 2 Nachkommastellen)
-
-Nur bei "PARTIAL"gesetzt
-
-3
-
-reklaGrundKat1
-
-disputeReason
-
-Mapping von internen DynS-Codes zu IBO-unterstützten Werten (Legacy: hart codierte Liste; Jetzt: englische Service-konforme Werte)
-
-Pflichtfeld in IBO, sonst Fehler
-
-4
-
-impulsOid
-
-issuerDisputeExternalReference
-
-1:1 Übernahme
-
-Muss eindeutig sein
-
-5
-
-crdVfggOrigBtrg, crdVfggOrigWs (falls leer → Fallback auf reklaBetrag/reklaWS)
-
-disputePostings[].postingAmount
-
-Währung normalisieren wie bei refundRedebitAmount, Exponent bestimmen
-
-Gilt für Partial und Full; bevorzugt crdVfggOrig…, sonst Fallback
-
-6
-
-(kein DynS-Feld, Systemwert)
-
-disputePostings[].postingTypeReference
-
-Immer "ISSUER_ACCOUNT"
-
-Festwert
-
-7
-
-(kein DynS-Feld, Systemwert)
-
-disputePostings[].immediateReimbursement
-
-Immer false
-
-Festwert
-
-8
-
-reklaBetrag + reklaBetragWs
-
-disputeEvents[].message
-
-Nur bei "PARTIAL": Text "Reklamation mit Teilbetrag i.H.v. <Betrag> <Währung>"
-
-type = "COMMENT"
-
-9
-
-—
-
-disputeDocuments[]
-
-Legacy: immer leer bei Create
-
-Dokumente werden nur später angehängt
-
-10
-
-Currency-Normalisierung
-
-.isoCode Felder in refundRedebitAmount und postingAmount
-
-Falls numeric (z. B. "978") → Mapping auf Alpha (EUR); falls Alpha bereits vorhanden → Uppercase; Exponent aus ISO 4217 bestimmen
-
-Legacy verhält sich gleich
-
-11
-
-—
-
-Alle Betragsfelder
-
-Komma in Beträgen → Punkt konvertieren; Rundung auf Exponent-Anzahl Nachkommastellen
-
-Wie in Legacy C-Code
-
------------------------------------------------------------------
-
-Wird der Betrag sonst über die reklamierte Position gesetzt oder doch immer?
+Die Events (Zeile 8) greifen ebenfalls nur auf den Teilbetrag zu, wenn PARTIAL.
