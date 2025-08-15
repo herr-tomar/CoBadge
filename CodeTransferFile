@@ -1,263 +1,36 @@
-package osplus.pkptuna.dispute.service.impl;
+import reactor.netty.http.client.HttpClient;
+import reactor.netty.resources.ConnectionProvider;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 
-import okhttp3.mockwebserver.MockResponse;
-import okhttp3.mockwebserver.MockWebServer;
-import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.MockedStatic;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.web.reactive.function.client.WebClient;
-import osplus.pkptuna.dispute.create.model.DisputeCreateRequestDto;
-import osplus.pkptuna.dispute.create.model.DisputeCreateResponseDto;
-import osplus.pkptuna.dispute.service.mapping.DynsToIboCreateMapper;
-import osplus.pkptuna.dispute.service.normalization.DisputeCreateNormalizer;
-import osplus.pkptuna.dispute.service.validation.DisputeCreateValidator;
-import osplus.pkptuna.dispute.service.validation.FunctionalValidationException;
-import osplus.pkptuna.dispute.service.validation.Violation;
-import osplus.pkptuna.rest.dispute.create.model.DisputeIboCreateRequestDto;
-import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateResponseDto;
-import osplus.pkptuna.rest.dispute.ibo.transaction.identifier.model.DisputeIboTransactionResponseDto;
-import osplus.pkptuna.rest.dispute.create.model.mapper.DisputeCreateRequestDtoMapper;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
-
-/**
- * Pure Mockito test for DisputeServiceImpl#createDispute (no Spring).
- */
-@ExtendWith(MockitoExtension.class)
 class DisputeServiceImplCreateDisputeUnitTest {
 
-    private MockWebServer server;
+  private MockWebServer server;
+  private DisputeServiceImpl service;
 
-    private DisputeServiceImpl service;
+  private ConnectionProvider provider; // keep a reference only if you want to dispose explicitly
 
-    @Mock private DisputeCreateRequestDtoMapper requestMapper;
-    @Mock private DynsToIboCreateMapper dynsToIboCreateMapper;
+  @BeforeEach
+  void setUp() throws IOException {
+    server = new MockWebServer();
+    server.start();
 
-    // We’ll mock the DisputeServiceProperties + its nested accessors.
-    @Mock private osplus.pkptuna.dispute.config.DisputeServiceProperties props;
-    @Mock private osplus.pkptuna.dispute.config.DisputeServiceProperties.Auth auth;
-    @Mock private osplus.pkptuna.dispute.config.DisputeServiceProperties.Paths paths;
+    // no connection pool => no lingering threads
+    provider = ConnectionProvider.newConnection();
+    HttpClient httpClient = HttpClient.create(provider);
 
-    private ObjectMapper objectMapper;
+    WebClient webClient = WebClient.builder()
+        .baseUrl(server.url("/").toString())
+        .clientConnector(new ReactorClientHttpConnector(httpClient))
+        .build();
 
-    @BeforeEach
-    void setUp() throws IOException {
-        server = new MockWebServer();
-        server.start();
+    // ... construct props + mapper mocks as you already do ...
+    service = new DisputeServiceImpl(webClient, props, requestMapper, dynsToIboCreateMapper, new ObjectMapper());
+  }
 
-        // Minimal WebClient pointing at MockWebServer
-        WebClient webClient = WebClient.builder()
-                .baseUrl(server.url("/").toString())
-                .build();
-
-        // Configure props
-        when(props.auth()).thenReturn(auth);
-        when(props.paths()).thenReturn(paths);
-        when(auth.username()).thenReturn("testuser");
-        when(auth.password()).thenReturn("testpass");
-        when(paths.lookupTransactionid()).thenReturn("/tx/lookup");
-        when(paths.disputeCreate()).thenReturn("/issuers/{issuerId}/transactions/{transactionId}/disputes");
-        when(paths.lookupDisputes()).thenReturn("/not-used-here");
-
-        objectMapper = new ObjectMapper();
-
-        // Wire service manually (no Spring)
-        service = new DisputeServiceImpl(webClient, props, requestMapper, dynsToIboCreateMapper, objectMapper);
-    }
-
-    @AfterEach
-    void tearDown() throws IOException {
-        server.shutdown();
-    }
-
-    @Test
-    void createDispute_happyPath_returnsDisputeFolderReference() {
-        DisputeCreateRequestDto in = DisputeCreateRequestDto.newBuilder().build();
-
-        // Mapper turns proto into REST DTO with issuer + ARN
-        osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto restDto =
-                new osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto();
-        restDto.setIssuerId("1001");
-        restDto.setAcquiringReferenceNumber("ARN-123");
-        when(requestMapper.toRestDto(in)).thenReturn(restDto);
-
-        // Normalized REST DTO
-        osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto normalized =
-                new osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto();
-        normalized.setIssuerId("1001");
-        normalized.setAcquiringReferenceNumber("ARN-123");
-
-        // IBO body built by mapper
-        DisputeIboCreateRequestDto iboBody = new DisputeIboCreateRequestDto();
-        when(dynsToIboCreateMapper.toIbo(normalized)).thenReturn(iboBody);
-
-        // Static stubs
-        try (MockedStatic<DisputeCreateValidator> validator = mockStatic(DisputeCreateValidator.class);
-             MockedStatic<DisputeCreateNormalizer> normalizer = mockStatic(DisputeCreateNormalizer.class)) {
-
-            validator.when(() -> DisputeCreateValidator.validate(restDto))
-                    .thenReturn(Collections.emptyList());
-            normalizer.when(() -> DisputeCreateNormalizer.normalize(restDto))
-                    .thenReturn(normalized);
-
-            // HTTP 1: transaction lookup -> 200 OK with a transaction id
-            enqueueJson(200, """
-                    {
-                      "responseMetadata": { "statusCode": 200, "correlationId": "corr-tx" },
-                      "data": [
-                        { "transactionIdentifier": { "transactionId": "TX-999" } }
-                      ]
-                    }
-                    """);
-
-            // HTTP 2: create dispute -> 201 Created with folder reference
-            enqueueJson(201, """
-                    {
-                      "responseMetadata": { "statusCode": 201, "correlationId": "corr-create" },
-                      "data": {
-                        "disputeFolderIdentifier": { "disputeFolderReference": "DFR-116855" }
-                      }
-                    }
-                    """);
-
-            DisputeCreateResponseDto out = service.createDispute(in);
-            assertNotNull(out);
-            assertEquals("DFR-116855", out.getReklVgngIntnNr());
-        }
-    }
-
-    @Test
-    void createDispute_whenValidationFails_throwsFunctionalValidationException() {
-        DisputeCreateRequestDto in = DisputeCreateRequestDto.newBuilder().build();
-
-        osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto restDto =
-                new osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto();
-        restDto.setIssuerId("1001");
-        restDto.setAcquiringReferenceNumber("ARN-123");
-        when(requestMapper.toRestDto(in)).thenReturn(restDto);
-
-        Violation violation = new Violation("field", "must not be null");
-
-        try (MockedStatic<DisputeCreateValidator> validator = mockStatic(DisputeCreateValidator.class)) {
-            validator.when(() -> DisputeCreateValidator.validate(restDto))
-                    .thenReturn(List.of(violation));
-
-            FunctionalValidationException ex = assertThrows(
-                    FunctionalValidationException.class,
-                    () -> service.createDispute(in)
-            );
-            assertEquals(1, ex.getViolations().size());
-            assertEquals("field", ex.getViolations().get(0).getField());
-        }
-    }
-
-    @Test
-    void createDispute_whenTxLookupReturnsNoTransactionId_throws() {
-        DisputeCreateRequestDto in = DisputeCreateRequestDto.newBuilder().build();
-
-        osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto restDto =
-                new osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto();
-        restDto.setIssuerId("1001");
-        restDto.setAcquiringReferenceNumber("ARN-123");
-        when(requestMapper.toRestDto(in)).thenReturn(restDto);
-
-        try (MockedStatic<DisputeCreateValidator> validator = mockStatic(DisputeCreateValidator.class);
-             MockedStatic<DisputeCreateNormalizer> normalizer = mockStatic(DisputeCreateNormalizer.class)) {
-
-            validator.when(() -> DisputeCreateValidator.validate(restDto))
-                    .thenReturn(Collections.emptyList());
-            normalizer.when(() -> DisputeCreateNormalizer.normalize(restDto))
-                    .thenReturn(restDto);
-
-            // Tx lookup returns OK but no data/transactionId
-            enqueueJson(200, """
-                    {
-                      "responseMetadata": { "statusCode": 200, "correlationId": "corr-tx" },
-                      "data": []
-                    }
-                    """);
-
-            RuntimeException ex = assertThrows(RuntimeException.class, () -> service.createDispute(in));
-            assertTrue(ex.getMessage().contains("Transaction identifier not found"));
-        }
-    }
-
-    @Test
-    void createDispute_whenCreateApiNon2xx_throws() {
-        DisputeCreateRequestDto in = DisputeCreateRequestDto.newBuilder().build();
-
-        osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto restDto =
-                new osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto();
-        restDto.setIssuerId("1001");
-        restDto.setAcquiringReferenceNumber("ARN-123");
-        when(requestMapper.toRestDto(in)).thenReturn(restDto);
-
-        // After normalization, service maps to IBO body
-        DisputeIboCreateRequestDto iboBody = new DisputeIboCreateRequestDto();
-        when(dynsToIboCreateMapper.toIbo(restDto)).thenReturn(iboBody);
-
-        try (MockedStatic<DisputeCreateValidator> validator = mockStatic(DisputeCreateValidator.class);
-             MockedStatic<DisputeCreateNormalizer> normalizer = mockStatic(DisputeCreateNormalizer.class)) {
-
-            validator.when(() -> DisputeCreateValidator.validate(restDto))
-                    .thenReturn(Collections.emptyList());
-            normalizer.when(() -> DisputeCreateNormalizer.normalize(restDto))
-                    .thenReturn(restDto);
-
-            // Tx lookup OK with a transaction id
-            enqueueJson(200, """
-                    {
-                      "responseMetadata": { "statusCode": 200 },
-                      "data": [ { "transactionIdentifier": { "transactionId": "TX-999" } } ]
-                    }
-                    """);
-
-            // Create API responds 400; service ensureOk should throw
-            enqueueJson(400, """
-                    {
-                      "responseMetadata": { "statusCode": 400, "statusMessage": "Bad Request" }
-                    }
-                    """);
-
-            RuntimeException ex = assertThrows(RuntimeException.class, () -> service.createDispute(in));
-            assertTrue(ex.getMessage().contains("Create dispute failed"));
-            assertTrue(ex.getMessage().contains("status=400"));
-        }
-    }
-
-    @Test
-    void createDispute_whenIssuerOrArnMissing_throwsEarly() {
-        DisputeCreateRequestDto in = DisputeCreateRequestDto.newBuilder().build();
-
-        // Mapper returns DTO missing required fields -> service should throw before HTTP
-        osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto restDto =
-                new osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto();
-        // restDto.setIssuerId(null);
-        // restDto.setAcquiringReferenceNumber(null);
-        when(requestMapper.toRestDto(in)).thenReturn(restDto);
-
-        RuntimeException ex = assertThrows(RuntimeException.class, () -> service.createDispute(in));
-        assertTrue(
-                ex.getMessage().contains("IssuerId is not present")
-                        || ex.getMessage().contains("acquiringReferenceNumber is not present")
-        );
-    }
-
-    // --- helper to enqueue JSON responses
-    private void enqueueJson(int status, String body) {
-        server.enqueue(new MockResponse()
-                .setResponseCode(status)
-                .addHeader("Content-Type", "application/json")
-                .addHeader("WL-Correlation-ID", (status == 200 || status == 201) ? "corr-id" : "corr-err")
-                .setBody(body));
-    }
+  @AfterEach
+  void tearDown() throws IOException {
+    server.shutdown();
+    // Not strictly necessary for newConnection(), but harmless:
+    provider.disposeLater().block();
+  }
 }
