@@ -1,39 +1,34 @@
-    /**
-     * Erstellt einen neuen Dispute-Ordner basierend auf den übergebenen Dispute-Daten.
-     * 
-     * Der konkrete Implementierungsschritt umfasst:
-     * <ul>
-     *   <li>Validierung der Eingabedaten</li>
-     *   <li>Ermittlung der zugehörigen Transaktions-ID</li>
-     *   <li>Aufruf des externen Systems zur Anlage des Dispute-Ordners</li>
-     *   <li>Rückgabe der vom externen System vergebenen Dispute-Ordner-Referenz</li>
-     * </ul>
-     *
-     * @param disputeCreateRequestDto das DTO mit den für die Erstellung erforderlichen Dispute-Daten
-     * @return ein {@link DisputeCreateResponseDto} mit der Referenz auf den neu erstellten Dispute-Ordner
-     */
+/**
+ * Erstellt einen neuen Dispute-Ordner basierend auf den übergebenen Dispute-Daten.
+ *
+ * @param disputeCreateRequestDto die zur Erstellung notwendigen Dispute-Daten
+ * @return ein {@link DisputeCreateResponseDto} mit der Referenz auf den neu erstellten Dispute-Ordner
+ * @throws osplus.pkptuna.dispute.service.validation.FunctionalValidationException
+ *         wenn die fachliche Validierung fehlschlägt
+ * @throws RuntimeException wenn Pflichtdaten fehlen oder externe Aufrufe fehlschlagen
+ */
+DisputeCreateResponseDto createDispute(DisputeCreateRequestDto disputeCreateRequestDto);
 
 
------
+--------
 
 
 /**
- * Erstellt einen neuen Dispute-Ordner im externen IBO-System.
+ * {@inheritDoc}
  * <p>
- * Ablauf:
+ * Implementierungsschritte:
  * <ol>
  *   <li>Wandelt das eingehende Protobuf-DTO in das REST-DTO für den IBO-Service um.</li>
- *   <li>Ermittelt über die ARN (Acquirer Reference Number) die zugehörige Transaktions-ID
+ *   <li>Ermittelt über die Acquirer Reference Number (ARN) die zugehörige Transaktions-ID
  *       durch einen Lookup beim externen Service.</li>
- *   <li>Validiert die Eingabedaten fachlich und normalisiert diese falls notwendig.</li>
+ *   <li>Führt eine fachliche Validierung der Eingabedaten durch und normalisiert diese ggf.</li>
  *   <li>Mappt die normalisierten Daten auf das IBO-spezifische Create-Request-DTO.</li>
  *   <li>Sendet die Create-Anfrage an den IBO-Service und prüft die Antwort auf Erfolg.</li>
  *   <li>Extrahiert und liefert die vom IBO-System vergebene DisputeFolderReference zurück.</li>
  * </ol>
  *
- * @param disputeCreateRequestDto das Protobuf-DTO mit den zur Erstellung erforderlichen Dispute-Daten
- * @return {@link DisputeCreateResponseDto} mit der Referenz auf den neu angelegten Dispute-Ordner
- * @throws RuntimeException wenn Pflichtdaten fehlen, externe Aufrufe fehlschlagen oder die Antwort ungültig ist
  * @throws osplus.pkptuna.dispute.service.validation.FunctionalValidationException
  *         wenn die fachliche Validierung fehlschlägt
+ * @throws RuntimeException wenn Pflichtdaten fehlen, externe Aufrufe fehlschlagen
+ *         oder die Antwort ungültig ist
  */
