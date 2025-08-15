@@ -1,13 +1,28 @@
-In der aktuellen Logik wird der Betrag nicht pauschal immer aus der reklamierten Position gesetzt, sondern hängt von den im Mapping definierten Bedingungen ab:
+POST http://4.239.136.13:43001/api/v2/issuers/1004/transactions/1000000000150297/dispute
 
-Für refundRedebitAmount (Mapping-Zeile 2) gilt: Dieser wird nur gesetzt, wenn reklaTeilbetragKz = 'J' (also „PARTIAL“). In diesem Fall kommen die Werte aus reklaBetrag und reklaBetragWs (inkl. Währungsnormalisierung und Exponent). Bei „FULL“ bleibt dieses Feld leer.
+HTTP/1.1 400 Bad Request
+Cache-Control: no-store
+Set-Cookie: JSESSIONID=HsDQPU7AHwD1ZKKbhv5Nabe0cvP0PvZkT-XFVgIB.d100stulxdmc161; path=/; HttpOnly
+X-XSS-Protection: 1; mode=block
+Pragma: no-cache
+X-Frame-Options: SAMEORIGIN
+Date: Fri, 15 Aug 2025 16:28:41 GMT
+Connection: keep-alive
+X-Content-Type-Options: nosniff
+Content-Type: application/json
+Content-Length: 249
+WL-Correlation-ID: ee3993bb-5411-4b2b-b101-fcadcf656afd
 
-Für disputePostings[].postingAmount (Mapping-Zeile 5) gilt:
+{
+  "responseMetadata": {
+    "correlationId": "ee3993bb-5411-4b2b-b101-fcadcf656afd",
+    "statusMessage": "DisputeFolder already exists with transaction id : 1000000000150297",
+    "statusCode": 400,
+    "responseDateTime": "2025-08-15T18:28:41.501+0200",
+    "timeTakenMs": 1717
+  }
+}
+Response file saved.
+> 2025-08-15T182841.400.json
 
-Primär wird versucht, crdVfggOrigBtrg + crdVfggOrigWs zu verwenden (immer – egal ob FULL oder PARTIAL).
-
-Falls diese leer sind und es sich um PARTIAL handelt, wird auf reklaBetrag + reklaBetragWs zurückgegriffen.
-
-Gibt es weder Originalbetrag noch (bei PARTIAL) den Teilbetrag, wird kein Posting angelegt.
-
-Die Events (Zeile 8) greifen ebenfalls nur auf den Teilbetrag zu, wenn PARTIAL.
+Response code: 400 (Bad Request); Time: 1767ms (1 s 767 ms); Content length: 249 bytes (249 B)
