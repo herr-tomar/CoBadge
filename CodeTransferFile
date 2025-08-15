@@ -1,146 +1,119 @@
-package osplus.pkptuna.dispute.service.normalization;
+#
 
-import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
+DynS Feld
 
-/**
- * Hilfsklasse zur Normalisierung von {@link DisputeCreateRequestDto}-Objekten.
- * <p>
- * Führt minimale Bereinigungen der Eingabedaten durch, indem
- * führende und nachgestellte Leerzeichen aus bestimmten Zeichenkettenfeldern entfernt werden.
- * Währungsfelder und Reason-Codes bleiben unverändert.
- * </p>
- *
- * <p><strong>Hinweis:</strong> Die Klasse ist als {@code final} deklariert
- * und hat einen privaten Konstruktor, um eine Instanziierung zu verhindern.</p>
- */
-public final class DisputeCreateNormalizer {
+IBO Feld
 
-    /** Privater Konstruktor, um Instanziierung zu verhindern. */
-    private DisputeCreateNormalizer() {}
+Transformation / Geschäftslogik
 
-    /**
-     * Normalisiert ein {@link DisputeCreateRequestDto}-Objekt.
-     * <ul>
-     *   <li>Entfernt führende und nachgestellte Leerzeichen aus den Feldern:
-     *       <ul>
-     *           <li>{@code reklaBetrag}</li>
-     *           <li>{@code crdVfggOrigBtrg}</li>
-     *           <li>{@code impulsOid}</li>
-     *           <li>{@code reklaGrundKat1}</li>
-     *       </ul>
-     *   </li>
-     *   <li>Alle anderen Felder bleiben unverändert.</li>
-     *   <li>Wenn ein Feld {@code null} ist, bleibt es unverändert.</li>
-     * </ul>
-     *
-     * @param s das zu normalisierende DTO
-     * @return dasselbe DTO-Objekt mit bereinigten Feldern
-     */
-    public static DisputeCreateRequestDto normalize(DisputeCreateRequestDto s) {
-        if (s.getReklaBetrag() != null) {
-            s.setReklaBetrag(s.getReklaBetrag().trim());
-        }
-        if (s.getCrdVfggOrigBtrg() != null) {
-            s.setCrdVfggOrigBtrg(s.getCrdVfggOrigBtrg().trim());
-        }
-        if (s.getImpulsOid() != null) {
-            s.setImpulsOid(s.getImpulsOid().trim());
-        }
-        if (s.getReklaGrundKat1() != null) {
-            s.setReklaGrundKat1(s.getReklaGrundKat1().trim());
-        }
-        return s;
-    }
-}
+Bedingungen / Anmerkungen
 
-------
+1
 
+reklaTeilbetragKz (e.g. Wert J/N)
 
-package osplus.pkptuna.dispute.service.normalization;
+refundRedebitIndicator
 
-import org.junit.jupiter.api.Test;
-import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
+Wenn J ⇒ "PARTIAL", sonst "NONE"
 
-import static org.junit.jupiter.api.Assertions.*;
+Steuert gleichzeitig, ob refundRedebitAmountgesetzt wird und ob Dispute Events angelegt werden
 
-class DisputeCreateNormalizerTest {
+2
 
-    @Test
-    void shouldTrimAllTargetFieldsWhenNotNull() {
-        // given
-        DisputeCreateRequestDto dto = DisputeCreateRequestDto.newBuilder()
-                .setReklaBetrag("  12345  ")
-                .setCrdVfggOrigBtrg("  67890  ")
-                .setImpulsOid("  OID123  ")
-                .setReklaGrundKat1("  REASON1  ")
-                .build();
+reklaBetrag, reklaBetragWs
 
-        // when
-        DisputeCreateRequestDto normalized = DisputeCreateNormalizer.normalize(dto);
+refundRedebitAmount.value, .isoCode, .exponent
 
-        // then
-        assertEquals("12345", normalized.getReklaBetrag());
-        assertEquals("67890", normalized.getCrdVfggOrigBtrg());
-        assertEquals("OID123", normalized.getImpulsOid());
-        assertEquals("REASON1", normalized.getReklaGrundKat1());
-    }
+Betrag und Währung übernehmen; Währung normalisieren (Numeric→Alpha z. B. 978→EUR) und Exponent aus ISO-Standard ableiten (z. B. EUR = 2 Nachkommastellen)
 
-    @Test
-    void shouldLeaveFieldsUnchangedWhenAlreadyTrimmed() {
-        // given
-        DisputeCreateRequestDto dto = DisputeCreateRequestDto.newBuilder()
-                .setReklaBetrag("12345")
-                .setCrdVfggOrigBtrg("67890")
-                .setImpulsOid("OID123")
-                .setReklaGrundKat1("REASON1")
-                .build();
+Nur bei "PARTIAL"gesetzt
 
-        // when
-        DisputeCreateRequestDto normalized = DisputeCreateNormalizer.normalize(dto);
+3
 
-        // then
-        assertSame(dto, normalized, "normalize should return same instance");
-        assertEquals("12345", normalized.getReklaBetrag());
-        assertEquals("67890", normalized.getCrdVfggOrigBtrg());
-        assertEquals("OID123", normalized.getImpulsOid());
-        assertEquals("REASON1", normalized.getReklaGrundKat1());
-    }
+reklaGrundKat1
 
-    @Test
-    void shouldLeaveFieldsNullIfTheyAreNull() {
-        // given
-        DisputeCreateRequestDto dto = DisputeCreateRequestDto.newBuilder().build();
+disputeReason
 
-        // when
-        DisputeCreateRequestDto normalized = DisputeCreateNormalizer.normalize(dto);
+Mapping von internen DynS-Codes zu IBO-unterstützten Werten (Legacy: hart codierte Liste; Jetzt: englische Service-konforme Werte)
 
-        // then
-        assertNull(normalized.getReklaBetrag());
-        assertNull(normalized.getCrdVfggOrigBtrg());
-        assertNull(normalized.getImpulsOid());
-        assertNull(normalized.getReklaGrundKat1());
-    }
+Pflichtfeld in IBO, sonst Fehler
 
-    @Test
-    void shouldHandleMixedNullAndNonNullValues() {
-        // given
-        DisputeCreateRequestDto dto = DisputeCreateRequestDto.newBuilder()
-                .setReklaBetrag(null)
-                .setCrdVfggOrigBtrg("  111  ")
-                .setImpulsOid(null)
-                .setReklaGrundKat1("  REASON  ")
-                .build();
+4
 
-        // when
-        DisputeCreateRequestDto normalized = DisputeCreateNormalizer.normalize(dto);
+impulsOid
 
-        // then
-        assertNull(normalized.getReklaBetrag());
-        assertEquals("111", normalized.getCrdVfggOrigBtrg());
-        assertNull(normalized.getImpulsOid());
-        assertEquals("REASON", normalized.getReklaGrundKat1());
-    }
-}
+issuerDisputeExternalReference
 
+1:1 Übernahme
 
-------------
+Muss eindeutig sein
+
+5
+
+crdVfggOrigBtrg, crdVfggOrigWs (falls leer → Fallback auf reklaBetrag/reklaWS)
+
+disputePostings[].postingAmount
+
+Währung normalisieren wie bei refundRedebitAmount, Exponent bestimmen
+
+Gilt für Partial und Full; bevorzugt crdVfggOrig…, sonst Fallback
+
+6
+
+(kein DynS-Feld, Systemwert)
+
+disputePostings[].postingTypeReference
+
+Immer "ISSUER_ACCOUNT"
+
+Festwert
+
+7
+
+(kein DynS-Feld, Systemwert)
+
+disputePostings[].immediateReimbursement
+
+Immer false
+
+Festwert
+
+8
+
+reklaBetrag + reklaBetragWs
+
+disputeEvents[].message
+
+Nur bei "PARTIAL": Text "Reklamation mit Teilbetrag i.H.v. <Betrag> <Währung>"
+
+type = "COMMENT"
+
+9
+
+—
+
+disputeDocuments[]
+
+Legacy: immer leer bei Create
+
+Dokumente werden nur später angehängt
+
+10
+
+Currency-Normalisierung
+
+.isoCode Felder in refundRedebitAmount und postingAmount
+
+Falls numeric (z. B. "978") → Mapping auf Alpha (EUR); falls Alpha bereits vorhanden → Uppercase; Exponent aus ISO 4217 bestimmen
+
+Legacy verhält sich gleich
+
+11
+
+—
+
+Alle Betragsfelder
+
+Komma in Beträgen → Punkt konvertieren; Rundung auf Exponent-Anzahl Nachkommastellen
+
+Wie in Legacy C-Code
