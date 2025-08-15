@@ -2,15 +2,45 @@ package osplus.pkptuna.dispute.service.normalization;
 
 import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
 
+/**
+ * Hilfsklasse zur Normalisierung von {@link DisputeCreateRequestDto}-Objekten.
+ * <p>
+ * Führt minimale Bereinigungen der Eingabedaten durch, indem
+ * führende und nachgestellte Leerzeichen aus bestimmten Zeichenkettenfeldern entfernt werden.
+ * Währungsfelder und Reason-Codes bleiben unverändert.
+ * </p>
+ *
+ * <p><strong>Hinweis:</strong> Die Klasse ist als {@code final} deklariert
+ * und hat einen privaten Konstruktor, um eine Instanziierung zu verhindern.</p>
+ */
 public final class DisputeCreateNormalizer {
+
+    /** Privater Konstruktor, um Instanziierung zu verhindern. */
     private DisputeCreateNormalizer() {}
 
+    /**
+     * Normalisiert ein {@link DisputeCreateRequestDto}-Objekt.
+     * <ul>
+     *   <li>Entfernt führende und nachgestellte Leerzeichen aus den Feldern:
+     *       <ul>
+     *           <li>{@code reklaBetrag}</li>
+     *           <li>{@code crdVfggOrigBtrg}</li>
+     *           <li>{@code impulsOid}</li>
+     *           <li>{@code reklaGrundKat1}</li>
+     *       </ul>
+     *   </li>
+     *   <li>Alle anderen Felder bleiben unverändert.</li>
+     *   <li>Wenn ein Feld {@code null} ist, bleibt es unverändert.</li>
+     * </ul>
+     *
+     * @param s das zu normalisierende DTO
+     * @return dasselbe DTO-Objekt mit bereinigten Feldern
+     */
     public static DisputeCreateRequestDto normalize(DisputeCreateRequestDto s) {
-        // TODO: Minimale Normalisierung; Währung & Reason bleiben "as-is".
-        if (s.getReklaBetrag() != null){
+        if (s.getReklaBetrag() != null) {
             s.setReklaBetrag(s.getReklaBetrag().trim());
         }
-        if (s.getCrdVfggOrigBtrg() != null){
+        if (s.getCrdVfggOrigBtrg() != null) {
             s.setCrdVfggOrigBtrg(s.getCrdVfggOrigBtrg().trim());
         }
         if (s.getImpulsOid() != null) {
@@ -22,3 +52,95 @@ public final class DisputeCreateNormalizer {
         return s;
     }
 }
+
+------
+
+
+package osplus.pkptuna.dispute.service.normalization;
+
+import org.junit.jupiter.api.Test;
+import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class DisputeCreateNormalizerTest {
+
+    @Test
+    void shouldTrimAllTargetFieldsWhenNotNull() {
+        // given
+        DisputeCreateRequestDto dto = DisputeCreateRequestDto.newBuilder()
+                .setReklaBetrag("  12345  ")
+                .setCrdVfggOrigBtrg("  67890  ")
+                .setImpulsOid("  OID123  ")
+                .setReklaGrundKat1("  REASON1  ")
+                .build();
+
+        // when
+        DisputeCreateRequestDto normalized = DisputeCreateNormalizer.normalize(dto);
+
+        // then
+        assertEquals("12345", normalized.getReklaBetrag());
+        assertEquals("67890", normalized.getCrdVfggOrigBtrg());
+        assertEquals("OID123", normalized.getImpulsOid());
+        assertEquals("REASON1", normalized.getReklaGrundKat1());
+    }
+
+    @Test
+    void shouldLeaveFieldsUnchangedWhenAlreadyTrimmed() {
+        // given
+        DisputeCreateRequestDto dto = DisputeCreateRequestDto.newBuilder()
+                .setReklaBetrag("12345")
+                .setCrdVfggOrigBtrg("67890")
+                .setImpulsOid("OID123")
+                .setReklaGrundKat1("REASON1")
+                .build();
+
+        // when
+        DisputeCreateRequestDto normalized = DisputeCreateNormalizer.normalize(dto);
+
+        // then
+        assertSame(dto, normalized, "normalize should return same instance");
+        assertEquals("12345", normalized.getReklaBetrag());
+        assertEquals("67890", normalized.getCrdVfggOrigBtrg());
+        assertEquals("OID123", normalized.getImpulsOid());
+        assertEquals("REASON1", normalized.getReklaGrundKat1());
+    }
+
+    @Test
+    void shouldLeaveFieldsNullIfTheyAreNull() {
+        // given
+        DisputeCreateRequestDto dto = DisputeCreateRequestDto.newBuilder().build();
+
+        // when
+        DisputeCreateRequestDto normalized = DisputeCreateNormalizer.normalize(dto);
+
+        // then
+        assertNull(normalized.getReklaBetrag());
+        assertNull(normalized.getCrdVfggOrigBtrg());
+        assertNull(normalized.getImpulsOid());
+        assertNull(normalized.getReklaGrundKat1());
+    }
+
+    @Test
+    void shouldHandleMixedNullAndNonNullValues() {
+        // given
+        DisputeCreateRequestDto dto = DisputeCreateRequestDto.newBuilder()
+                .setReklaBetrag(null)
+                .setCrdVfggOrigBtrg("  111  ")
+                .setImpulsOid(null)
+                .setReklaGrundKat1("  REASON  ")
+                .build();
+
+        // when
+        DisputeCreateRequestDto normalized = DisputeCreateNormalizer.normalize(dto);
+
+        // then
+        assertNull(normalized.getReklaBetrag());
+        assertEquals("111", normalized.getCrdVfggOrigBtrg());
+        assertNull(normalized.getImpulsOid());
+        assertEquals("REASON", normalized.getReklaGrundKat1());
+    }
+}
+
+
+------------
