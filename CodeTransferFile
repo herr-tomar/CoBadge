@@ -1,72 +1,74 @@
-    // ------------------- Hilfsmethoden -------------------
+    /**
+     * Ermittelt den Refund/Redebit-Indikator für den IBO-Dispute-Request.
+     * <p>
+     * Die Logik entspricht der Legacy-Implementierung:
+     * <ul>
+     *   <li>"N" → keine automatische Erstattung</li>
+     *   <li>"P" → automatische Erstattung möglich und Teilbetragskennzeichen = 'J'</li>
+     *   <li>"Y" → automatische Erstattung möglich und kein Teilbetragskennzeichen</li>
+     * </ul>
+     * <p>
+     * Alle Eingaben werden zunächst null-sicher in Zahlenwerte konvertiert
+     * (über {@link #safeInt(Integer)} und {@link #safeDouble(Double)}).
+     *
+     * @param s Eingabeobjekt mit Dispute-Daten
+     * @return Refund-Indikator ("N", "P" oder "Y")
+     */
+    default String calcRefundIndicator(DisputeCreateRequestDto s) {
+        if (s == null) return "N";
+
+        DisputeBusinessLogic.AutoErstattungResult res =
+                DisputeBusinessLogic.ermittelnAutoErst(
+                        safeInt(s.getAnzahlAutoErstattungen()),
+                        safeInt(s.getAutoErstMaxAnzahl()),
+                        safeDouble(s.getAutoErstMaxBetrag()),
+                        safeDouble(s.getReklaBetrag()),
+                        s.getCrdVfggOrigWs(),
+                        safeDouble(s.getCrdVfggOrigKurs()),
+                        safeDouble(s.getCrdEntBtrg()),
+                        s.getReklaTeilbetragKz()
+                );
+
+        if ("N".equals(res.getKennzeichen())) return "N";
+        if ("J".equals(res.getKennzeichen()) && isJ(s.getReklaTeilbetragKz())) return "P";
+        return "Y";
+    }
 
     /**
-     * Baut ein {@link AmountDto}-Objekt aus einem numerischen Wert und einem Währungscode.
+     * Ermittelt den Refund/Redebit-Betrag für den IBO-Dispute-Request.
      * <p>
-     * Falls entweder {@code val} {@code null} ist oder {@code ws} leer/blank,
-     * wird {@code null} zurückgegeben.
+     * Falls keine automatische Erstattung möglich ist
+     * (Kennzeichen = 'N'), wird {@code null} zurückgegeben.
+     * Andernfalls wird ein {@link AmountDto} mit folgenden Eigenschaften aufgebaut:
+     * <ul>
+     *   <li>value → Betrag in Minor Units (z. B. Cents)</li>
+     *   <li>exponent → immer 2</li>
+     *   <li>isoCode → normalisierter ISO-Währungscode aus {@code reklaBetragWs}</li>
+     * </ul>
      *
-     * @param val numerischer Wert (in Major Units, z. B. 10.50 für 10 EUR 50 Cent)
-     * @param ws  ISO-Währungscode (z. B. "EUR")
-     * @return aufgebautes {@link AmountDto} oder {@code null}, falls Eingaben fehlen
+     * @param s Eingabeobjekt mit Dispute-Daten
+     * @return Refund-Betrag als {@link AmountDto}, oder {@code null}, wenn keine Erstattung
      */
-    private AmountDto buildAmount(Double val, String ws) {
-        if (val == null || isBlank(ws)) return null;
+    default AmountDto calcRefundAmount(DisputeCreateRequestDto s) {
+        if (s == null) return null;
+
+        DisputeBusinessLogic.AutoErstattungResult res =
+                DisputeBusinessLogic.ermittelnAutoErst(
+                        safeInt(s.getAnzahlAutoErstattungen()),
+                        safeInt(s.getAutoErstMaxAnzahl()),
+                        safeDouble(s.getAutoErstMaxBetrag()),
+                        safeDouble(s.getReklaBetrag()),
+                        s.getCrdVfggOrigWs(),
+                        safeDouble(s.getCrdVfggOrigKurs()),
+                        safeDouble(s.getCrdEntBtrg()),
+                        s.getReklaTeilbetragKz()
+                );
+
+        if ("N".equals(res.getKennzeichen())) return null;
+
         AmountDto a = new AmountDto();
-        a.setValue(DisputeBusinessLogic.toCents(val));
+        a.setValue(DisputeBusinessLogic.toCents(res.getBetrag()));
         a.setExponent(2);
-        a.setIsoCode(DisputeBusinessLogic.normalizeCurrency(ws));
+        a.setIsoCode(DisputeBusinessLogic.normalizeCurrency(s.getReklaBetragWs()));
         return a;
     }
-
-    /**
-     * Prüft, ob der übergebene String gleich 'J' ist (Groß-/Kleinschreibung egal).
-     *
-     * @param v Eingabestring
-     * @return {@code true}, falls v = 'J' (ignoring case), sonst {@code false}
-     */
-    default boolean isJ(String v) {
-        return v != null && v.trim().equalsIgnoreCase("J");
-    }
-
-    /**
-     * Prüft, ob ein String {@code null} oder nur aus Leerzeichen besteht.
-     *
-     * @param v Eingabestring
-     * @return {@code true}, wenn leer oder {@code null}, sonst {@code false}
-     */
-    private boolean isBlank(String v) {
-        return v == null || v.trim().isEmpty();
-    }
-
-    /**
-     * Liefert einen sicheren int-Wert zurück.
-     * <p>
-     * Falls der Eingabewert {@code null} ist, wird 0 zurückgegeben.
-     *
-     * @param i Eingabe-Integer
-     * @return Wert oder 0 bei {@code null}
-     */
-    private int safeInt(Integer i) {
-        return i == null ? 0 : i;
-    }
-
-    /**
-     * Liefert einen sicheren double-Wert zurück.
-     * <p>
-     * Falls der Eingabewert {@code null} ist, wird 0.0 zurückgegeben.
-     *
-     * @param d Eingabe-Double
-     * @return Wert oder 0.0 bei {@code null}
-     */
-    private double safeDouble(Double d) {
-        return d == null ? 0.0 : d;
-    }
-
-
-
-
---------
-
-
-
