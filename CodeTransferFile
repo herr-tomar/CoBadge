@@ -1,78 +1,305 @@
-default String calcRefundIndicator(DisputeCreateRequestDto s) {
-    if (s == null) return "N";
 
-    DisputeBusinessLogic.AutoErstattungResult res =
-            DisputeBusinessLogic.ermittelnAutoErst(
-                    safeInt(s.getAnzahlAutoErstattungen()),
-                    safeInt(s.getAutoErstMaxAnzahl()),
-                    safeDouble(s.getAutoErstMaxBetrag()),
-                    safeDouble(s.getReklaBetrag()),
-                    s.getCrdVfggOrigWs(),
-                    safeDouble(s.getCrdVfggOrigKurs()),
-                    safeDouble(s.getCrdEntBtrg()),
-                    s.getReklaTeilbetragKz()
-            );
+package osplus.pkptuna.dispute.service.mapping;
 
-    if ("N".equals(res.getKennzeichen())) return "N";
-    if ("J".equals(res.getKennzeichen()) && isJ(s.getReklaTeilbetragKz())) return "P";
-    return "Y";
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.Mappings;
+import org.mapstruct.NullValuePropertyMappingStrategy;
+import osplus.apl.core.api.AplComponent;
+import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.AmountDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeEventRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputePostingRequestDto;
+
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * MapStruct-Mapper zur Umwandlung eines {@link osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto}
+ * in ein {@link osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateRequestDto}
+ * für den Aufruf des externen IBO-Dispute-Create-Services.
+ * <p>
+ * Neben der direkten Feldzuordnung werden hier auch mehrere berechnete bzw. zusammengesetzte Felder
+ * erzeugt, wie z.B.:
+ * <ul>
+ *   <li>Ermittlung des Refund/Redebit-Indikators abhängig vom Teilbetrags-Kennzeichen</li>
+ *   <li>Aufbau von Betragsobjekten (Refund-Betrag, Originalbetrag) mit Währungs- und Exponentenangaben</li>
+ *   <li>Erstellung von Posting- und Event-Listen je nach Vorhandensein relevanter Daten</li>
+ * </ul>
+ * Nicht gesetzte oder leere Quellwerte werden gemäß
+ * {@link org.mapstruct.NullValuePropertyMappingStrategy#IGNORE} nicht gemappt.
+ */
+@AplComponent
+@Mapper(componentModel = "spring",
+        nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+public interface DynsToIboCreateMapper {
+
+    String ISSUER_ACCOUNT = "ISSUER_ACCOUNT";
+
+    /**
+     * Führt die Hauptabbildung von einem internen DisputeCreateRequestDto
+     * auf das IBO-spezifische CreateRequestDto durch.
+     * <p>
+     * Neben der direkten Übernahme bestimmter Felder werden:
+     * <ul>
+     *   <li>Standardwerte gesetzt (z. B. declareFraudIndicator = false)</li>
+     *   <li>Berechnete Felder wie refundRedebitIndicator ermittelt</li>
+     *   <li>Listen für Postings, Events und Dokumente erzeugt</li>
+     * </ul>
+     *
+     * @param src Eingangsobjekt mit Dispute-Daten
+     * @return IBO-kompatibles CreateRequestDto
+     */
+    @Mappings({
+            @Mapping(target = "disputeReason",
+                    expression = "java(DisputeBusinessLogic.translateReasonCode(src.getReklaGrundKat1()))"),
+            @Mapping(target = "issuerDisputeExternalReference", source = "impulsOid"),
+            @Mapping(target = "declareFraudIndicator", constant = "false"),
+
+            // LEGACY: refundRedebitIndicator must be "P", "Y", or "N"
+            @Mapping(target = "refundRedebitIndicator",
+                    expression = "java(calcRefundIndicator(src))"),
+
+            // refundRedebitAmount based on autoErstattungsbetrag
+            @Mapping(target = "refundRedebitAmount",
+                    expression = "java(calcRefundAmount(src))"),
+
+            @Mapping(target = "disputePostings", expression = "java(buildPostings(src))"),
+            @Mapping(target = "disputeEvents", expression = "java(buildEvents(src))"),
+            @Mapping(target = "disputeDocuments", expression = "java(java.util.Collections.emptyList())")
+    })
+    DisputeIboCreateRequestDto toIbo(DisputeCreateRequestDto src);
+
+    default String calcRefundIndicator(DisputeCreateRequestDto s) {
+        if (s == null) return "N";
+
+        DisputeBusinessLogic.AutoErstattungResult res =
+                DisputeBusinessLogic.ermittelnAutoErst(
+                        safeInt(s.getAnzahlAutoErstattungen()),
+                        safeInt(s.getAutoErstMaxAnzahl()),
+                        safeDouble(s.getAutoErstMaxBetrag()),
+                        safeDouble(s.getReklaBetrag()),
+                        s.getCrdVfggOrigWs(),
+                        safeDouble(s.getCrdVfggOrigKurs()),
+                        safeDouble(s.getCrdEntBtrg()),
+                        s.getReklaTeilbetragKz()
+                );
+
+        if ("N".equals(res.getKennzeichen())) return "N";
+        if ("J".equals(res.getKennzeichen()) && isJ(s.getReklaTeilbetragKz())) return "P";
+        return "Y";
+    }
+
+    default AmountDto calcRefundAmount(DisputeCreateRequestDto s) {
+        if (s == null) return null;
+
+        DisputeBusinessLogic.AutoErstattungResult res =
+                DisputeBusinessLogic.ermittelnAutoErst(
+                        safeInt(s.getAnzahlAutoErstattungen()),
+                        safeInt(s.getAutoErstMaxAnzahl()),
+                        safeDouble(s.getAutoErstMaxBetrag()),
+                        safeDouble(s.getReklaBetrag()),
+                        s.getCrdVfggOrigWs(),
+                        safeDouble(s.getCrdVfggOrigKurs()),
+                        safeDouble(s.getCrdEntBtrg()),
+                        s.getReklaTeilbetragKz()
+                );
+
+        if ("N".equals(res.getKennzeichen())) return null;
+
+        AmountDto a = new AmountDto();
+        a.setValue(DisputeBusinessLogic.toCents(res.getBetrag())); // safely converted inside
+        a.setExponent(2);
+        a.setIsoCode(DisputeBusinessLogic.normalizeCurrency(s.getReklaBetragWs()));
+        return a;
+    }
+
+    /**
+     * Baut die Liste der Dispute-Postings auf:
+     * <ol>
+     *   <li>Bevorzugt TransactionBetrag (crdVfggOrigBtrg / crdVfggOrigWs)</li>
+     *   <li>Falls TransactionBetrag fehlt und Teilbetrag vorliegt → Refund-Betrag verwenden</li>
+     *   <li>Falls beides fehlt → leere Liste zurückgeben</li>
+     * </ol>
+     *
+     * @param s Dispute-Request-Daten
+     * @return Liste der Posting-Einträge
+     */
+    default List<DisputePostingRequestDto> buildPostings(DisputeCreateRequestDto s) {
+        AmountDto amt = null;
+        if (s.getTransactionBetrag() != null && !isBlank(s.getCrdVfggOrigWs())) {
+            amt = buildAmount(s.getTransactionBetrag(), s.getCrdVfggOrigWs());
+        } else if ("J".equalsIgnoreCase(s.getReklaTeilbetragKz())
+                && s.getReklaBetrag() != null && !isBlank(s.getReklaBetragWs())) {
+            amt = buildAmount(s.getReklaBetrag(), s.getReklaBetragWs());
+        }
+
+        if (amt == null) {
+            return Collections.emptyList();
+        }
+
+        DisputePostingRequestDto p = new DisputePostingRequestDto();
+        p.setPostingAmount(amt);
+        p.setImmediateReimbursement(false);
+        p.setPostingTypeReference(ISSUER_ACCOUNT);
+        return List.of(p);
+    }
+
+    /**
+     * Erstellt eine COMMENT-Eventliste, wenn ein Teilbetrag vorliegt
+     * und Betrag + Währung gesetzt sind.
+     * <p>
+     * Andernfalls wird eine leere Liste zurückgegeben.
+     *
+     * @param s Dispute-Request-Daten
+     * @return Liste mit einem COMMENT-Event oder leer
+     */
+    default List<DisputeEventRequestDto> buildEvents(DisputeCreateRequestDto s) {
+        if (!isJ(s.getReklaTeilbetragKz())) return Collections.emptyList();
+        if (s.getReklaBetrag() == null || isBlank(s.getReklaBetragWs())) return Collections.emptyList();
+
+        DisputeEventRequestDto ev = new DisputeEventRequestDto();
+        ev.setType("COMMENT");
+        ev.setMessage("Reklamation mit Teilbetrag i.H.v. " +
+                s.getReklaBetrag() + " " + s.getReklaBetragWs());
+        return List.of(ev);
+    }
+
+
+    // ------------------- Hilfsmethoden -------------------
+
+    private AmountDto buildAmount(Double val, String ws) {
+        if (val == null || isBlank(ws)) return null;
+        AmountDto a = new AmountDto();
+        a.setValue(DisputeBusinessLogic.toCents(val));
+        a.setExponent(2);
+        a.setIsoCode(DisputeBusinessLogic.normalizeCurrency(ws));
+        return a;
+    }
+
+    /** Prüft, ob der String gleich 'J' (Groß-/Kleinschreibung egal) ist. */
+    default boolean isJ(String v) {
+        return v != null && v.trim().equalsIgnoreCase("J");
+    }
+
+    private boolean isBlank(String v) {
+        return v == null || v.trim().isEmpty();
+    }
+
+    private int safeInt(Integer i) { return i == null ? 0 : i; }
+    private double safeDouble(Double d) { return d == null ? 0.0 : d; }
 }
 
-default AmountDto calcRefundAmount(DisputeCreateRequestDto s) {
-    if (s == null) return null;
 
-    DisputeBusinessLogic.AutoErstattungResult res =
-            DisputeBusinessLogic.ermittelnAutoErst(
-                    safeInt(s.getAnzahlAutoErstattungen()),
-                    safeInt(s.getAutoErstMaxAnzahl()),
-                    safeDouble(s.getAutoErstMaxBetrag()),
-                    safeDouble(s.getReklaBetrag()),
-                    s.getCrdVfggOrigWs(),
-                    safeDouble(s.getCrdVfggOrigKurs()),
-                    safeDouble(s.getCrdEntBtrg()),
-                    s.getReklaTeilbetragKz()
-            );
+------------
 
-    if ("N".equals(res.getKennzeichen())) return null;
 
-    AmountDto a = new AmountDto();
-    a.setValue(DisputeBusinessLogic.toCents(res.getBetrag())); // safely converted inside
-    a.setExponent(2);
-    a.setIsoCode(DisputeBusinessLogic.normalizeCurrency(s.getReklaBetragWs()));
-    return a;
+package osplus.pkptuna.dispute.service.mapping;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mapstruct.factory.Mappers;
+import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeEventRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputePostingRequestDto;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class DynsToIboCreateMapperTest {
+
+    private DynsToIboCreateMapper mapper;
+
+    @BeforeEach
+    void setUp() {
+        mapper = Mappers.getMapper(DynsToIboCreateMapper.class);
+    }
+
+    @Test
+    void toIbo_mapsBasicFieldsAndComputedValues() {
+        DisputeCreateRequestDto src = new DisputeCreateRequestDto();
+        src.setReklaGrundKat1("reason1");
+        src.setImpulsOid("impulse123");
+        src.setReklaTeilbetragKz("J");
+        src.setReklaBetrag(Double.valueOf("1000"));
+        src.setReklaBetragWs("EUR");
+
+        DisputeIboCreateRequestDto out = mapper.toIbo(src);
+
+        assertThat(out.getDisputeReason()).isEqualTo("reason1");
+        assertThat(out.getIssuerDisputeExternalReference()).isEqualTo("impulse123");
+        assertThat(out.getDeclareFraudIndicator()).isFalse();
+        assertThat(out.getRefundRedebitIndicator()).isEqualTo("P");
+        assertThat(out.getRefundRedebitAmount()).isNotNull();
+        assertThat(out.getDisputePostings()).isNotEmpty();
+        assertThat(out.getDisputeEvents()).isNotEmpty();
+        assertThat(out.getDisputeDocuments()).isEmpty();
+    }
+
+    @Test
+    void buildPostings_prefersOriginalAmountOverRefund() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setTransactionBetrag(Double.valueOf("2000"));
+        dto.setCrdVfggOrigWs("CHF");
+        dto.setReklaTeilbetragKz("J");
+        dto.setReklaBetrag(Double.valueOf("500"));
+        dto.setReklaBetragWs("USD");
+
+        List<DisputePostingRequestDto> postings = mapper.buildPostings(dto);
+        assertThat(postings).hasSize(1);
+        assertThat(postings.get(0).getPostingAmount().getIsoCode()).isEqualTo("CHF");
+    }
+
+    @Test
+    void buildPostings_fallsBackToRefundAmountWhenPartialAndNoOriginal() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setReklaTeilbetragKz("J");
+        dto.setReklaBetrag(Double.valueOf("500"));
+        dto.setReklaBetragWs("USD");
+
+        List<DisputePostingRequestDto> postings = mapper.buildPostings(dto);
+        assertThat(postings).hasSize(1);
+        assertThat(postings.get(0).getPostingAmount().getIsoCode()).isEqualTo("USD");
+    }
+
+    @Test
+    void buildPostings_returnsEmptyListWhenNoAmountsAvailable() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        assertThat(mapper.buildPostings(dto)).isEmpty();
+    }
+
+    @Test
+    void buildEvents_returnsEventOnlyForPartialWithValues() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setReklaTeilbetragKz("J");
+        dto.setReklaBetrag(Double.valueOf("500"));
+        dto.setReklaBetragWs("USD");
+
+        List<DisputeEventRequestDto> events = mapper.buildEvents(dto);
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0).getType()).isEqualTo("COMMENT");
+        assertThat(events.get(0).getMessage()).contains("500.0 USD");
+    }
+
+    @Test
+    void buildEvents_returnsEmptyWhenNotPartialOrMissingValues() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setReklaTeilbetragKz("N");
+        assertThat(mapper.buildEvents(dto)).isEmpty();
+
+        dto.setReklaTeilbetragKz("J");
+        dto.setReklaBetrag(null);
+        dto.setReklaBetragWs(null);
+        assertThat(mapper.buildEvents(dto)).isEmpty();
+    }
+
+    @Test
+    void isJ_and_isBlank_and_parseLongSafe_workAsExpected() {
+        assertThat(mapper.isJ("J")).isTrue();
+        assertThat(mapper.isJ("j")).isTrue();
+        assertThat(mapper.isJ("N")).isFalse();
+    }
 }
-
-default AmountDto buildRefundAmount(DisputeCreateRequestDto s) {
-    if (!isJ(s.getReklaTeilbetragKz())) return null;
-    if (s.getReklaBetrag() == null || isBlank(s.getReklaBetragWs())) return null;
-
-    AmountDto a = new AmountDto();
-    a.setValue(DisputeBusinessLogic.toCents(safeDouble(s.getReklaBetrag())));
-    a.setExponent(2);
-    a.setIsoCode(DisputeBusinessLogic.normalizeCurrency(s.getReklaBetragWs()));
-    return a;
-}
-
-default List<DisputeEventRequestDto> buildEvents(DisputeCreateRequestDto s) {
-    if (!isJ(s.getReklaTeilbetragKz())) return Collections.emptyList();
-    if (s.getReklaBetrag() == null || isBlank(s.getReklaBetragWs())) return Collections.emptyList();
-
-    DisputeEventRequestDto ev = new DisputeEventRequestDto();
-    ev.setType("COMMENT");
-    ev.setMessage("Reklamation mit Teilbetrag i.H.v. " +
-            s.getReklaBetrag() + " " + s.getReklaBetragWs());
-    return List.of(ev);
-}
-
-private AmountDto buildAmount(Double val, String ws) {
-    if (val == null || isBlank(ws)) return null;
-    AmountDto a = new AmountDto();
-    a.setValue(DisputeBusinessLogic.toCents(val));
-    a.setExponent(2);
-    a.setIsoCode(DisputeBusinessLogic.normalizeCurrency(ws));
-    return a;
-}
-
-// --- Safe conversion helpers ---
-private int safeInt(Integer i) { return i == null ? 0 : i; }
-private double safeDouble(Double d) { return d == null ? 0.0 : d; }
