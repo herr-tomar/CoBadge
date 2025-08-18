@@ -1,61 +1,239 @@
-package osplus.pkptuna.dispute.service.validation;
 
+package osplus.pkptuna.dispute.service.mapping;
+
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.Mappings;
+import org.mapstruct.NullValuePropertyMappingStrategy;
+import osplus.apl.core.api.AplComponent;
 import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.AmountDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeEventRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputePostingRequestDto;
 
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
-public final class DisputeCreateValidator {
+/**
+ * MapStruct-Mapper zur Umwandlung eines {@link osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto}
+ * in ein {@link osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateRequestDto}
+ * für den Aufruf des externen IBO-Dispute-Create-Services.
+ * <p>
+ * Neben der direkten Feldzuordnung werden hier auch mehrere berechnete bzw. zusammengesetzte Felder
+ * erzeugt, wie z.B.:
+ * <ul>
+ *   <li>Ermittlung des Refund/Redebit-Indikators abhängig vom Teilbetrags-Kennzeichen</li>
+ *   <li>Aufbau von Betragsobjekten (Refund-Betrag, Originalbetrag) mit Währungs- und Exponentenangaben</li>
+ *   <li>Erstellung von Posting- und Event-Listen je nach Vorhandensein relevanter Daten</li>
+ * </ul>
+ * Nicht gesetzte oder leere Quellwerte werden gemäß
+ * {@link org.mapstruct.NullValuePropertyMappingStrategy#IGNORE} nicht gemappt.
+ */
+@AplComponent
+@Mapper(componentModel = "spring",
+        nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+public interface DynsToIboCreateMapper {
 
-    private DisputeCreateValidator() {}
+    String ISSUER_ACCOUNT = "ISSUER_ACCOUNT";
 
-    public static List<Violation> validate(DisputeCreateRequestDto s) {
-        List<Violation> v = new ArrayList<>();
+    /**
+     * Führt die Hauptabbildung von einem internen DisputeCreateRequestDto
+     * auf das IBO-spezifische CreateRequestDto durch.
+     * <p>
+     * Neben der direkten Übernahme bestimmter Felder werden:
+     * <ul>
+     *   <li>Standardwerte gesetzt (z. B. declareFraudIndicator = false)</li>
+     *   <li>Berechnete Felder wie refundRedebitIndicator ermittelt</li>
+     *   <li>Listen für Postings, Events und Dokumente erzeugt</li>
+     * </ul>
+     *
+     * @param src Eingangsobjekt mit Dispute-Daten
+     * @return IBO-kompatibles CreateRequestDto
+     */
+    @Mappings({
+            @Mapping(target = "disputeReason",
+                    expression = "java(DisputeBusinessLogic.translateReasonCode(src.getReklaGrundKat1()))"),
+            @Mapping(target = "issuerDisputeExternalReference", source = "impulsOid"),
+            @Mapping(target = "declareFraudIndicator", constant = "false"),
 
-        // Pflichtfelder
-        req(v, s.getImpulsOid(), "impulsOid");
-        req(v, s.getReklaGrundKat1(), "reklaGrundKat1");
+            // LEGACY: refundRedebitIndicator must be "P", "Y", or "N"
+            @Mapping(target = "refundRedebitIndicator",
+                    expression = "java(calcRefundIndicator(src))"),
 
-        // Teil/Voll-Logik
-        boolean isPartial = isJ(s.getReklaTeilbetragKz());
-        if (isPartial) {
-            // refundRedebitAmount benötigt Betrag + Währung
-            req(v, s.getReklaBetrag(), "reklaBetrag");
-            req(v, s.getReklaBetragWs(), "reklaBetragWs");
-            numeric(v, s.getReklaBetrag(), "reklaBetrag");
+            // refundRedebitAmount based on autoErstattungsbetrag
+            @Mapping(target = "refundRedebitAmount",
+                    expression = "java(calcRefundAmount(src))"),
+
+            @Mapping(target = "disputePostings", expression = "java(buildPostings(src))"),
+            @Mapping(target = "disputeEvents", expression = "java(buildEvents(src))"),
+            @Mapping(target = "disputeDocuments", expression = "java(java.util.Collections.emptyList())")
+    })
+    DisputeIboCreateRequestDto toIbo(DisputeCreateRequestDto src);
+
+    default String calcRefundIndicator(DisputeCreateRequestDto s) {
+        DisputeBusinessLogic.AutoErstattungResult res =
+                DisputeBusinessLogic.ermittelnAutoErst(
+                        s.getAnzahlAutoErstattungen(),
+                        s.getAutoErstMaxAnzahl(),
+                        s.getAutoErstMaxBetrag(),
+                        s.getReklaBetrag(),
+                        s.getCrdVfggOrigWs(),
+                        s.getCrdVfggOrigKurs(),
+                        s.getCrdEntBtrg(),
+                        s.getReklaTeilbetragKz()
+                );
+
+        if ("N".equals(res.getKennzeichen())) {
+            return "N"; // No refund
         }
-
-        // Posting-Quelle (TransactionBetrag/-währung) – paarig
-        pairIfPresentMustBeBoth(v, s.getTransactionBetrag(), s.getCrdVfggOrigWs(),
-                "transactionBetrag", "crdVfggOrigWs");
-        if (notBlank(s.getTransactionBetrag())) {
-            numeric(v, s.getTransactionBetrag(), "transactionBetrag");
+        if ("J".equals(res.getKennzeichen())
+                && "J".equalsIgnoreCase(s.getReklaTeilbetragKz())) {
+            return "P"; // Partial
         }
-
-        return v;
+        return "Y";     // Full
     }
 
-    private static void req(List<Violation> v, String val, String field) {
-        if (val == null || val.trim().isEmpty()) {
-            v.add(new Violation(field, "Pflichtfeld fehlt"));
+    default AmountDto calcRefundAmount(DisputeCreateRequestDto s) {
+        DisputeBusinessLogic.AutoErstattungResult res =
+                DisputeBusinessLogic.ermittelnAutoErst(
+                        s.getAnzahlAutoErstattungen(),
+                        s.getAutoErstMaxAnzahl(),
+                        s.getAutoErstMaxBetrag(),
+                        s.getReklaBetrag(),
+                        s.getCrdVfggOrigWs(),
+                        s.getCrdVfggOrigKurs(),
+                        s.getCrdEntBtrg(),
+                        s.getReklaTeilbetragKz()
+                );
+
+        if ("N".equals(res.getKennzeichen())) {
+            return null; // no refund amount
         }
+
+        AmountDto a = new AmountDto();
+        a.setValue((long) (res.getBetrag() * 100)); // convert to minor units (e.g. cents)
+        a.setExponent(2);
+        a.setIsoCode(DisputeBusinessLogic.normalizeCurrency(s.getReklaBetragWs()));
+        return a;
     }
 
-    private static void numeric(List<Violation> v, String val, String field) {
-        if (val == null) {
-            return;
-        }
-        try { Long.parseLong(val.trim()); }
-        catch (Exception e) { v.add(new Violation(field, "Muss numerisch (Ganzzahl in Minor Units) sein")); }
+    private double parseDoubleSafe(String s, double def) {
+        try { return Double.parseDouble(s.trim()); } catch (Exception e) { return def; }
     }
 
-    private static void pairIfPresentMustBeBoth(List<Violation> v, String a, String b, String fa, String fb) {
-        boolean ha = notBlank(a), hb = notBlank(b);
-        if (ha ^ hb) {
-            v.add(new Violation(ha ? fb : fa, "Betrag/Währung müssen paarig vorkommen"));
-        }
+    /**
+     * Ermittelt den Refund/Redebit-Indikator:
+     * <ul>
+     *   <li>"PARTIAL", wenn reklaTeilbetragKz = 'J'</li>
+     *   <li>sonst "NONE"</li>
+     * </ul>
+     *
+     * @param s Dispute-Request-Daten
+     * @return "PARTIAL" oder "NONE"
+     */
+    default String calcIndicator(DisputeCreateRequestDto s) {
+        return isJ(s.getReklaTeilbetragKz()) ? "PARTIAL" : "NONE";
     }
 
-    private static boolean notBlank(String s) { return s != null && !s.trim().isEmpty(); }
-    private static boolean isJ(String v) { return v != null && v.trim().equalsIgnoreCase("J"); }
+    /**
+     * Baut den Refund-Betrag auf, wenn ein Teilbetrag vorliegt und
+     * Betrag + Währung gesetzt sind.
+     * <p>
+     * Falls keine Teilbetragskennzeichnung oder unvollständige Daten vorliegen,
+     * wird {@code null} zurückgegeben.
+     *
+     * @param s Dispute-Request-Daten
+     * @return Betrag mit Währung oder null
+     */
+    default AmountDto buildRefundAmount(DisputeCreateRequestDto s) {
+        if (!"J".equalsIgnoreCase(s.getReklaTeilbetragKz())) {
+            return null;
+        }
+        if (s.getReklaBetrag() == null || isBlank(s.getReklaBetragWs())) {
+            return null;
+        }
+
+        AmountDto a = new AmountDto();
+        a.setValue(DisputeBusinessLogic.toCents(s.getReklaBetrag()));
+        a.setExponent(2);
+        a.setIsoCode(DisputeBusinessLogic.normalizeCurrency(s.getReklaBetragWs()));
+        return a;
+    }
+
+
+    /**
+     * Baut die Liste der Dispute-Postings auf:
+     * <ol>
+     *   <li>Bevorzugt TransactionBetrag (crdVfggOrigBtrg / crdVfggOrigWs)</li>
+     *   <li>Falls TransactionBetrag fehlt und Teilbetrag vorliegt → Refund-Betrag verwenden</li>
+     *   <li>Falls beides fehlt → leere Liste zurückgeben</li>
+     * </ol>
+     *
+     * @param s Dispute-Request-Daten
+     * @return Liste der Posting-Einträge
+     */
+    default List<DisputePostingRequestDto> buildPostings(DisputeCreateRequestDto s) {
+        AmountDto amt = null;
+        if (s.getTransactionBetrag() != null && !isBlank(s.getCrdVfggOrigWs())) {
+            amt = buildAmount(s.getTransactionBetrag(), s.getCrdVfggOrigWs());
+        } else if ("J".equalsIgnoreCase(s.getReklaTeilbetragKz())
+                && s.getReklaBetrag() != null && !isBlank(s.getReklaBetragWs())) {
+            amt = buildAmount(s.getReklaBetrag(), s.getReklaBetragWs());
+        }
+
+        if (amt == null) {
+            return Collections.emptyList();
+        }
+
+        DisputePostingRequestDto p = new DisputePostingRequestDto();
+        p.setPostingAmount(amt);
+        p.setImmediateReimbursement(false);
+        p.setPostingTypeReference(ISSUER_ACCOUNT);
+        return List.of(p);
+    }
+
+    /**
+     * Erstellt eine COMMENT-Eventliste, wenn ein Teilbetrag vorliegt
+     * und Betrag + Währung gesetzt sind.
+     * <p>
+     * Andernfalls wird eine leere Liste zurückgegeben.
+     *
+     * @param s Dispute-Request-Daten
+     * @return Liste mit einem COMMENT-Event oder leer
+     */
+    default List<DisputeEventRequestDto> buildEvents(DisputeCreateRequestDto s) {
+        if (!"J".equalsIgnoreCase(s.getReklaTeilbetragKz())) {
+            return Collections.emptyList();
+        }
+        if (s.getReklaBetrag() != null  || isBlank(s.getReklaBetragWs())) {
+            return Collections.emptyList();
+        }
+
+        DisputeEventRequestDto ev = new DisputeEventRequestDto();
+        ev.setType("COMMENT");
+        ev.setMessage("Reklamation mit Teilbetrag i.H.v. " +
+                s.getReklaBetrag() + " " + s.getReklaBetragWs());
+        return List.of(ev);
+    }
+
+
+    // ------------------- Hilfsmethoden -------------------
+
+    private AmountDto buildAmount(Double val, String ws) {
+        AmountDto a = new AmountDto();
+        a.setValue(DisputeBusinessLogic.toCents(val));
+        a.setExponent(2);
+        a.setIsoCode(DisputeBusinessLogic.normalizeCurrency(ws));
+        return a;
+    }
+
+    /** Prüft, ob der String gleich 'J' (Groß-/Kleinschreibung egal) ist. */
+    default boolean isJ(String v) {
+        return v != null && v.trim().equalsIgnoreCase("J");
+    }
+
+    private boolean isBlank(String v) {
+        return v == null || v.trim().isEmpty();
+    }
 }
