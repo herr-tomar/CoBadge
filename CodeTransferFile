@@ -1,307 +1,133 @@
-
-package osplus.pkptuna.dispute.service.mapping;
-
-import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
-import org.mapstruct.Mappings;
-import org.mapstruct.NullValuePropertyMappingStrategy;
-import osplus.apl.core.api.AplComponent;
-import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
-import osplus.pkptuna.rest.dispute.ibo.create.model.AmountDto;
-import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeEventRequestDto;
-import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateRequestDto;
-import osplus.pkptuna.rest.dispute.ibo.create.model.DisputePostingRequestDto;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
-/**
- * MapStruct-Mapper zur Umwandlung eines {@link osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto}
- * in ein {@link osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateRequestDto}
- * für den Aufruf des externen IBO-Dispute-Create-Services.
- * <p>
- * Neben der direkten Feldzuordnung werden hier auch mehrere berechnete bzw. zusammengesetzte Felder
- * erzeugt, wie z.B.:
- * <ul>
- *   <li>Ermittlung des Refund/Redebit-Indikators abhängig vom Teilbetrags-Kennzeichen</li>
- *   <li>Aufbau von Betragsobjekten (Refund-Betrag, Originalbetrag) mit Währungs- und Exponentenangaben</li>
- *   <li>Erstellung von Posting- und Event-Listen je nach Vorhandensein relevanter Daten</li>
- * </ul>
- * Nicht gesetzte oder leere Quellwerte werden gemäß
- * {@link org.mapstruct.NullValuePropertyMappingStrategy#IGNORE} nicht gemappt.
- */
-@AplComponent
 @Mapper(componentModel = "spring",
         nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+@AplComponent
 public interface DynsToIboCreateMapper {
 
-    /**
-     * Führt die Hauptabbildung von einem internen DisputeCreateRequestDto
-     * auf das IBO-spezifische CreateRequestDto durch.
-     * <p>
-     * Neben der direkten Übernahme bestimmter Felder werden:
-     * <ul>
-     *   <li>Standardwerte gesetzt (z. B. declareFraudIndicator = false)</li>
-     *   <li>Berechnete Felder wie refundRedebitIndicator ermittelt</li>
-     *   <li>Listen für Postings, Events und Dokumente erzeugt</li>
-     * </ul>
-     *
-     * @param src Eingangsobjekt mit Dispute-Daten
-     * @return IBO-kompatibles CreateRequestDto
-     */
     @Mappings({
-            @Mapping(target = "disputeReason", source = "reklaGrundKat1"),
-            @Mapping(target = "issuerDisputeExternalReference", source = "impulsOid"),
-            @Mapping(target = "declareFraudIndicator", expression = "java(false)"),
-            @Mapping(target = "refundRedebitIndicator", expression = "java(calcIndicator(src))"),
-            @Mapping(target = "refundRedebitAmount", expression = "java(buildRefundAmount(src))"),
-            @Mapping(target = "disputePostings", expression = "java(buildPostings(src))"),
-            @Mapping(target = "disputeEvents", expression = "java(buildEvents(src))"),
-            @Mapping(target = "disputeDocuments", expression = "java(java.util.Collections.emptyList())")
+        @Mapping(target = "disputeReason",
+                 expression = "java(DisputeBusinessLogic.translateReasonCode(src.getReklaGrundKat1()))"),
+        @Mapping(target = "issuerDisputeExternalReference", source = "impulsOid"),
+        @Mapping(target = "declareFraudIndicator", constant = "false"),
+        @Mapping(target = "refundRedebitIndicator",
+                 expression = "java(DisputeBusinessLogic.calcRefundIndicator(src.getReklaTeilbetragKz()))"),
+        @Mapping(target = "refundRedebitAmount", expression = "java(buildRefundAmount(src))"),
+        @Mapping(target = "disputePostings", expression = "java(buildPostings(src))"),
+        @Mapping(target = "disputeEvents", expression = "java(buildEvents(src))"),
+        @Mapping(target = "disputeDocuments", expression = "java(java.util.Collections.emptyList())")
     })
     DisputeIboCreateRequestDto toIbo(DisputeCreateRequestDto src);
 
-    /**
-     * Ermittelt den Refund/Redebit-Indikator:
-     * <ul>
-     *   <li>"PARTIAL", wenn reklaTeilbetragKz = 'J'</li>
-     *   <li>sonst "NONE"</li>
-     * </ul>
-     *
-     * @param s Dispute-Request-Daten
-     * @return "PARTIAL" oder "NONE"
-     */
-    default String calcIndicator(DisputeCreateRequestDto s) {
-        return isJ(s.getReklaTeilbetragKz()) ? "PARTIAL" : "NONE";
-    }
+    // ------------------ Mapper-specific build methods ------------------
 
-    /**
-     * Baut den Refund-Betrag auf, wenn ein Teilbetrag vorliegt und
-     * Betrag + Währung gesetzt sind.
-     * <p>
-     * Falls keine Teilbetragskennzeichnung oder unvollständige Daten vorliegen,
-     * wird {@code null} zurückgegeben.
-     *
-     * @param s Dispute-Request-Daten
-     * @return Betrag mit Währung oder null
-     */
     default AmountDto buildRefundAmount(DisputeCreateRequestDto s) {
-        if (!isJ(s.getReklaTeilbetragKz())) {
-            return null;
-        }
-        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaBetragWs())) {
-            return null;
-        }
+        if (!"J".equalsIgnoreCase(s.getReklaTeilbetragKz())) return null;
+        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaBetragWs())) return null;
 
         AmountDto a = new AmountDto();
-        a.setValue(parseLongSafe(s.getReklaBetrag(), 0L));
+        a.setValue(DisputeBusinessLogic.parseLongSafe(s.getReklaBetrag(), 0L));
         a.setExponent(2);
-        a.setIsoCode(s.getReklaBetragWs());
+        a.setIsoCode(DisputeBusinessLogic.normalizeCurrency(s.getReklaBetragWs()));
         return a;
     }
 
-    /**
-     * Baut die Liste der Dispute-Postings auf:
-     * <ol>
-     *   <li>Bevorzugt Originalbetrag (crdVfggOrigBtrg / crdVfggOrigWs)</li>
-     *   <li>Falls Originalbetrag fehlt und Teilbetrag vorliegt → Refund-Betrag verwenden</li>
-     *   <li>Falls beides fehlt → leere Liste zurückgeben</li>
-     * </ol>
-     *
-     * @param s Dispute-Request-Daten
-     * @return Liste der Posting-Einträge
-     */
     default List<DisputePostingRequestDto> buildPostings(DisputeCreateRequestDto s) {
         AmountDto amt = null;
-
-        // Bevorzugte Quelle: Originalbetrag
         if (!isBlank(s.getCrdVfggOrigBtrg()) && !isBlank(s.getCrdVfggOrigWs())) {
-            amt = new AmountDto();
-            amt.setValue(parseLongSafe(s.getCrdVfggOrigBtrg(), 0L));
-            amt.setExponent(2);
-            amt.setIsoCode(s.getCrdVfggOrigWs());
-        }
-        // Fallback bei Teilbetrag
-        else if (isJ(s.getReklaTeilbetragKz())
-                && !isBlank(s.getReklaBetrag())
-                && !isBlank(s.getReklaBetragWs())) {
-            amt = new AmountDto();
-            amt.setValue(parseLongSafe(s.getReklaBetrag(), 0L));
-            amt.setExponent(2);
-            amt.setIsoCode(s.getReklaBetragWs());
+            amt = buildAmount(s.getCrdVfggOrigBtrg(), s.getCrdVfggOrigWs());
+        } else if ("J".equalsIgnoreCase(s.getReklaTeilbetragKz())
+                && !isBlank(s.getReklaBetrag()) && !isBlank(s.getReklaBetragWs())) {
+            amt = buildAmount(s.getReklaBetrag(), s.getReklaBetragWs());
         }
 
-        if (amt == null) {
-            return Collections.emptyList();
-        }
+        if (amt == null) return Collections.emptyList();
 
         DisputePostingRequestDto p = new DisputePostingRequestDto();
         p.setPostingAmount(amt);
         p.setImmediateReimbursement(false);
         p.setPostingTypeReference("ISSUER_ACCOUNT");
-
-        List<DisputePostingRequestDto> out = new ArrayList<>(1);
-        out.add(p);
-        return out;
+        return List.of(p);
     }
 
-    /**
-     * Erstellt eine COMMENT-Eventliste, wenn ein Teilbetrag vorliegt
-     * und Betrag + Währung gesetzt sind.
-     * <p>
-     * Andernfalls wird eine leere Liste zurückgegeben.
-     *
-     * @param s Dispute-Request-Daten
-     * @return Liste mit einem COMMENT-Event oder leer
-     */
     default List<DisputeEventRequestDto> buildEvents(DisputeCreateRequestDto s) {
-        if (!isJ(s.getReklaTeilbetragKz())) {
-            return Collections.emptyList();
-        }
-        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaBetragWs())) {
-            return Collections.emptyList();
-        }
+        if (!"J".equalsIgnoreCase(s.getReklaTeilbetragKz())) return Collections.emptyList();
+        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaBetragWs())) return Collections.emptyList();
 
         DisputeEventRequestDto ev = new DisputeEventRequestDto();
         ev.setType("COMMENT");
-        ev.setMessage("Reklamation mit Teilbetrag i.H.v. " + s.getReklaBetrag() + " " + s.getReklaBetragWs());
-        return Collections.singletonList(ev);
+        ev.setMessage("Reklamation mit Teilbetrag i.H.v. " +
+                       s.getReklaBetrag() + " " + s.getReklaBetragWs());
+        return List.of(ev);
     }
 
-    // ------------------- Hilfsmethoden -------------------
+    private AmountDto buildAmount(String val, String ws) {
+        AmountDto a = new AmountDto();
+        a.setValue(DisputeBusinessLogic.parseLongSafe(val, 0L));
+        a.setExponent(2);
+        a.setIsoCode(DisputeBusinessLogic.normalizeCurrency(ws));
+        return a;
+    }
 
-    /** Prüft, ob der String gleich 'J' (Groß-/Kleinschreibung egal) ist. */
-    default boolean isJ(String v) { return v != null && v.trim().equalsIgnoreCase("J"); }
+    private boolean isBlank(String v) {
+        return v == null || v.trim().isEmpty();
+    }
+}
 
-    /** Prüft, ob der String null oder leer (nur Whitespace) ist. */
-    default boolean isBlank(String v) { return v == null || v.trim().isEmpty(); }
 
-    /** Versucht, einen String als Long zu parsen, ansonsten Rückgabe eines Defaultwertes. */
-    default long parseLongSafe(String s, long def) {
+
+---------
+
+
+
+
+
+public final class DisputeBusinessLogic {
+
+    private DisputeBusinessLogic() {}
+
+    private static final Map<String, String> REASON_CODE_MAP = Map.ofEntries(
+            Map.entry("FI-11", "Kunde bestreitet Belastung"),
+            Map.entry("FI-8", "Kunde erkennt Transaktion nicht an")
+            // extend with full list from getReasonText
+    );
+
+    /** Maps reklaGrundKat1 → German reason text */
+    public static String translateReasonCode(String dynsCode) {
+        if (dynsCode == null) return null;
+        return REASON_CODE_MAP.getOrDefault(dynsCode, dynsCode);
+    }
+
+    /** Returns "PARTIAL" if reklaTeilbetragKz = J, otherwise "NONE" */
+    public static String calcRefundIndicator(String reklaTeilbetragKz) {
+        return reklaTeilbetragKz != null && reklaTeilbetragKz.trim().equalsIgnoreCase("J")
+                ? "PARTIAL" : "NONE";
+    }
+
+    /** Always returns EUR (since Dyns always delivers in EUR now) */
+    public static String normalizeCurrency(String ws) {
+        return ws == null ? "EUR" : ws.trim().toUpperCase();
+    }
+
+    /** Converts String → long safely (minor units) */
+    public static long parseLongSafe(String s, long def) {
         try { return Long.parseLong(s.trim()); } catch (Exception e) { return def; }
     }
-}
 
+    /** Product classification from sepTraExtPurp + crdAfsgBetrag (legacy KACHAOAF.c) */
+    public static String classifyProduct(String sepTraExtPurp, String crdAfsgBetrag) {
+        double amount = 0;
+        try { amount = Double.parseDouble(crdAfsgBetrag); } catch (Exception ignored) {}
 
-----------------------------------------------
+        if (sepTraExtPurp == null) return "";
 
-package osplus.pkptuna.dispute.service.normalization;
-
-import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
-
-/**
- * Hilfsklasse zur Normalisierung von {@link DisputeCreateRequestDto}-Objekten.
- * <p>
- * Führt minimale Bereinigungen der Eingabedaten durch, indem
- * führende und nachgestellte Leerzeichen aus bestimmten Zeichenkettenfeldern entfernt werden.
- * Währungsfelder und Reason-Codes bleiben unverändert.
- * </p>
- *
- * <p><strong>Hinweis:</strong> Die Klasse ist als {@code final} deklariert
- * und hat einen privaten Konstruktor, um eine Instanziierung zu verhindern.</p>
- */
-public final class DisputeCreateNormalizer {
-
-    /** Privater Konstruktor, um Instanziierung zu verhindern. */
-    private DisputeCreateNormalizer() {}
-
-    /**
-     * Normalisiert ein {@link DisputeCreateRequestDto}-Objekt.
-     * <ul>
-     *   <li>Entfernt führende und nachgestellte Leerzeichen aus den Feldern:
-     *       <ul>
-     *           <li>{@code reklaBetrag}</li>
-     *           <li>{@code crdVfggOrigBtrg}</li>
-     *           <li>{@code impulsOid}</li>
-     *           <li>{@code reklaGrundKat1}</li>
-     *       </ul>
-     *   </li>
-     *   <li>Alle anderen Felder bleiben unverändert.</li>
-     *   <li>Wenn ein Feld {@code null} ist, bleibt es unverändert.</li>
-     * </ul>
-     *
-     * @param s das zu normalisierende DTO
-     * @return dasselbe DTO-Objekt mit bereinigten Feldern
-     */
-    public static DisputeCreateRequestDto normalize(DisputeCreateRequestDto s) {
-        if (s.getReklaBetrag() != null) {
-            s.setReklaBetrag(s.getReklaBetrag().trim());
+        if (sepTraExtPurp.startsWith("DCRD")) return "ECM";
+        if (sepTraExtPurp.startsWith("CDCB") ||
+            sepTraExtPurp.startsWith("CDDP") ||
+            sepTraExtPurp.startsWith("CDOC") ||
+            sepTraExtPurp.startsWith("IDCP")) return "POS";
+        if (sepTraExtPurp.startsWith("CDCS")) return "ATMmdKE";
+        if (sepTraExtPurp.startsWith("CDCD")) {
+            return (amount == 0) ? "ATModKE" : "ATMmdKE";
         }
-        if (s.getCrdVfggOrigBtrg() != null) {
-            s.setCrdVfggOrigBtrg(s.getCrdVfggOrigBtrg().trim());
-        }
-        if (s.getImpulsOid() != null) {
-            s.setImpulsOid(s.getImpulsOid().trim());
-        }
-        if (s.getReklaGrundKat1() != null) {
-            s.setReklaGrundKat1(s.getReklaGrundKat1().trim());
-        }
-        return s;
+        return "";
     }
-}
-
----------------------------------------
-
-
-package osplus.pkptuna.dispute.service.validation;
-
-import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
-
-import java.util.ArrayList;
-import java.util.List;
-
-public final class DisputeCreateValidator {
-
-    private DisputeCreateValidator() {}
-
-    public static List<Violation> validate(DisputeCreateRequestDto s) {
-        List<Violation> v = new ArrayList<>();
-
-        // Pflichtfelder
-        req(v, s.getImpulsOid(), "impulsOid");
-        req(v, s.getReklaGrundKat1(), "reklaGrundKat1");
-
-        // Teil/Voll-Logik
-        boolean isPartial = isJ(s.getReklaTeilbetragKz());
-        if (isPartial) {
-            // refundRedebitAmount benötigt Betrag + Währung
-            req(v, s.getReklaBetrag(), "reklaBetrag");
-            req(v, s.getReklaBetragWs(), "reklaBetragWs");
-            numeric(v, s.getReklaBetrag(), "reklaBetrag");
-        }
-
-        // Posting-Quelle (Originalbetrag/-währung) – paarig
-        pairIfPresentMustBeBoth(v, s.getCrdVfggOrigBtrg(), s.getCrdVfggOrigWs(),
-                "crdVfggOrigBtrg", "crdVfggOrigWs");
-        if (notBlank(s.getCrdVfggOrigBtrg())) {
-            numeric(v, s.getCrdVfggOrigBtrg(), "crdVfggOrigBtrg");
-        }
-
-        return v;
-    }
-
-    private static void req(List<Violation> v, String val, String field) {
-        if (val == null || val.trim().isEmpty()) {
-            v.add(new Violation(field, "Pflichtfeld fehlt"));
-        }
-    }
-
-    private static void numeric(List<Violation> v, String val, String field) {
-        if (val == null) {
-            return;
-        }
-        try { Long.parseLong(val.trim()); }
-        catch (Exception e) { v.add(new Violation(field, "Muss numerisch (Ganzzahl in Minor Units) sein")); }
-    }
-
-    private static void pairIfPresentMustBeBoth(List<Violation> v, String a, String b, String fa, String fb) {
-        boolean ha = notBlank(a), hb = notBlank(b);
-        if (ha ^ hb) {
-            v.add(new Violation(ha ? fb : fa, "Betrag/Währung müssen paarig vorkommen"));
-        }
-    }
-
-    private static boolean notBlank(String s) { return s != null && !s.trim().isEmpty(); }
-    private static boolean isJ(String v) { return v != null && v.trim().equalsIgnoreCase("J"); }
 }
