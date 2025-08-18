@@ -1,41 +1,5 @@
-  /**
-     * Ermittelt den Refund/Redebit-Indikator für den IBO-Dispute-Request.
-     * <p>
-     * Die Logik entspricht der Legacy-Implementierung:
-     * <ul>
-     *   <li>"N" → keine automatische Erstattung</li>
-     *   <li>"P" → automatische Erstattung möglich und Teilbetragskennzeichen = 'J'</li>
-     *   <li>"Y" → automatische Erstattung möglich und kein Teilbetragskennzeichen</li>
-     * </ul>
-     * <p>
-     * Alle Eingaben werden zunächst null-sicher in Zahlenwerte konvertiert
-     * (über {@link #safeInt(Integer)} und {@link #safeDouble(Double)}).
-     *
-     * @param s Eingabeobjekt mit Dispute-Daten
-     * @return Refund-Indikator ("NONE", "PARTIAL" oder "FULL")
-     */
-    default String calcRefundIndicator(DisputeCreateRequestDto s) {
-        if (s == null) {
-            return "NONE";
-        }
-
-        DisputeBusinessLogic.AutoErstattungResult res =
-                DisputeBusinessLogic.ermittelnAutoErst(
-                        safeInt(s.getAnzahlAutoErstattungen()),
-                        safeInt(s.getAutoErstMaxAnzahl()),
-                        safeDouble(s.getAutoErstMaxBetrag()),
-                        safeDouble(s.getReklaBetrag()),
-                        s.getCrdVfggOrigWs(),
-                        safeDouble(s.getCrdVfggOrigKurs()),
-                        safeDouble(s.getCrdEntBtrg()),
-                        s.getReklaTeilbetragKz()
-                );
-
-        if ("N".equals(res.getKennzeichen())){
-            return "NONE";
-        }
-        if ("J".equals(res.getKennzeichen()) && isJ(s.getReklaTeilbetragKz())){
-            return "PARTIAL";
-        }
-        return "FULL";
-    }
+  private static final Map<String, String> REASON_CODE_MAP = Map.ofEntries(
+            Map.entry("FI-11", "Kunde bestreitet Belastung"),
+            Map.entry("FI-8", "Kunde erkennt Transaktion nicht an")
+            // extend with full list from getReasonText
+    );
