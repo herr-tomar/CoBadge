@@ -1,37 +1,61 @@
-message DisputeCreateRequestDto {
-  string impulsOid = 1;
-  string umsatzId = 2;
-  string empfKontoId = 3;
-  string empfBlz = 4;
+package osplus.pkptuna.dispute.service.validation;
 
-  string reklaGrundKat1 = 5;          // Kategorie-Code (String)
-  double reklaBetrag = 6;             // BigDecimal → double
-  string reklaBetragWs = 7;           // Währungscode (ISO 4217)
-  string transactionSign = 8;         // "DEBIT"/"CREDIT"
-  string reklaTeilbetragKz = 9;       // "J"/"N"
+import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
 
-  string karteSperren = 10;           // "J"/"N"
+import java.util.ArrayList;
+import java.util.List;
 
-  string crdVfggOrigWs = 11;          // Originalwährung
-  double crdVfggOrigKurs = 12;        // BigDecimal(17,8) → double
-  double crdEntBtrg = 13;             // BigDecimal(17,2)
+public final class DisputeCreateValidator {
 
-  string crdVerfallMon = 14;          // Ablaufmonat (MMYY)
-  double crdAfsgBtrg = 15;            // BigDecimal(17,2)
+    private DisputeCreateValidator() {}
 
-  string sepTraExtPurp = 16;          // Zweckbestimmung
+    public static List<Violation> validate(DisputeCreateRequestDto s) {
+        List<Violation> v = new ArrayList<>();
 
-  string primaryAccountNumber = 17;   // PAN
-  string transactionLifeCycleId = 18;
-  string acquirerReferenceData = 19;
+        // Pflichtfelder
+        req(v, s.getImpulsOid(), "impulsOid");
+        req(v, s.getReklaGrundKat1(), "reklaGrundKat1");
 
-  double transactionBetrag = 20;      // BigDecimal(17,2)
-  string transactionDateAndTime = 21; // Timestamp (String for now)
+        // Teil/Voll-Logik
+        boolean isPartial = isJ(s.getReklaTeilbetragKz());
+        if (isPartial) {
+            // refundRedebitAmount benötigt Betrag + Währung
+            req(v, s.getReklaBetrag(), "reklaBetrag");
+            req(v, s.getReklaBetragWs(), "reklaBetragWs");
+            numeric(v, s.getReklaBetrag(), "reklaBetrag");
+        }
 
-  int32 anzahlAutoErstattungen = 22;  // Anzahl (int)
-  double autoErstMaxBetrag = 23;      // BigDecimal(17,2)
-  int32 autoErstMaxAnzahl = 24;       // Anzahl (int)
+        // Posting-Quelle (TransactionBetrag/-währung) – paarig
+        pairIfPresentMustBeBoth(v, s.getTransactionBetrag(), s.getCrdVfggOrigWs(),
+                "transactionBetrag", "crdVfggOrigWs");
+        if (notBlank(s.getTransactionBetrag())) {
+            numeric(v, s.getTransactionBetrag(), "transactionBetrag");
+        }
 
-  string osplusValuta = 25;           // Valuta (String)
-  int32 issuerId = 26;                // GENERIC_ISSUER_ID (int)
+        return v;
+    }
+
+    private static void req(List<Violation> v, String val, String field) {
+        if (val == null || val.trim().isEmpty()) {
+            v.add(new Violation(field, "Pflichtfeld fehlt"));
+        }
+    }
+
+    private static void numeric(List<Violation> v, String val, String field) {
+        if (val == null) {
+            return;
+        }
+        try { Long.parseLong(val.trim()); }
+        catch (Exception e) { v.add(new Violation(field, "Muss numerisch (Ganzzahl in Minor Units) sein")); }
+    }
+
+    private static void pairIfPresentMustBeBoth(List<Violation> v, String a, String b, String fa, String fb) {
+        boolean ha = notBlank(a), hb = notBlank(b);
+        if (ha ^ hb) {
+            v.add(new Violation(ha ? fb : fa, "Betrag/Währung müssen paarig vorkommen"));
+        }
+    }
+
+    private static boolean notBlank(String s) { return s != null && !s.trim().isEmpty(); }
+    private static boolean isJ(String v) { return v != null && v.trim().equalsIgnoreCase("J"); }
 }
