@@ -1,206 +1,473 @@
-package osplus.pkptuna.dispute.service.mapping;
+POST http://localhost:8080/pkptuna/service/dispute/v1/publishDisputeCreateRequest/v1
+Accept: application/apl.universal.ui.v1+json
+Content-Type: application/apl.universal.ui.v1+json
+Cookie: SESSION=1e2386bb-8dfb-4f02-951d-b68834a574f4
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mapstruct.factory.Mappers;
-import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
-import osplus.pkptuna.rest.dispute.ibo.create.model.AmountDto;
-import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeEventRequestDto;
-import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateRequestDto;
-import osplus.pkptuna.rest.dispute.ibo.create.model.DisputePostingRequestDto;
+{
+  "payload":{
+      "impulsOid": "4-42146xxb-1r8",
+      "umsatzId": "2025-06-17-11.30.39.692979",
+      "empfKontoId": "7593-06-18-18-38-15-900724",
+      "empfBlz": "94059307",
+      "reklaGrundKat1": "HIGH_AMOUNT",
+      "reklaBetrag": "4400",
+      "reklaBetragWs": "EUR",
+      "reklaTeilbetragKz": "J",
+      "karteSperren": "N",
+      "autoErstattungKz": "J",
+      "crdVfggOrigWs": "EUR",
+      "crdVfggOrigBtrg": "1000",
+      "crdVfggOrigKurs": "0",
+      "crdVerfallMon": "12",
+      "crdTaTraceNr": "0/36/37/48/50/61/62",
+      "primaryAccountNumber": "5352990007882264",
+      "acquiringReferenceNumber": "22287503098004899494942",
+      "transactionDateAndTime": "2022-12-09T00:00:00",
+      "issuerId": "1004"
+   }
+}
 
-import java.util.List;
+-------------------------------------
 
-import static org.assertj.core.api.Assertions.assertThat;
+/*
+ * Copyright Finanz Informatik GmbH & Co. KG
+ */
+package osplus.dynssee.ie.fraudbear.bs.impl;
+
+import jakarta.json.JsonObject;
+import jakarta.json.JsonString;
+import jakarta.json.JsonValue;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import osplus.dynssee.buchungskern.fo.LiesUmsatzInternAusgabe;
+import osplus.dynssee.buchungskern.fo.LiesUmsatzInternEingabe;
+import osplus.dynssee.buchungskern.fo.Umsatz;
+import osplus.dynssee.ie.fraudbear.bs.base.CobadgeUmsatzReklaAnlegBsBase;
+import osplus.dynssee.ie.fraudbear.bs.meldungen.CobadgeUmsatzReklaAnlegMeldungen;
+import osplus.dynssee.ie.fraudbear.dao.dto.IInstitutsParameterLesenTo;
+import osplus.dynssee.ie.fraudbear.vertrag.karte.util.ConvertUtils;
+import osplus.dynssee.impulsmanagement.fo.ErmittleAnzahlAutomatischerErstattungenEingabe;
+import osplus.dynssee.impulsmanagement.fo.ImpAnzErstattungenErmAusgabe;
+import osplus.dynssee.impulsmanagement.fo.VerarbeiteImpReklamationEingabe;
+import osplus.dynssee.impulsmanagement.fo.VerarbeiteImpReklamationUeberMldgTxtEingabe;
+import osplus.dynssee.vertrag.karte.bs.CobadgeUmsatzReklaAnlegBs;
+import osplus.dynssee.vertrag.karte.fo.CobadgeUmsatzReklaAnlegAusgabe;
+import osplus.dynssee.vertrag.karte.fo.ErgebnisUmsatzReklamation;
+import osplus.dynssee.vertrag.karte.fo.LegCobadgeUmsatzReklaAnEingabe;
+import osplus.dynssee.vertrag.karte.fo.LegCobadgeUmsatzReklaAnUeberUmsatzIdEingabe;
+import osplus.dynssee.vertrag.karte.fo.LegCobadgeUmsatzReklaAnUeberUmsatzListeEingabe;
+import osplus.dynssee.vertrag.karte.fo.PflegeKarteFraudUeberKartenIdEingabe;
+import osplus.dynssee.vertrag.karte.fo.UmsatzRekla;
+import osplus.enterprise.josp.fo.exception.TechnicalFachobjektFailure;
+import osplus.fo.dyns.schnittstelle.IKarteFraudPflegenService;
+import osplus.fo.impl.FachobjektOoBase;
+import osplus.fo.impl.FachobjektParameterContainer;
+import osplus.fo.schnittstelle.IFachobjektMeldung;
+import osplus.fo.schnittstelle.IFachobjektMeldungen;
+import osplus.fraudbear.service.cbd.ReklaBetrag;
+import osplus.fraudbear.service.connectivity.GatewayJsonRequestBuilder;
+import osplus.fraudbear.service.connectivity.JsonRemoteService;
+import osplus.fraudbear.service.connectivity.JsonServiceException;
+import osplus.fraudbear.service.connectivity.RemoteServiceResult;
+import osplus.fraudbear.service.connectivity.UmsatzdatenService;
+import osplus.josp.service.BusinessServiceCallerAsynchron;
+import osplus.josp.service.BusinessServiceFailedException;
+import osplus.josp.service.DataAccessServiceFailedException;
+import osplus.josp.service.ServiceContext;
+import osplus.josp.service.foservice.FachobjektOoServiceProvider;
+import osplus.josp.tools.StringUtils;
+import osplus.kartenallgemein.lib.crossplatform.technical.types.FiTimestamp;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.text.MessageFormat;
+import java.util.Arrays;
+import java.util.Objects;
+
+import static osplus.dynssee.ie.fraudbear.bs.meldungen.CobadgeUmsatzReklaAnlegMeldungen.INFO_FEHLER_BEIM_UNTERPROGRAMMAUFRUF;
+import static osplus.dynssee.ie.fraudbear.bs.meldungen.CobadgeUmsatzReklaAnlegMeldungen.INFO_FEHLER_BEIM_UNTERPROGRAMMAUFRUF_4;
+import static osplus.dynssee.ie.fraudbear.bs.meldungen.CobadgeUmsatzReklaAnlegMeldungen.INFO_FEHLER_BEIM_UNTERPROGRAMMAUFRUF_5;
+import static osplus.dynssee.ie.fraudbear.vertrag.karte.util.BigDecimalUtils.isLess;
+import static osplus.dynssee.ie.fraudbear.vertrag.karte.util.BigDecimalUtils.isLessOrEq;
+import static osplus.dynssee.ie.fraudbear.vertrag.karte.util.ConvertUtils.charToString;
+import static osplus.dynssee.ie.fraudbear.vertrag.karte.util.ConvertUtils.stringToChar;
 
 /**
- * Vollständige Unit-Tests für alle öffentlichen Methoden
- * von {@link DynsToIboCreateMapper}.
+ * Implementierung des Business-Services CobadgeUmsatzReklaAnleg.
  */
-class DynsToIboCreateMapperAllMethodsTest {
+public final class CobadgeUmsatzReklaAnlegBsImpl extends CobadgeUmsatzReklaAnlegBsBase {
 
-    private DynsToIboCreateMapper mapper;
+    private static final Logger LOG = LoggerFactory.getLogger(CobadgeUmsatzReklaAnlegBsImpl.class);
 
-    @BeforeEach
-    void setUp() {
-        mapper = Mappers.getMapper(DynsToIboCreateMapper.class);
+    private static final String GATEWAY_URL_PATTERN = "http://{0}:{1}/v1/x-anwename/Idm4Reklamation";
+    private static final String PROP_GATEWAY_PORT = "ocp.czos.paycard.dispute.port";
+    private static final String PROP_GATEWAY_IP = "ocp.czos.ip";
+
+    /**
+     * Währungscode des Zahlungsverkehrs
+     */
+    private static final String ZV_WS = "EUR";
+
+    private static final String INSTITUTSWERT_AUTO_ERST_MAX_ANZAHL = "DMC-MAXAZ-AE";
+    private static final String INSTITUTSWERT_AUTO_ERST_MAX_BETRAG = "DMC-MAXBT-AE";
+
+    private static final Integer GENERIC_ISSUER_ID = 1000;
+
+    private final BusinessServiceCallerAsynchron<CobadgeUmsatzReklaAnlegBs, CobadgeUmsatzReklaAnlegAusgabe> bsCobadgeUmsatzReklaAnlegAusgabeBusinessServiceCallerAsynchron;
+
+    @Autowired
+    JsonRemoteService gatewayService;
+
+    @Autowired
+    private FachobjektOoServiceProvider fFachobjektOoServiceProvider;
+
+    public CobadgeUmsatzReklaAnlegBsImpl(final ServiceContext serviceContext, @Qualifier("fraudbear.bscaller.async") BusinessServiceCallerAsynchron<CobadgeUmsatzReklaAnlegBs, CobadgeUmsatzReklaAnlegAusgabe> bsCobadgeUmsatzReklaAnlegAusgabeBusinessServiceCallerAsynchron) {
+        super(serviceContext);
+        this.bsCobadgeUmsatzReklaAnlegAusgabeBusinessServiceCallerAsynchron = bsCobadgeUmsatzReklaAnlegAusgabeBusinessServiceCallerAsynchron;
     }
 
-    // ------------------- toIbo -------------------
+    /**
+     * Diese Service-Operation arbeitet Synchron
+     * Einzelverarbeitung eines Umsatzes für die Reklamation
+     * @param legCobadgeUmsatzReklaAnUeberUmsatzIdEingabe
+     * @return
+     * @throws BusinessServiceFailedException
+     */
+    @Override
+    protected CobadgeUmsatzReklaAnlegAusgabe legCobadgeUmsatzReklaAnUeberUmsatzIdImpl(LegCobadgeUmsatzReklaAnUeberUmsatzIdEingabe legCobadgeUmsatzReklaAnUeberUmsatzIdEingabe) throws BusinessServiceFailedException {
+        CobadgeUmsatzReklaAnlegAusgabe ausg = new CobadgeUmsatzReklaAnlegAusgabe();
+        final Umsatz umsatz = readUmsatz(legCobadgeUmsatzReklaAnUeberUmsatzIdEingabe);
 
-    @Test
-    void toIbo_mapsFieldsAndDefaults() {
-        DisputeCreateRequestDto src = new DisputeCreateRequestDto();
-        src.setImpulsOid("impulse123");
-        src.setReklaGrundKat1("R1");
-        src.setReklaTeilbetragKz("J");
-        src.setReklaBetrag(500.0);
-        src.setReklaBetragWs("EUR");
-        src.setAnzahlAutoErstattungen(0);
-        src.setAutoErstMaxAnzahl(5);
-        src.setAutoErstMaxBetrag(1000.0);
+        pflegeFraud(umsatz, legCobadgeUmsatzReklaAnUeberUmsatzIdEingabe.getKartenSperrKz(), legCobadgeUmsatzReklaAnUeberUmsatzIdEingabe.getImpsKtgr());
 
-        DisputeIboCreateRequestDto out = mapper.toIbo(src);
+        final ReklaBetrag reklaBetrag = determineReklaBetrag(legCobadgeUmsatzReklaAnUeberUmsatzIdEingabe, umsatz);
+        // INFO impsKtgr für DMC prüfbar --> FI-D10    UNBEKANNTER_UMSATZ_/_MISSBRAUCH_KARTE
 
-        assertThat(out.getIssuerDisputeExternalReference()).isEqualTo("impulse123");
-        assertThat(out.getDisputeReason()).isEqualTo("R1"); // mapped via translateReasonCode
-        assertThat(out.getDeclareFraudIndicator()).isFalse();
-        assertThat(out.getRefundRedebitIndicator()).isEqualTo("P");
-        assertThat(out.getRefundRedebitAmount()).isNotNull();
-        assertThat(out.getDisputePostings()).isNotEmpty();
-        assertThat(out.getDisputeEvents()).isNotEmpty();
-        assertThat(out.getDisputeDocuments()).isEmpty();
+        final BigDecimal autoErstMaxBetrag = readInstitutswertMaxBetrag();
+        final int autoErstMaxAnzahl = readInstitutswertMaxAnzahl();
+
+        // Anzahl Autoerstattungen ermitteln
+        int umsErstAutoAnzahl = 0;
+        final ErmittleAnzahlAutomatischerErstattungenEingabe anzErstattungenErmEingabe = new ErmittleAnzahlAutomatischerErstattungenEingabe();
+        anzErstattungenErmEingabe.setPersNr(umsatz.getPersNr());
+        anzErstattungenErmEingabe.setAnzahlMonate(legCobadgeUmsatzReklaAnUeberUmsatzIdEingabe.getAnzahlMonate());
+        ImpAnzErstattungenErmAusgabe impAnzErstattungenErmAusgabe = null;
+        try {
+            impAnzErstattungenErmAusgabe = fImpAnzErstattungenErmService.ermittleAnzahlAutomatischerErstattungen(anzErstattungenErmEingabe);
+        } catch (Exception e) {
+            LOG.info("Cobadge Reklamation - Fehler bei ermittleAnzahlAutomatischerErstattungen | ImpmImpsOid = " + legCobadgeUmsatzReklaAnUeberUmsatzIdEingabe.getImpmImpsOid(), e);
+            getServiceContext().getMeldungsContainer().addMeldung(INFO_FEHLER_BEIM_UNTERPROGRAMMAUFRUF, e);
+        }
+        if (null != impAnzErstattungenErmAusgabe && null != impAnzErstattungenErmAusgabe.getDmcUmsErstAutoAnz()) {
+            umsErstAutoAnzahl = impAnzErstattungenErmAusgabe.getDmcUmsErstAutoAnz();
+        }
+
+        // Webservice Aufruf
+        final JsonObject gatewayRequest = createJsonRequest(legCobadgeUmsatzReklaAnUeberUmsatzIdEingabe, umsatz, reklaBetrag, autoErstMaxBetrag, autoErstMaxAnzahl, umsErstAutoAnzahl);
+        final RemoteServiceResult gatewayServiceResult = callGateway(gatewayRequest);
+
+        ErgebnisUmsatzReklamation ergebnisUmsatzReklamation = createErgebnisUmsatzReklamation(gatewayServiceResult);
+        ergebnisUmsatzReklamation.setUmsatzId(legCobadgeUmsatzReklaAnUeberUmsatzIdEingabe.getUmsatzId());
+        ausg.getErgebnisUmsatzReklamation().add(ergebnisUmsatzReklamation);
+
+        // Verarbeitung der Rückmeldung des IDM Webservices
+        // Bei einem Webservice Fehler wird verarbeiteImpReklamationUeberMldgTxt aufgerufen
+        if (StringUtils.isNotBlank(ergebnisUmsatzReklamation.getFehlerText())) {
+            VerarbeiteImpReklamationUeberMldgTxtEingabe verarbeiteImpReklamationUeberMldgTxtEingabe = new VerarbeiteImpReklamationUeberMldgTxtEingabe();
+            verarbeiteImpReklamationUeberMldgTxtEingabe.setImpmImpsOid(legCobadgeUmsatzReklaAnUeberUmsatzIdEingabe.getImpmImpsOid());
+            verarbeiteImpReklamationUeberMldgTxtEingabe.setMldgTxt(ergebnisUmsatzReklamation.getFehlerText());
+            verarbeiteImpReklamationUeberMldgTxtEingabe.setMldgKlss(8);
+            try {
+                fImpReklamationVerarbeitenService.verarbeiteImpReklamationUeberMldgTxt(verarbeiteImpReklamationUeberMldgTxtEingabe);
+            } catch (Exception e) {
+                LOG.info("Cobadge Reklamation - Fehler bei verarbeiteImpReklamationUeberMldgTxt | ImpmImpsOid = " + legCobadgeUmsatzReklaAnUeberUmsatzIdEingabe.getImpmImpsOid(), e);
+                getServiceContext().getMeldungsContainer().addMeldung(INFO_FEHLER_BEIM_UNTERPROGRAMMAUFRUF_4, e);
+            }
+        } else {
+            VerarbeiteImpReklamationEingabe verarbeiteImpReklamationEingabe = new VerarbeiteImpReklamationEingabe();
+            verarbeiteImpReklamationEingabe.setImpmImpsOid(legCobadgeUmsatzReklaAnUeberUmsatzIdEingabe.getImpmImpsOid());
+            verarbeiteImpReklamationEingabe.setReklVgngIntnNr(ergebnisUmsatzReklamation.getReklVgngIntnNr());
+            verarbeiteImpReklamationEingabe.setImpsBtrgErst(ergebnisUmsatzReklamation.getImpsBtrgErst());
+            verarbeiteImpReklamationEingabe.setDmcUmsErstAutoKz(ergebnisUmsatzReklamation.getCbdUmsErstAutoKz());
+            try {
+                fImpReklamationVerarbeitenService.verarbeiteImpReklamation(verarbeiteImpReklamationEingabe);
+            } catch (Exception e) {
+                LOG.info("Cobadge Reklamation - Fehler bei verarbeiteImpReklamation | ImpmImpsOid = " + legCobadgeUmsatzReklaAnUeberUmsatzIdEingabe.getImpmImpsOid(), e);
+                getServiceContext().getMeldungsContainer().addMeldung(INFO_FEHLER_BEIM_UNTERPROGRAMMAUFRUF_5, e);
+            }
+        }
+
+        return ausg;
     }
 
-    // ------------------- calcRefundIndicator -------------------
+    /**
+     * Diese Service-Operation arbeitet Synchron
+     * Nimmt eine Liste entgegen und ruft die Synchrone Einzelverarbeitung legCobadgeUmsatzReklaAnUeberUmsatzId auf
+     * @param legCobadgeUmsatzReklaAnUeberUmsatzListeEingabe
+     * @return
+     * @throws BusinessServiceFailedException
+     */
+    @Override
+    protected CobadgeUmsatzReklaAnlegAusgabe legCobadgeUmsatzReklaAnUeberUmsatzListeImpl(LegCobadgeUmsatzReklaAnUeberUmsatzListeEingabe legCobadgeUmsatzReklaAnUeberUmsatzListeEingabe) throws BusinessServiceFailedException {
+        CobadgeUmsatzReklaAnlegAusgabe ausg = new CobadgeUmsatzReklaAnlegAusgabe();
+        for (UmsatzRekla umsatzEingabe : legCobadgeUmsatzReklaAnUeberUmsatzListeEingabe.getUmsatzRekla()) {
+                LegCobadgeUmsatzReklaAnUeberUmsatzIdEingabe syncEingabe = new LegCobadgeUmsatzReklaAnUeberUmsatzIdEingabe();
+                syncEingabe.setImpmImpsOid(umsatzEingabe.getImpmImpsOid());
+                syncEingabe.setUmsatzId(umsatzEingabe.getUmsatzId());
+                syncEingabe.setEmpfKontoId(umsatzEingabe.getEmpfKontoId());
+                syncEingabe.setImpsKtgr(umsatzEingabe.getImpsKtgr());
+                syncEingabe.setOrigBtrgTbtr(umsatzEingabe.getOrigBtrgTbtr());
+                syncEingabe.setKartenSperrKz(umsatzEingabe.getKartenSperrKz());
+                syncEingabe.setAnzahlMonate(umsatzEingabe.getAnzahlMonate());
 
-    @Test
-    void calcRefundIndicator_returnsN_whenSourceIsNull() {
-        assertThat(mapper.calcRefundIndicator(null)).isEqualTo("N");
+                ausg.getErgebnisUmsatzReklamation().addAll(this.legCobadgeUmsatzReklaAnUeberUmsatzId(syncEingabe).getErgebnisUmsatzReklamation());
+            }
+
+        return ausg;
     }
 
-    @Test
-    void calcRefundIndicator_returnsN_whenNotAllowed() {
-        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
-        dto.setAnzahlAutoErstattungen(10);
-        dto.setAutoErstMaxAnzahl(0);
-        assertThat(mapper.calcRefundIndicator(dto)).isEqualTo("N");
+    /**
+     * Diese Service Operation arbeitet A-Synchron
+     * Nimmt eine Liste entgegen und ruft die Synchrone Service-Operation legCobadgeUmsatzReklaAnUeberUmsatzListe auf
+     */
+    @Override
+    public CobadgeUmsatzReklaAnlegAusgabe legCobadgeUmsatzReklaAnImpl(final LegCobadgeUmsatzReklaAnEingabe eingabe) {
+        bsCobadgeUmsatzReklaAnlegAusgabeBusinessServiceCallerAsynchron.callBs(bs -> {
+            LegCobadgeUmsatzReklaAnUeberUmsatzListeEingabe syncListeEingabe = new LegCobadgeUmsatzReklaAnUeberUmsatzListeEingabe();
+            syncListeEingabe.getUmsatzRekla().addAll(eingabe.getUmsatzRekla());
+
+            return bs.legCobadgeUmsatzReklaAnUeberUmsatzListe(syncListeEingabe);
+        });
+
+        return new CobadgeUmsatzReklaAnlegAusgabe();
     }
 
-    @Test
-    void calcRefundIndicator_returnsP_whenPartial() {
-        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
-        dto.setAnzahlAutoErstattungen(0);
-        dto.setAutoErstMaxAnzahl(5);
-        dto.setAutoErstMaxBetrag(1000.0);
-        dto.setReklaBetrag(500.0);
-        dto.setReklaTeilbetragKz("J");
-        assertThat(mapper.calcRefundIndicator(dto)).isEqualTo("P");
+    private void pflegeFraud(Umsatz umsatz, Character sperrKz, String impsKtgr) {
+
+        // Feld codiert die Karte, mit der der Umsatz getätigt wurde
+        final String umsatzE2eId = umsatz.getSepTraEref();
+        final boolean isFraudAnDmcKarte = impsKtgr.contains("FI-D10");
+
+		/*
+		 Bedingung:
+		 Feld muss vorhanden sein und an Stelle 33 muss ein 'A' für Apple
+		 Pay oder ein 'H' für HCE oder ein 'T' für Händlertoken stehen.
+
+		 Dann soll BS KarteFraudPflegen aufgerufen werden
+		 */
+        final int laengeDerEndToEndId = 34;
+        final int positionDesKennzeichensEinerDigitalenKarte = 33;
+        final boolean isUmsatzMitDigitalerKarte = StringUtils.isNotEmpty(umsatzE2eId)
+                && umsatzE2eId.length() >= laengeDerEndToEndId
+                && Arrays.asList('A', 'H', 'T').contains(umsatzE2eId.charAt(positionDesKennzeichensEinerDigitalenKarte));
+
+        final boolean fraudPflegen = isUmsatzMitDigitalerKarte
+                && (isFraudAnDmcKarte || 'J' == sperrKz);
+        if (LOG.isInfoEnabled()) {
+            LOG.info("umsatzE2eId=" + umsatz.getSepTraEref() + "; sperrKz=" + sperrKz + "; impsKtgr=" + impsKtgr);
+        }
+
+        // Aufruf des BS wenn Bedingung erfüllt
+        if (fraudPflegen) {
+            String karteIds = "KarteId=" + umsatz.getKarteId() + "; KarteIdHaupt=" + umsatz.getKarteIdHaupt();
+            LOG.info(karteIds);
+
+            IKarteFraudPflegenService foService = fFachobjektOoServiceProvider.getFachobjektService(IKarteFraudPflegenService.class);
+            final PflegeKarteFraudUeberKartenIdEingabe fraudEingabe = new PflegeKarteFraudUeberKartenIdEingabe();
+            fraudEingabe.setKarteId(umsatz.getKarteId());
+            fraudEingabe.setKarteIdHaupt(umsatz.getKarteIdHaupt());
+            // Datum und Uhrzeit zu dem der Betrug erstmalig festgestellt wurde.
+            fraudEingabe.setFraudTs(new FiTimestamp().toIdTimestamp());
+            // "F" fix für "Fraud"
+            fraudEingabe.setFraudGrndKz('F');
+            // "IM" fix für "OSPlus_neo-Impulse"
+            fraudEingabe.setFraudSendId("IM");
+
+            FachobjektParameterContainer<PflegeKarteFraudUeberKartenIdEingabe> parameterContainer = foService.getNewParameterPflegeKarteFraudUeberKartenId(fraudEingabe);
+            TechnicalFachobjektFailure.callDyns(() -> foService.pflegeKarteFraudUeberKartenId(parameterContainer));
+
+            if (parameterContainer.getMeldungen().isError()) {
+                //TODO temporäre Lösung für prod. Probleme mit Händlertoken; zu gegebener Zeit reverten für Abbruch (Version vor 24.11.23)
+                loggeFraudMeldungenImFehlerfall(parameterContainer);
+                // INFO_FEHLER_BEIM_UNTERPROGRAMMAUFRUF nicht optimal ohne weitere Meldungen, aber besser als nichts (sollte nur temporär sein)
+                getServiceContext().addMeldung(CobadgeUmsatzReklaAnlegMeldungen.INFO_FEHLER_BEIM_UNTERPROGRAMMAUFRUF_3);
+                LOG.error("Fehler bei KARTE_FRAUD_PFLEGEN mit " + karteIds);
+            }
+        }
     }
 
-    @Test
-    void calcRefundIndicator_returnsY_whenFull() {
-        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
-        dto.setAnzahlAutoErstattungen(0);
-        dto.setAutoErstMaxAnzahl(5);
-        dto.setAutoErstMaxBetrag(1000.0);
-        dto.setReklaBetrag(500.0);
-        dto.setReklaTeilbetragKz("N");
-        assertThat(mapper.calcRefundIndicator(dto)).isEqualTo("Y");
+    private <T extends FachobjektOoBase> void loggeFraudMeldungenImFehlerfall(
+            FachobjektParameterContainer<T> parameter) {
+        if (parameter.getMeldungen().getMeldungMitHoechsterFehlerklasse() != null) {
+            IFachobjektMeldungen meldungen = parameter.getMeldungen();
+            IFachobjektMeldung meldungMitHoechsterFehlerklasse = meldungen.getMeldungMitHoechsterFehlerklasse();
+            if (meldungMitHoechsterFehlerklasse.getKlasse() > 4) {
+                final StringBuilder meldungsTextBuilder = new StringBuilder(
+                        "DynS-Service " + meldungMitHoechsterFehlerklasse.getServiceName() + " mit Meldungen:");
+                for (final IFachobjektMeldung m : meldungen.getMeldungenOhneDoppelte()) {
+                    meldungsTextBuilder.append("\n");
+                    meldungsTextBuilder.append(String.format(" - MK %d | RC %d | %s", m.getKlasse(),
+                            m.getNummer(), m.getText()));
+                }
+                LOG.error(meldungsTextBuilder.toString());
+            }
+        }
     }
 
-    // ------------------- calcRefundAmount -------------------
-
-    @Test
-    void calcRefundAmount_returnsNull_whenSourceIsNull() {
-        assertThat(mapper.calcRefundAmount(null)).isNull();
+    private String getProperty(String name) {
+        final String result = fOspeProperty.getOspeProperty(name, "ocp");
+        if (result == null) {
+            throw new BusinessServiceFailedException(CobadgeUmsatzReklaAnlegMeldungen.FEHLERHAFTE_KONFIGURATION, name + " ist nicht gesetzt");
+        }
+        return result;
     }
 
-    @Test
-    void calcRefundAmount_returnsNull_whenNotAllowed() {
-        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
-        dto.setAnzahlAutoErstattungen(10);
-        dto.setAutoErstMaxAnzahl(0);
-        assertThat(mapper.calcRefundAmount(dto)).isNull();
+    private Umsatz readUmsatz(final LegCobadgeUmsatzReklaAnUeberUmsatzIdEingabe umsatzEingabe) {
+        final LiesUmsatzInternEingabe liesUmsatzIn = new LiesUmsatzInternEingabe();
+        liesUmsatzIn.setEmpfKontoId(umsatzEingabe.getEmpfKontoId());
+        liesUmsatzIn.setUmsatzId(umsatzEingabe.getUmsatzId());
+        final LiesUmsatzInternAusgabe liesUmsatzOut = this.fUmsatzInternLesenService.liesUmsatzIntern(liesUmsatzIn);
+        final Umsatz umsatz = liesUmsatzOut.getUmsatz();
+        if (umsatz == null) {
+            throw new BusinessServiceFailedException(CobadgeUmsatzReklaAnlegMeldungen.KEIN_UMSATZ);
+        }
+        return umsatz;
     }
 
-    @Test
-    void calcRefundAmount_returnsAmount_whenAllowed() {
-        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
-        dto.setAnzahlAutoErstattungen(0);
-        dto.setAutoErstMaxAnzahl(5);
-        dto.setAutoErstMaxBetrag(1000.0);
-        dto.setReklaBetrag(250.0);
-        dto.setReklaBetragWs("EUR");
-        dto.setReklaTeilbetragKz("N");
-
-        AmountDto amt = mapper.calcRefundAmount(dto);
-
-        assertThat(amt).isNotNull();
-        assertThat(amt.getValue()).isEqualTo(25000L); // in cents
-        assertThat(amt.getExponent()).isEqualTo(2);
-        assertThat(amt.getIsoCode()).isEqualTo("EUR");
+    private BigDecimal readInstitutswertMaxBetrag() {
+        return readInstitutswert(INSTITUTSWERT_AUTO_ERST_MAX_BETRAG).getWertNum();
     }
 
-    // ------------------- buildPostings -------------------
-
-    @Test
-    void buildPostings_prefersTransactionAmount() {
-        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
-        dto.setTransactionBetrag(2000.0);
-        dto.setCrdVfggOrigWs("CHF");
-        dto.setReklaTeilbetragKz("J");
-        dto.setReklaBetrag(500.0);
-        dto.setReklaBetragWs("USD");
-
-        List<DisputePostingRequestDto> postings = mapper.buildPostings(dto);
-
-        assertThat(postings).hasSize(1);
-        assertThat(postings.get(0).getPostingAmount().getIsoCode()).isEqualTo("CHF");
+    private int readInstitutswertMaxAnzahl() {
+        final BigDecimal institutswert = readInstitutswert(INSTITUTSWERT_AUTO_ERST_MAX_ANZAHL).getWertNum();
+        try {
+            return institutswert.intValueExact();
+        } catch (ArithmeticException e) {
+            LOG.error("Fehlerhafter Institutswert", e);
+            throw new BusinessServiceFailedException(CobadgeUmsatzReklaAnlegMeldungen.INSTITUTSWERT_MAX_ANZAHL_FEHLERHAFT, institutswert, INSTITUTSWERT_AUTO_ERST_MAX_ANZAHL);
+        }
     }
 
-    @Test
-    void buildPostings_fallsBackToRefundAmount() {
-        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
-        dto.setReklaTeilbetragKz("J");
-        dto.setReklaBetrag(500.0);
-        dto.setReklaBetragWs("USD");
-
-        List<DisputePostingRequestDto> postings = mapper.buildPostings(dto);
-
-        assertThat(postings).hasSize(1);
-        assertThat(postings.get(0).getPostingAmount().getIsoCode()).isEqualTo("USD");
+    private IInstitutsParameterLesenTo readInstitutswert(String name) {
+        try {
+            final IInstitutsParameterLesenTo readResult = fInstitutsParameterLesenDao.liesInstitutsparameter(name);
+            if (!readResult.datenVorhanden()) {
+                throw new BusinessServiceFailedException(CobadgeUmsatzReklaAnlegMeldungen.INSTITUTSWERT_FEHLT, name);
+            }
+            return readResult;
+        } catch (DataAccessServiceFailedException e) {
+            throw new BusinessServiceFailedException(CobadgeUmsatzReklaAnlegMeldungen.INFO_FEHLER_BEIM_UNTERPROGRAMMAUFRUF_2);
+        }
     }
 
-    @Test
-    void buildPostings_returnsEmptyWhenNothingAvailable() {
-        assertThat(mapper.buildPostings(new DisputeCreateRequestDto())).isEmpty();
+    private ReklaBetrag determineReklaBetrag(LegCobadgeUmsatzReklaAnUeberUmsatzIdEingabe umsatzEingabe, Umsatz umsatz) {
+        final BigDecimal teilbetrag = umsatzEingabe.getOrigBtrgTbtr();
+        final String transactionSign = isLess(umsatz.getUmsatzBetrag(), BigDecimal.ZERO) ? "DEBIT" : "CREDIT";
+        final BigDecimal gesamtbetragZv = umsatz.getUmsatzBetrag().abs();
+        if (teilbetrag == null) {
+            return new ReklaBetrag(gesamtbetragZv, ZV_WS, transactionSign, false);
+        }
+        if (!isLessOrEq(teilbetrag, BigDecimal.ZERO)) {
+            return new ReklaBetrag(teilbetrag, umsatz.getCrdVfggOrigWs(), transactionSign, true);
+        }
+        throw new BusinessServiceFailedException(CobadgeUmsatzReklaAnlegMeldungen.UMSATZ_UNZULAESSIG, "Teilbetrag " + teilbetrag + " zu klein");
     }
 
-    // ------------------- buildEvents -------------------
-
-    @Test
-    void buildEvents_createsCommentWhenPartialWithValues() {
-        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
-        dto.setReklaTeilbetragKz("J");
-        dto.setReklaBetrag(500.0);
-        dto.setReklaBetragWs("USD");
-
-        List<DisputeEventRequestDto> events = mapper.buildEvents(dto);
-
-        assertThat(events).hasSize(1);
-        assertThat(events.get(0).getType()).isEqualTo("COMMENT");
-        assertThat(events.get(0).getMessage()).contains("500.0 USD");
+    private JsonObject createJsonRequest(LegCobadgeUmsatzReklaAnUeberUmsatzIdEingabe eingabe, Umsatz umsatz, ReklaBetrag reklaBetrag, BigDecimal autoErstMaxBetrag, int autoErstMaxAnzahl, int umsErstAutoAnzahl) {
+        final BigDecimal verfuegungOriginalbetrag = UmsatzdatenService.getVerfuegungOriginalbetrag(umsatz);
+        final String transactionLifeCycleId = UmsatzdatenService.getTransactionLifeCycleId(umsatz);
+        return new GatewayJsonRequestBuilder("idm4reklamation")
+                .add("impulsOId", eingabe.getImpmImpsOid())
+                .add("umsatzId", eingabe.getUmsatzId().getId())
+                .add("empfKontoId", eingabe.getEmpfKontoId().getId())
+                .add("empfBlz", umsatz.getEmpfBlz(), 0)
+                .add("reklaGrundKat1", eingabe.getImpsKtgr())
+                .add("reklaBetrag", reklaBetrag.getBetrag())
+                .add("reklaBetragWs", reklaBetrag.getWs())
+                .add("transactionSign", reklaBetrag.getTransactionSign())
+                .add("reklaTeilbetragKz", reklaBetrag.isTeilbetrag())
+                .add("karteSperren", charToString(eingabe.getKartenSperrKz()), "N")
+                .add("crdVfggOrigWs", umsatz.getCrdVfggOrigWs())
+                .add("crdVfggOrigKurs", umsatz.getCrdVfggOrigKurs())
+                .add("crdEntBtrg", umsatz.getCrdEntgBtrg())
+                .add("crdVerfallMon", umsatz.getCrdVerfallMon())
+                .add("crdAfsgBtrg", umsatz.getCrdAfsgBtrg())
+                .add("sepTraExtPurp", umsatz.getSepTraExtPurp())
+                .add("primaryAccountNumber", umsatz.getCrdPan())
+                .add("transactionLifeCycleId", transactionLifeCycleId)
+                .add("acquirerReferenceData", extractAcquirerReferenceData(umsatz))
+                .add("transactionBetrag", verfuegungOriginalbetrag)
+                .add("transactionDateAndTime", umsatz.getCrdTaDateTime())
+                .add("anzahlAutoErstattungen", umsErstAutoAnzahl, 0)
+                .add("autoErstMaxBetrag", autoErstMaxBetrag)
+                .add("autoErstMaxAnzahl", autoErstMaxAnzahl)
+//				.add("osplusValuta", umsatz.getValutaBasis().toString())
+                .add("osplusValuta", umsatz.getValutaChar())
+                .add("issuerId", GENERIC_ISSUER_ID)
+                .createJson();
     }
 
-    @Test
-    void buildEvents_returnsEmptyWhenNotPartial() {
-        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
-        dto.setReklaTeilbetragKz("N");
-        assertThat(mapper.buildEvents(dto)).isEmpty();
+    private String extractAcquirerReferenceData(Umsatz umsatz) {
+        try {
+            return UmsatzdatenService.getAcquirerReferenceData(umsatz);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessServiceFailedException(CobadgeUmsatzReklaAnlegMeldungen.UMSATZ_UNZULAESSIG_2, e.getLocalizedMessage());
+        }
     }
 
-    @Test
-    void buildEvents_returnsEmptyWhenMissingValues() {
-        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
-        dto.setReklaTeilbetragKz("J");
-        dto.setReklaBetrag(null);
-        dto.setReklaBetragWs(null);
-        assertThat(mapper.buildEvents(dto)).isEmpty();
+    private RemoteServiceResult callGateway(JsonObject gatewayRequest) {
+        try {
+            final String gatewayUrl = MessageFormat.format(GATEWAY_URL_PATTERN, getProperty(PROP_GATEWAY_IP), getProperty(PROP_GATEWAY_PORT));
+            return gatewayService.postRequest(gatewayUrl, gatewayRequest);
+        } catch (JsonServiceException e) {
+            throw new BusinessServiceFailedException(CobadgeUmsatzReklaAnlegMeldungen.WEBSERVICE_ERROR, e.getMessage());
+        }
     }
 
-    // ------------------- isJ -------------------
+    private ErgebnisUmsatzReklamation createErgebnisUmsatzReklamation(RemoteServiceResult gatewayServiceResult) {
+        final ErgebnisUmsatzReklamation ergebnisReklamation = new ErgebnisUmsatzReklamation();
 
-    @Test
-    void isJ_returnsTrueForJOrj() {
-        assertThat(mapper.isJ("J")).isTrue();
-        assertThat(mapper.isJ("j")).isTrue();
+        final JsonObject responseContent = getChecked(gatewayServiceResult.getResponse(), "idm4response", JsonObject.class);
+
+        String intReference = getStringChecked(responseContent, "intReference");
+        try {
+            if (StringUtils.isNotBlank(intReference)) {
+                ergebnisReklamation.setReklVgngIntnNr(new BigInteger(intReference));
+            }
+        } catch (Exception e) {
+            LOG.info("Fehler IDM Response - Konnte Feld intReference nicht mappen. Wert: " + intReference);
+            ergebnisReklamation.setReklVgngIntnNr(BigInteger.valueOf(-1));
+        }
+
+        final String status = getStringChecked(responseContent, "idmStatus");
+        if (!"OK".equals(status)) {
+            final String message = getStringChecked(responseContent, "idmMessage");
+            ergebnisReklamation.setFehlerText("IDM-Fehler: " + status + "| " + message + " | intReference = " + intReference);
+        }
+
+        final Character autoErstattungKz = stringToChar(getStringChecked(responseContent, "autoErstattungKz"));
+        ergebnisReklamation.setCbdUmsErstAutoKz(Objects.requireNonNullElse(autoErstattungKz, ' '));
+        if (ConvertUtils.isJ(autoErstattungKz)) {
+            final String autoErstBetragString = getStringChecked(responseContent, "autoErstattungBetrag");
+            ergebnisReklamation.setImpsBtrgErst(new BigDecimal(StringUtils.isNotBlank(autoErstBetragString) ? autoErstBetragString : "0"));
+        }
+
+        return ergebnisReklamation;
     }
 
-    @Test
-    void isJ_returnsFalseOtherwise() {
-        assertThat(mapper.isJ("N")).isFalse();
-        assertThat(mapper.isJ(null)).isFalse();
-        assertThat(mapper.isJ(" ")).isFalse();
+    private String getStringChecked(JsonObject jsonObject, String key) {
+        return getChecked(jsonObject, key, JsonString.class).getString();
+    }
+
+    private <T extends JsonValue> T getChecked(JsonObject jsonObject, String key, Class<T> expectedClass) {
+        final JsonValue object = jsonObject.get(key);
+        if (!expectedClass.isInstance(object)) {
+            LOG.error("Fehler beim Lesen von " + key + " aus der Gateway-Antwort");
+            throw new BusinessServiceFailedException(CobadgeUmsatzReklaAnlegMeldungen.RESPONSE_JSON_VALUE_ERROR, "JSON-Key " + key + " in Gateway-Antwort");
+        }
+        return expectedClass.cast(object);
     }
 }
+
