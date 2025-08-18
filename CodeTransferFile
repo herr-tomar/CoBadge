@@ -1,5 +1,31 @@
-  private static final Map<String, String> REASON_CODE_MAP = Map.ofEntries(
-            Map.entry("FI-11", "Kunde bestreitet Belastung"),
-            Map.entry("FI-8", "Kunde erkennt Transaktion nicht an")
-            // extend with full list from getReasonText
-    );
+private static final Map<String, String> REASON_CODE_MAP = Map.ofEntries(
+        // FI-D series
+        Map.entry("FI-D0",  "UNBEKANNTER_GRUND"),
+        Map.entry("FI-D1",  "MEHRFACHE_BEZAHLUNG_SERVICE_/_LEISTUNG"),
+        Map.entry("FI-D2",  "GELDAUTOMATENUMSATZ_NICHT_KORREKT"),
+        Map.entry("FI-D3",  "BETRAG_WEICHT_VOM_BELEG_AB"),
+        Map.entry("FI-D4",  "BETRAG_IN_FALSCHER_WÄHRUNG_BELASTET"),
+        Map.entry("FI-D5",  "WARE_ODER_DIENSTLEISTUNG_NICHT_ERHALTEN"),
+        Map.entry("FI-D6",  "VERDACHT_AUF_MARKENFÄLSCHUNG"),
+        Map.entry("FI-D7",  "GUTSCHRIFT_FEHLT_NACH_STORNIERUNG"),
+        Map.entry("FI-D8",  "BELASTUNG_AUTOVERMIETUNG_/_HOTEL"),
+        Map.entry("FI-D9",  "WIEDERKEHRENDE_BELASTUNGEN_/_ABO"),
+        Map.entry("FI-D10", "UNBEKANNTER_UMSATZ_/_MISSBRAUCH_KARTE"),
+        Map.entry("FI-D11", "SONSTIGE_GRÜNDE"),
+        Map.entry("FI-D12", "INSOLVENZ"),
+
+        // FI-V series
+        Map.entry("FI-V0",  "V_UNBEKANNTER_GRUND"),
+        Map.entry("FI-V1",  "V_MEHRFACHE_BEZAHLUNG_SERVICE_/_LEISTUNG"),
+        Map.entry("FI-V2",  "V_GELDAUTOMATENUMSATZ_NICHT_KORREKT"),
+        Map.entry("FI-V3",  "V_BETRAG_WEICHT_VOM_BELEG_AB"),
+        Map.entry("FI-V4",  "V_BETRAG_IN_FALSCHER_WÄHRUNG_BELASTET"),
+        Map.entry("FI-V5",  "V_WARE_ODER_DIENSTLEISTUNG_NICHT_ERHALTEN"),
+        Map.entry("FI-V6",  "V_VERDACHT_AUF_MARKENFÄLSCHUNG"),
+        Map.entry("FI-V7",  "V_GUTSCHRIFT_FEHLT_NACH_STORNIERUNG"),
+        Map.entry("FI-V8",  "V_BELASTUNG_AUTOVERMIETUNG_/_HOTEL"),
+        Map.entry("FI-V9",  "V_WIEDERKEHRENDE_BELASTUNGEN_/_ABO"),
+        Map.entry("FI-V10", "V_UNBEKANNTER_UMSATZ_/_MISSBRAUCH_KARTE"),
+        Map.entry("FI-V11", "V_SONSTIGE_GRÜNDE"),
+        Map.entry("FI-V12", "V_INSOLVENZ")
+);
