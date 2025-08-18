@@ -1,74 +1,206 @@
-    /**
-     * Ermittelt den Refund/Redebit-Indikator für den IBO-Dispute-Request.
-     * <p>
-     * Die Logik entspricht der Legacy-Implementierung:
-     * <ul>
-     *   <li>"N" → keine automatische Erstattung</li>
-     *   <li>"P" → automatische Erstattung möglich und Teilbetragskennzeichen = 'J'</li>
-     *   <li>"Y" → automatische Erstattung möglich und kein Teilbetragskennzeichen</li>
-     * </ul>
-     * <p>
-     * Alle Eingaben werden zunächst null-sicher in Zahlenwerte konvertiert
-     * (über {@link #safeInt(Integer)} und {@link #safeDouble(Double)}).
-     *
-     * @param s Eingabeobjekt mit Dispute-Daten
-     * @return Refund-Indikator ("N", "P" oder "Y")
-     */
-    default String calcRefundIndicator(DisputeCreateRequestDto s) {
-        if (s == null) return "N";
+package osplus.pkptuna.dispute.service.mapping;
 
-        DisputeBusinessLogic.AutoErstattungResult res =
-                DisputeBusinessLogic.ermittelnAutoErst(
-                        safeInt(s.getAnzahlAutoErstattungen()),
-                        safeInt(s.getAutoErstMaxAnzahl()),
-                        safeDouble(s.getAutoErstMaxBetrag()),
-                        safeDouble(s.getReklaBetrag()),
-                        s.getCrdVfggOrigWs(),
-                        safeDouble(s.getCrdVfggOrigKurs()),
-                        safeDouble(s.getCrdEntBtrg()),
-                        s.getReklaTeilbetragKz()
-                );
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mapstruct.factory.Mappers;
+import osplus.pkptuna.rest.dispute.create.model.DisputeCreateRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.AmountDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeEventRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputeIboCreateRequestDto;
+import osplus.pkptuna.rest.dispute.ibo.create.model.DisputePostingRequestDto;
 
-        if ("N".equals(res.getKennzeichen())) return "N";
-        if ("J".equals(res.getKennzeichen()) && isJ(s.getReklaTeilbetragKz())) return "P";
-        return "Y";
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Vollständige Unit-Tests für alle öffentlichen Methoden
+ * von {@link DynsToIboCreateMapper}.
+ */
+class DynsToIboCreateMapperAllMethodsTest {
+
+    private DynsToIboCreateMapper mapper;
+
+    @BeforeEach
+    void setUp() {
+        mapper = Mappers.getMapper(DynsToIboCreateMapper.class);
     }
 
-    /**
-     * Ermittelt den Refund/Redebit-Betrag für den IBO-Dispute-Request.
-     * <p>
-     * Falls keine automatische Erstattung möglich ist
-     * (Kennzeichen = 'N'), wird {@code null} zurückgegeben.
-     * Andernfalls wird ein {@link AmountDto} mit folgenden Eigenschaften aufgebaut:
-     * <ul>
-     *   <li>value → Betrag in Minor Units (z. B. Cents)</li>
-     *   <li>exponent → immer 2</li>
-     *   <li>isoCode → normalisierter ISO-Währungscode aus {@code reklaBetragWs}</li>
-     * </ul>
-     *
-     * @param s Eingabeobjekt mit Dispute-Daten
-     * @return Refund-Betrag als {@link AmountDto}, oder {@code null}, wenn keine Erstattung
-     */
-    default AmountDto calcRefundAmount(DisputeCreateRequestDto s) {
-        if (s == null) return null;
+    // ------------------- toIbo -------------------
 
-        DisputeBusinessLogic.AutoErstattungResult res =
-                DisputeBusinessLogic.ermittelnAutoErst(
-                        safeInt(s.getAnzahlAutoErstattungen()),
-                        safeInt(s.getAutoErstMaxAnzahl()),
-                        safeDouble(s.getAutoErstMaxBetrag()),
-                        safeDouble(s.getReklaBetrag()),
-                        s.getCrdVfggOrigWs(),
-                        safeDouble(s.getCrdVfggOrigKurs()),
-                        safeDouble(s.getCrdEntBtrg()),
-                        s.getReklaTeilbetragKz()
-                );
+    @Test
+    void toIbo_mapsFieldsAndDefaults() {
+        DisputeCreateRequestDto src = new DisputeCreateRequestDto();
+        src.setImpulsOid("impulse123");
+        src.setReklaGrundKat1("R1");
+        src.setReklaTeilbetragKz("J");
+        src.setReklaBetrag(500.0);
+        src.setReklaBetragWs("EUR");
+        src.setAnzahlAutoErstattungen(0);
+        src.setAutoErstMaxAnzahl(5);
+        src.setAutoErstMaxBetrag(1000.0);
 
-        if ("N".equals(res.getKennzeichen())) return null;
+        DisputeIboCreateRequestDto out = mapper.toIbo(src);
 
-        AmountDto a = new AmountDto();
-        a.setValue(DisputeBusinessLogic.toCents(res.getBetrag()));
-        a.setExponent(2);
-        a.setIsoCode(DisputeBusinessLogic.normalizeCurrency(s.getReklaBetragWs()));
-        return a;
+        assertThat(out.getIssuerDisputeExternalReference()).isEqualTo("impulse123");
+        assertThat(out.getDisputeReason()).isEqualTo("R1"); // mapped via translateReasonCode
+        assertThat(out.getDeclareFraudIndicator()).isFalse();
+        assertThat(out.getRefundRedebitIndicator()).isEqualTo("P");
+        assertThat(out.getRefundRedebitAmount()).isNotNull();
+        assertThat(out.getDisputePostings()).isNotEmpty();
+        assertThat(out.getDisputeEvents()).isNotEmpty();
+        assertThat(out.getDisputeDocuments()).isEmpty();
     }
+
+    // ------------------- calcRefundIndicator -------------------
+
+    @Test
+    void calcRefundIndicator_returnsN_whenSourceIsNull() {
+        assertThat(mapper.calcRefundIndicator(null)).isEqualTo("N");
+    }
+
+    @Test
+    void calcRefundIndicator_returnsN_whenNotAllowed() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setAnzahlAutoErstattungen(10);
+        dto.setAutoErstMaxAnzahl(0);
+        assertThat(mapper.calcRefundIndicator(dto)).isEqualTo("N");
+    }
+
+    @Test
+    void calcRefundIndicator_returnsP_whenPartial() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setAnzahlAutoErstattungen(0);
+        dto.setAutoErstMaxAnzahl(5);
+        dto.setAutoErstMaxBetrag(1000.0);
+        dto.setReklaBetrag(500.0);
+        dto.setReklaTeilbetragKz("J");
+        assertThat(mapper.calcRefundIndicator(dto)).isEqualTo("P");
+    }
+
+    @Test
+    void calcRefundIndicator_returnsY_whenFull() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setAnzahlAutoErstattungen(0);
+        dto.setAutoErstMaxAnzahl(5);
+        dto.setAutoErstMaxBetrag(1000.0);
+        dto.setReklaBetrag(500.0);
+        dto.setReklaTeilbetragKz("N");
+        assertThat(mapper.calcRefundIndicator(dto)).isEqualTo("Y");
+    }
+
+    // ------------------- calcRefundAmount -------------------
+
+    @Test
+    void calcRefundAmount_returnsNull_whenSourceIsNull() {
+        assertThat(mapper.calcRefundAmount(null)).isNull();
+    }
+
+    @Test
+    void calcRefundAmount_returnsNull_whenNotAllowed() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setAnzahlAutoErstattungen(10);
+        dto.setAutoErstMaxAnzahl(0);
+        assertThat(mapper.calcRefundAmount(dto)).isNull();
+    }
+
+    @Test
+    void calcRefundAmount_returnsAmount_whenAllowed() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setAnzahlAutoErstattungen(0);
+        dto.setAutoErstMaxAnzahl(5);
+        dto.setAutoErstMaxBetrag(1000.0);
+        dto.setReklaBetrag(250.0);
+        dto.setReklaBetragWs("EUR");
+        dto.setReklaTeilbetragKz("N");
+
+        AmountDto amt = mapper.calcRefundAmount(dto);
+
+        assertThat(amt).isNotNull();
+        assertThat(amt.getValue()).isEqualTo(25000L); // in cents
+        assertThat(amt.getExponent()).isEqualTo(2);
+        assertThat(amt.getIsoCode()).isEqualTo("EUR");
+    }
+
+    // ------------------- buildPostings -------------------
+
+    @Test
+    void buildPostings_prefersTransactionAmount() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setTransactionBetrag(2000.0);
+        dto.setCrdVfggOrigWs("CHF");
+        dto.setReklaTeilbetragKz("J");
+        dto.setReklaBetrag(500.0);
+        dto.setReklaBetragWs("USD");
+
+        List<DisputePostingRequestDto> postings = mapper.buildPostings(dto);
+
+        assertThat(postings).hasSize(1);
+        assertThat(postings.get(0).getPostingAmount().getIsoCode()).isEqualTo("CHF");
+    }
+
+    @Test
+    void buildPostings_fallsBackToRefundAmount() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setReklaTeilbetragKz("J");
+        dto.setReklaBetrag(500.0);
+        dto.setReklaBetragWs("USD");
+
+        List<DisputePostingRequestDto> postings = mapper.buildPostings(dto);
+
+        assertThat(postings).hasSize(1);
+        assertThat(postings.get(0).getPostingAmount().getIsoCode()).isEqualTo("USD");
+    }
+
+    @Test
+    void buildPostings_returnsEmptyWhenNothingAvailable() {
+        assertThat(mapper.buildPostings(new DisputeCreateRequestDto())).isEmpty();
+    }
+
+    // ------------------- buildEvents -------------------
+
+    @Test
+    void buildEvents_createsCommentWhenPartialWithValues() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setReklaTeilbetragKz("J");
+        dto.setReklaBetrag(500.0);
+        dto.setReklaBetragWs("USD");
+
+        List<DisputeEventRequestDto> events = mapper.buildEvents(dto);
+
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0).getType()).isEqualTo("COMMENT");
+        assertThat(events.get(0).getMessage()).contains("500.0 USD");
+    }
+
+    @Test
+    void buildEvents_returnsEmptyWhenNotPartial() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setReklaTeilbetragKz("N");
+        assertThat(mapper.buildEvents(dto)).isEmpty();
+    }
+
+    @Test
+    void buildEvents_returnsEmptyWhenMissingValues() {
+        DisputeCreateRequestDto dto = new DisputeCreateRequestDto();
+        dto.setReklaTeilbetragKz("J");
+        dto.setReklaBetrag(null);
+        dto.setReklaBetragWs(null);
+        assertThat(mapper.buildEvents(dto)).isEmpty();
+    }
+
+    // ------------------- isJ -------------------
+
+    @Test
+    void isJ_returnsTrueForJOrj() {
+        assertThat(mapper.isJ("J")).isTrue();
+        assertThat(mapper.isJ("j")).isTrue();
+    }
+
+    @Test
+    void isJ_returnsFalseOtherwise() {
+        assertThat(mapper.isJ("N")).isFalse();
+        assertThat(mapper.isJ(null)).isFalse();
+        assertThat(mapper.isJ(" ")).isFalse();
+    }
+}
