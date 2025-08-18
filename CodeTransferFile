@@ -1,133 +1,23 @@
-@Mapper(componentModel = "spring",
-        nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
-@AplComponent
-public interface DynsToIboCreateMapper {
+/** 
+ * Calculate auto refund indicator (CHG_autoErstattungKz).
+ * - "N" = No refund
+ * - "Y" = Full refund
+ * - "P" = Partial refund
+ */
+public static String calcAutoErstattungKz(String autoErstattungKz, String reklaTeilbetragKz) {
+    if (autoErstattungKz == null) return "N";
 
-    @Mappings({
-        @Mapping(target = "disputeReason",
-                 expression = "java(DisputeBusinessLogic.translateReasonCode(src.getReklaGrundKat1()))"),
-        @Mapping(target = "issuerDisputeExternalReference", source = "impulsOid"),
-        @Mapping(target = "declareFraudIndicator", constant = "false"),
-        @Mapping(target = "refundRedebitIndicator",
-                 expression = "java(DisputeBusinessLogic.calcRefundIndicator(src.getReklaTeilbetragKz()))"),
-        @Mapping(target = "refundRedebitAmount", expression = "java(buildRefundAmount(src))"),
-        @Mapping(target = "disputePostings", expression = "java(buildPostings(src))"),
-        @Mapping(target = "disputeEvents", expression = "java(buildEvents(src))"),
-        @Mapping(target = "disputeDocuments", expression = "java(java.util.Collections.emptyList())")
-    })
-    DisputeIboCreateRequestDto toIbo(DisputeCreateRequestDto src);
-
-    // ------------------ Mapper-specific build methods ------------------
-
-    default AmountDto buildRefundAmount(DisputeCreateRequestDto s) {
-        if (!"J".equalsIgnoreCase(s.getReklaTeilbetragKz())) return null;
-        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaBetragWs())) return null;
-
-        AmountDto a = new AmountDto();
-        a.setValue(DisputeBusinessLogic.parseLongSafe(s.getReklaBetrag(), 0L));
-        a.setExponent(2);
-        a.setIsoCode(DisputeBusinessLogic.normalizeCurrency(s.getReklaBetragWs()));
-        return a;
-    }
-
-    default List<DisputePostingRequestDto> buildPostings(DisputeCreateRequestDto s) {
-        AmountDto amt = null;
-        if (!isBlank(s.getCrdVfggOrigBtrg()) && !isBlank(s.getCrdVfggOrigWs())) {
-            amt = buildAmount(s.getCrdVfggOrigBtrg(), s.getCrdVfggOrigWs());
-        } else if ("J".equalsIgnoreCase(s.getReklaTeilbetragKz())
-                && !isBlank(s.getReklaBetrag()) && !isBlank(s.getReklaBetragWs())) {
-            amt = buildAmount(s.getReklaBetrag(), s.getReklaBetragWs());
+    if (autoErstattungKz.trim().equalsIgnoreCase("J")) {
+        if (reklaTeilbetragKz != null && reklaTeilbetragKz.trim().equalsIgnoreCase("J")) {
+            return "P";
+        } else {
+            return "Y";
         }
-
-        if (amt == null) return Collections.emptyList();
-
-        DisputePostingRequestDto p = new DisputePostingRequestDto();
-        p.setPostingAmount(amt);
-        p.setImmediateReimbursement(false);
-        p.setPostingTypeReference("ISSUER_ACCOUNT");
-        return List.of(p);
     }
-
-    default List<DisputeEventRequestDto> buildEvents(DisputeCreateRequestDto s) {
-        if (!"J".equalsIgnoreCase(s.getReklaTeilbetragKz())) return Collections.emptyList();
-        if (isBlank(s.getReklaBetrag()) || isBlank(s.getReklaBetragWs())) return Collections.emptyList();
-
-        DisputeEventRequestDto ev = new DisputeEventRequestDto();
-        ev.setType("COMMENT");
-        ev.setMessage("Reklamation mit Teilbetrag i.H.v. " +
-                       s.getReklaBetrag() + " " + s.getReklaBetragWs());
-        return List.of(ev);
-    }
-
-    private AmountDto buildAmount(String val, String ws) {
-        AmountDto a = new AmountDto();
-        a.setValue(DisputeBusinessLogic.parseLongSafe(val, 0L));
-        a.setExponent(2);
-        a.setIsoCode(DisputeBusinessLogic.normalizeCurrency(ws));
-        return a;
-    }
-
-    private boolean isBlank(String v) {
-        return v == null || v.trim().isEmpty();
-    }
+    return "N";
 }
 
+----
 
-
----------
-
-
-
-
-
-public final class DisputeBusinessLogic {
-
-    private DisputeBusinessLogic() {}
-
-    private static final Map<String, String> REASON_CODE_MAP = Map.ofEntries(
-            Map.entry("FI-11", "Kunde bestreitet Belastung"),
-            Map.entry("FI-8", "Kunde erkennt Transaktion nicht an")
-            // extend with full list from getReasonText
-    );
-
-    /** Maps reklaGrundKat1 → German reason text */
-    public static String translateReasonCode(String dynsCode) {
-        if (dynsCode == null) return null;
-        return REASON_CODE_MAP.getOrDefault(dynsCode, dynsCode);
-    }
-
-    /** Returns "PARTIAL" if reklaTeilbetragKz = J, otherwise "NONE" */
-    public static String calcRefundIndicator(String reklaTeilbetragKz) {
-        return reklaTeilbetragKz != null && reklaTeilbetragKz.trim().equalsIgnoreCase("J")
-                ? "PARTIAL" : "NONE";
-    }
-
-    /** Always returns EUR (since Dyns always delivers in EUR now) */
-    public static String normalizeCurrency(String ws) {
-        return ws == null ? "EUR" : ws.trim().toUpperCase();
-    }
-
-    /** Converts String → long safely (minor units) */
-    public static long parseLongSafe(String s, long def) {
-        try { return Long.parseLong(s.trim()); } catch (Exception e) { return def; }
-    }
-
-    /** Product classification from sepTraExtPurp + crdAfsgBetrag (legacy KACHAOAF.c) */
-    public static String classifyProduct(String sepTraExtPurp, String crdAfsgBetrag) {
-        double amount = 0;
-        try { amount = Double.parseDouble(crdAfsgBetrag); } catch (Exception ignored) {}
-
-        if (sepTraExtPurp == null) return "";
-
-        if (sepTraExtPurp.startsWith("DCRD")) return "ECM";
-        if (sepTraExtPurp.startsWith("CDCB") ||
-            sepTraExtPurp.startsWith("CDDP") ||
-            sepTraExtPurp.startsWith("CDOC") ||
-            sepTraExtPurp.startsWith("IDCP")) return "POS";
-        if (sepTraExtPurp.startsWith("CDCS")) return "ATMmdKE";
-        if (sepTraExtPurp.startsWith("CDCD")) {
-            return (amount == 0) ? "ATModKE" : "ATMmdKE";
-        }
-        return "";
-    }
-}
+@Mapping(target = "autoErstattungKz",
+         expression = "java(DisputeBusinessLogic.calcAutoErstattungKz(src.getAutoErstattungKz(), src.getReklaTeilbetragKz()))")
