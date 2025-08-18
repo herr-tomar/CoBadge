@@ -1,193 +1,28 @@
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-
-public final class DisputeBusinessLogic {
-
-    private DisputeBusinessLogic() {}
-
-   /**
-     * Ergebnis der Funktion ermittelnAutoErst:
-     * - kennzeichen: "J" (ja, Autoerstattung) oder "N" (nein, keine Autoerstattung)
-     * - betrag: ermittelter Erstattungsbetrag (2 Nachkommastellen)
-     */
-    public static class AutoErstattungResult {
-        private final String kennzeichen;
-        private final double betrag;
-
-        public AutoErstattungResult(String kennzeichen, double betrag) {
-            this.kennzeichen = kennzeichen;
-            this.betrag = betrag;
-        }
-
-        public String getKennzeichen() { return kennzeichen; }
-        public double getBetrag() { return betrag; }
-
-        @Override
-        public String toString() {
-            return "AutoErstattungResult{" +
-                    "kennzeichen='" + kennzeichen + '\'' +
-                    ", betrag=" + betrag +
-                    '}';
-        }
-    }
-
-    /**
-     * Portierung der Legacy-Funktion ermittelnAutoErst aus C nach Java.
-     *
-     * @param anzAutoErstattungen    Anzahl bereits durchgeführter Autoerstattungen
-     * @param anzAutoErstattungenMax maximal zulässige Anzahl Autoerstattungen
-     * @param dAutoErstBetragMax     maximal zulässiger Autoerstattungsbetrag
-     * @param dReklaBetrag           reklamierter Betrag
-     * @param reklOrigWs             Originalwährung (z. B. "EUR" / "978")
-     * @param reklOrigWhks           Wechselkurs (falls nicht EUR)
-     * @param dCrdEntBtrg            Entgeltbetrag
-     * @param teilBtrgKz             Teilbetrags-Kennzeichen ("J" oder "N")
-     * @return AutoErstattungResult mit Kennzeichen und Betrag
-     */
-    public static AutoErstattungResult ermittelnAutoErst(
-            int anzAutoErstattungen,
-            int anzAutoErstattungenMax,
-            double dAutoErstBetragMax,
-            double dReklaBetrag,
-            String reklOrigWs,
-            double reklOrigWhks,
-            double dCrdEntBtrg,
-            String teilBtrgKz
-    ) {
-        double dKurs;
-        double dPruefBetrag;
-        double dErstattungsBetrag;
-
-        // Wechselkurs bestimmen:
-        // Bei EUR, ISO-Code 978 oder leerem/Blank-Feld wird 1.0 angenommen,
-        // ansonsten wird der übergebene Wechselkurs verwendet.
-        if (isEuro(reklOrigWs)) {
-            dKurs = 1.0;
-        } else {
-            dKurs = reklOrigWhks;
-        }
-
-        // Erstattungsbetrag unter Berücksichtigung des Teilbetrags-Kennzeichens:
-        // - bei "N": voller reklamierter Betrag, Prüfwert = Betrag minus Entgelt
-        // - bei "J": Betrag geteilt durch Kurs (+0,005 zur kaufmännischen Rundung)
-        if ("N".equalsIgnoreCase(teilBtrgKz)) {
-            dPruefBetrag = round2(dReklaBetrag - dCrdEntBtrg);
-            dErstattungsBetrag = round2(dReklaBetrag);
-        } else {
-            dPruefBetrag = round2(dReklaBetrag / dKurs + 0.005);
-            dErstattungsBetrag = round2(dPruefBetrag);
-        }
-
-        // Entscheidung über Autoerstattung:
-        // Nur wenn Anzahl < Maximalanzahl und Prüfwert <= Maximalbetrag
-        if (anzAutoErstattungen < anzAutoErstattungenMax
-                && dPruefBetrag <= dAutoErstBetragMax) {
-            return new AutoErstattungResult("J", dErstattungsBetrag);
-        } else {
-            return new AutoErstattungResult("N", 0.0);
-        }
-    }
-
-    // Hilfsfunktion: Prüft, ob Währung als EUR zu behandeln ist
-    private static boolean isEuro(String ws) {
-        if (ws == null || ws.isEmpty()) return true;   // leer = EUR
-        if (ws.charAt(0) == ' ') return true;          // führendes Leerzeichen = EUR
-        if (ws.length() >= 3) {
-            String prefix = ws.substring(0, 3).toUpperCase();
-            return "EUR".equals(prefix) || "978".equals(prefix);
-        }
-        return false;
-    }
-
-    // Hilfsfunktion: Rundet kaufmännisch auf 2 Nachkommastellen
-    private static double round2(double v) {
-        return BigDecimal.valueOf(v)
-                .setScale(2, RoundingMode.HALF_UP)
-                .doubleValue();
-    }
+message DisputeCreateRequestDto {
+  string impulsOid = 1;
+  string umsatzId = 2;
+  string empfKontoId = 3;
+  string empfBlz = 4;
+  string reklaGrundKat1 = 5;
+  string reklaBetrag = 6;
+  string reklaBetragWs = 7;
+  string transactionSign = 8;
+  string reklaTeilbetragKz = 9;
+  string karteSperren = 10;
+  string crdVfggOrigWs = 11;
+  string crdVfggOrigKurs = 12;
+  string crdEntBtrg = 13;
+  string crdVerfallMon = 14;
+  string crdAfsgBtrg = 15;
+  string sepTraExtPurp = 16;
+  string primaryAccountNumber = 17;
+  string transactionLifeCycleId = 18;
+  string acquirerReferenceData = 19;
+  string transactionBetrag = 20;
+  string transactionDateAndTime = 21;
+  string anzahlAutoErstattungen = 22;
+  string autoErstMaxBetrag = 23;
+  string autoErstMaxAnzahl = 24;
+  string osplusValuta = 25;
+  string issuerId = 26;
 }
-
-
------
-
-@Mapper(componentModel = "spring",
-        nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
-@AplComponent
-public interface DynsToIboCreateMapper {
-
-    @Mappings({
-        @Mapping(target = "disputeReason",
-                 expression = "java(DisputeBusinessLogic.translateReasonCode(src.getReklaGrundKat1()))"),
-        @Mapping(target = "issuerDisputeExternalReference", source = "impulsOid"),
-        @Mapping(target = "declareFraudIndicator", constant = "false"),
-
-        // LEGACY: refundRedebitIndicator must be "P", "Y", or "N"
-        @Mapping(target = "refundRedebitIndicator",
-                 expression = "java(calcRefundIndicator(src))"),
-
-        // refundRedebitAmount based on autoErstattungsbetrag
-        @Mapping(target = "refundRedebitAmount",
-                 expression = "java(calcRefundAmount(src))"),
-
-        @Mapping(target = "disputePostings", expression = "java(buildPostings(src))"),
-        @Mapping(target = "disputeEvents", expression = "java(buildEvents(src))"),
-        @Mapping(target = "disputeDocuments", expression = "java(java.util.Collections.emptyList())")
-    })
-    DisputeIboCreateRequestDto toIbo(DisputeCreateRequestDto src);
-
-    // ------------------ Helper methods ------------------
-
-    default String calcRefundIndicator(DisputeCreateRequestDto s) {
-        DisputeBusinessLogic.AutoErstattungResult res =
-            DisputeBusinessLogic.ermittelnAutoErst(
-                s.getAnzAutoErstattungen(),
-                s.getAnzAutoErstattungenMax(),
-                parseDoubleSafe(s.getAutoErstBetragMax(), 0.0),
-                parseDoubleSafe(s.getReklaBetrag(), 0.0),
-                s.getReklaBetragWs(),
-                parseDoubleSafe(s.getReklaOrigWhks(), 1.0),
-                parseDoubleSafe(s.getCrdEntgeltBetrag(), 0.0),
-                s.getReklaTeilbetragKz()
-            );
-
-        if ("N".equals(res.getKennzeichen())) {
-            return "N"; // No refund
-        }
-        if ("J".equals(res.getKennzeichen())
-                && "J".equalsIgnoreCase(s.getReklaTeilbetragKz())) {
-            return "P"; // Partial
-        }
-        return "Y";     // Full
-    }
-
-    default AmountDto calcRefundAmount(DisputeCreateRequestDto s) {
-        DisputeBusinessLogic.AutoErstattungResult res =
-            DisputeBusinessLogic.ermittelnAutoErst(
-                s.getAnzAutoErstattungen(),
-                s.getAnzAutoErstattungenMax(),
-                parseDoubleSafe(s.getAutoErstBetragMax(), 0.0),
-                parseDoubleSafe(s.getReklaBetrag(), 0.0),
-                s.getReklaBetragWs(),
-                parseDoubleSafe(s.getReklaOrigWhks(), 1.0),
-                parseDoubleSafe(s.getCrdEntgeltBetrag(), 0.0),
-                s.getReklaTeilbetragKz()
-            );
-
-        if ("N".equals(res.getKennzeichen())) {
-            return null; // no refund amount
-        }
-
-        AmountDto a = new AmountDto();
-        a.setValue((long) (res.getBetrag() * 100)); // convert to minor units (e.g. cents)
-        a.setExponent(2);
-        a.setIsoCode(DisputeBusinessLogic.normalizeCurrency(s.getReklaBetragWs()));
-        return a;
-    }
-
-    private double parseDoubleSafe(String s, double def) {
-        try { return Double.parseDouble(s.trim()); } catch (Exception e) { return def; }
-    }
-}
-
-
-
