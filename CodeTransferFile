@@ -148,4 +148,24 @@ Drei Ansätze sind identifiziert:
 
 ---
 
-Soll ich dir dazu auch eine **Mapping-Tabelle Dyns-Parameter ↔ IBO-Parameter** ergänzen, sodass im Dokument auf einen Blick erkennbar ist, wo die Lücken liegen?
+
+Natürlich 👍 – hier ein Vorschlag auf Deutsch für den JIRA-Eintrag:
+
+---
+
+**Summary**
+Prüfung auf bestehende Reklamation über IBO anstelle Cobadge-DB – Parameter-Mapping umsetzen
+
+**Description**
+Im neuen Verfahren soll die Existenzprüfung von Reklamationen nicht mehr über die Cobadge-Datenbank, sondern direkt gegen IBO erfolgen.
+Dyns liefert jedoch transaktionsbezogene Parameter (`umsatzId`, `transactionLifeCycleId`, `transactionDateAndTime`, `transactionAmount`, `PAN`, `ARN`), während IBO `issuerId` und `cardReference` benötigt. Dieses Parameter-Mapping ist derzeit nicht abgedeckt und verhindert den direkten Aufruf des IBO-Services.
+
+Aufgabe:
+
+* Strategie und Implementierung zur Auflösung des Parameter-Mismatches definieren.
+* Sicherstellen, dass die Cobadge-DB weiterhin für Clearing befüllt wird und lokale Prüfungen (Duplikat, Error-Retry, Zeitfenster, Konsistenz, Berechtigung) bestehen bleiben.
+* Umsetzung vorbereiten, sodass die Existenzprüfung über IBO erfolgt, während Cobadge-spezifische Validierungen lokal in der DB verbleiben.
+
+---
+
+Möchtest du, dass ich auch gleich einen **kurzen Epik-/Story-Kontext** formuliere (z. B. “Teil der Modernisierung des Reklamationsprozesses”), damit das Ticket im Backlog leichter eingeordnet werden kann?
