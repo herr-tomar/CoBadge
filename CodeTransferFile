@@ -1,190 +1,151 @@
-Got it 👍 — thanks for pointing that out.
-We’ll remove the **generic response parameter list** I had put in earlier, and instead extract the **actual response parameters** from the Java code you shared (`CobadgeUmsatzReklaPruefBsImpl`).
-
-Looking into the implementation, the IBO response is processed in this section:
-
-```java
-RemoteServiceResult gatewayServiceResult = gatewayService.postRequest(gatewayUrl, jsonRequest, 404);
-
-if (gatewayServiceResult.getStatusCode() == 200) {
-    return true;
-}
-if (gatewayServiceResult.getStatusCode() == 404) {
-    return false;
-}
-```
-
-
-
-This tells us:
-
-* The IBO response is evaluated purely by **HTTP status codes**.
-* No deeper parsing of a JSON payload is implemented (at least in this version).
+Alles klar 👍 – ich habe die Passage zu den Response-Parametern entfernt und den gesamten Text ins Deutsche übertragen.
 
 ---
 
-Here’s the revised functional specification with that correction:
+# Fachliche Spezifikation – Prüfung auf bestehende Reklamation
 
 ---
 
-# Functional Specification – Dispute Existence Check
+## 1. Detaillierte Beschreibung des Problems
+
+Im **bestehenden Cobadge-Verfahren** prüft das System, ob bereits eine Reklamation existiert, ausschließlich über die **lokale Cobadge-Datenbank**. Alle Prüfungen (Duplikate, Error-Retry, Zeitfenster, Konsistenz, Berechtigung) werden datenbankseitig durchgeführt.
+
+Im **neuen Verfahren** soll die *Existenzprüfung* direkt gegen das **IBO** erfolgen, das als interbankweites System of Record für Reklamationen gilt. Dadurch wird sichergestellt, dass Cobadge immer mit dem offiziellen externen Status abgeglichen ist und keine Abweichungen auftreten.
+
+Dabei entstehen jedoch zwei wesentliche Probleme:
+
+1. **Parameter-Mismatch**:
+
+   * Dyns liefert transaktionsbezogene Kennungen (umsatzId, PAN, ARN usw.).
+   * IBO benötigt jedoch issuerId und cardReference, um eine Reklamation nachzuschlagen.
+   * Diese Parameter lassen sich nicht 1:1 abbilden.
+
+2. **Prüfungen und Validierungen**:
+
+   * Die alte Cobadge-DB führte zahlreiche technische und fachliche Prüfungen durch.
+   * Diese Prüfungen sind über IBO nicht abgedeckt.
+   * Es muss definiert werden, wie diese Validierungen künftig umgesetzt werden.
 
 ---
 
-## 1. Detailed Description of the Issue
+## 2. Dyns Request-Parameter
 
-In the **current Cobadge solution**, the system validates whether a dispute already exists by checking directly in the **local Cobadge database**. All checks (duplicate, error retry, consistency, time window, eligibility) are DB-driven.
+Aus der Java-Implementierung werden von Dyns an Cobadge folgende Felder übergeben:
 
-In the **new solution**, the goal is to perform the *existence check* directly against **IBO**, which is the interbank system of record for disputes. This ensures that Cobadge is aligned with the official external status of disputes and avoids inconsistencies.
-
-However, two problems arise:
-
-1. **Parameter mismatch**:
-
-   * Dyns JSON delivers transaction-level identifiers (umsatzId, PAN, ARN, etc.).
-   * IBO requires issuerId and cardReference to perform a dispute lookup.
-   * These identifiers do not map 1:1.
-
-2. **Checks and validations**:
-
-   * The old Cobadge DB performed several technical and business checks.
-   * These checks are not automatically covered by IBO.
-   * We need to define how these validations will be handled in the new architecture.
+* `umsatzId` → Transaktionskennung
+* `transactionLifeCycleId` → Lebenszykluskennung der Transaktion
+* `transactionDateAndTime` → Zeitstempel der Ausführung
+* `transactionAmount` → Betrag der Transaktion
+* `primaryAccountNumber (PAN)` → Kartennummer (bereinigt)
+* `acquiringReferenceNumber (ARN)` → Referenznummer des Acquirers
 
 ---
 
-## 2. Dyns Request Parameters
+## 3. IBO-Parameter
 
-From the attached Java implementation, the following fields are delivered by Dyns to Cobadge:
-
-* `umsatzId` → Transaction identifier
-* `transactionLifeCycleId` → Transaction lifecycle identifier
-* `transactionDateAndTime` → Timestamp of transaction execution
-* `transactionAmount` → Transaction amount
-* `primaryAccountNumber` (PAN) → Card number (trimmed)
-* `acquiringReferenceNumber` (ARN) → Acquirer reference number
-
----
-
-## 3. IBO Parameters
-
-The IBO service for dispute lookup is:
+Der IBO-Service zur Prüfung einer bestehenden Reklamation lautet:
 
 ```
 GET /api/v2/issuers/{issuerId}/cards/{cardReference}/disputes
 ```
 
-### Required Input Parameters
+### Erforderliche Eingabeparameter
 
-* `issuerId` → Issuer identifier
-* `cardReference` → Identifier of the card (not the same as PAN)
-
-### Response Parameters (from code)
-
-From the implementation, Cobadge interprets only the **HTTP status code**:
-
-* **200** → dispute already exists in IBO.
-* **404** → no dispute found in IBO.
-* Any other status → treated as error.
+* `issuerId` → Kennung des kartenausgebenden Instituts
+* `cardReference` → Referenz auf die Karte (nicht identisch mit PAN)
 
 ---
 
-## 4. Old System – Checks and Validations
+## 4. Altes System – Prüfungen und Validierungen
 
-In the legacy DB-only solution, the following checks were performed:
+Im bisherigen, rein datenbankbasierten Verfahren wurden folgende Prüfungen durchgeführt:
 
-1. **Duplicate check**:
+1. **Duplikatsprüfung**
 
-   * Based on UMSATZ\_ID, PAN, ARN in Cobadge DB.
+   * Über UMSATZ\_ID, PAN, ARN in der Cobadge-DB.
 
-2. **Error retry**:
+2. **Error-Retry**
 
-   * If previous attempt had status = error, allow retry.
+   * Bei vorherigem Fehlerstatus erneute Reklamation zulässig.
 
-3. **Time window**:
+3. **Zeitfenster**
 
-   * Transaction date ≤ 540 days from system date.
+   * Transaktionsdatum maximal 540 Tage alt.
 
-4. **Consistency**:
+4. **Konsistenz**
 
-   * JSON values (PAN, ARN, amount, date/time) compared with UMSATZ record.
+   * Abgleich der Werte aus JSON (PAN, ARN, Betrag, Datum/Zeit) mit UMSATZ-Tabelle.
 
-5. **Eligibility**:
+5. **Berechtigung**
 
-   * Based on DB field `CBD_UMS_REKL_ZLSG_KZ` = J/N.
-
----
-
-## 5. New System – Proposed Checks and Validations
-
-1. **Existence check**
-
-   * Instead of Cobadge DB, call IBO endpoint `/issuers/{issuerId}/cards/{cardReference}/disputes`.
-   * Validate dispute existence based on HTTP status code.
-
-2. **Local checks**
-
-   * Retain DB checks for:
-
-     * Duplicate handling
-     * Error retry
-     * Time window (≤ 540 days)
-     * Consistency
-     * Eligibility (J/N flag)
-
-3. **Clearing requirement**
-
-   * Even in the new solution, the Cobadge dispute table must be populated for clearing processes (not modernized).
+   * Feld `CBD_UMS_REKL_ZLSG_KZ` = J/N entscheidet über Reklamationsfähigkeit.
 
 ---
 
-## 6. Exact Challenges
+## 5. Neues System – Vorgeschlagene Prüfungen und Validierungen
 
-1. **Parameter mismatch**:
+1. **Existenzprüfung**
 
-   * Dyns delivers umsatzId/ARN/PAN; IBO requires issuerId + cardReference.
-   * No direct mapping exists today.
+   * Anstelle der Cobadge-DB erfolgt die Abfrage über den IBO-Endpunkt `/issuers/{issuerId}/cards/{cardReference}/disputes`.
+   * Ergebnis entscheidet, ob eine Reklamation extern bereits existiert.
 
-2. **Enrichment difficulty**:
+2. **Lokale Prüfungen**
 
-   * To derive cardReference from PAN, Cobadge would need additional mapping data or a service call.
-   * Currently, no reliable enrichment process is in place.
+   * Beibehaltung der datenbankseitigen Prüfungen:
 
-3. **Validation coverage**:
+     * Duplikatsprüfung
+     * Error-Retry
+     * Zeitfenster (≤ 540 Tage)
+     * Konsistenz
+     * Berechtigung (J/N-Kennzeichen)
 
-   * IBO only tells if a dispute exists (status 200/404).
-   * It does not enforce Cobadge-specific checks (duplicates, retries, consistency, eligibility).
+3. **Clearing-Anforderung**
 
----
-
-## 7. Strategies to Solve the Issue
-
-Three possible approaches are identified:
-
-1. **Change Dyns JSON output**
-
-   * Modify Dyns so that it directly delivers `issuerId` and `cardReference`.
-
-2. **New IBO service**
-
-   * Build or request a new IBO API that can accept Dyns-style parameters (`umsatzId`, `ARN`, `PAN`) and perform the lookup internally.
-
-3. **Enrichment in Cobadge**
-
-   * Keep Dyns and IBO unchanged.
-   * Introduce a translation/enrichment step in Cobadge:
-
-     * Map `PAN → cardReference`.
-     * Derive `issuerId` if not directly available.
-     * Normalize other parameters.
-   * Then call IBO with the enriched identifiers.
+   * Auch im neuen Verfahren muss die Cobadge-Reklamationstabelle weiterhin gefüllt werden, da sie für Clearing-Prozesse benötigt wird, die nicht modernisiert werden.
 
 ---
 
-Would you like me to now also **add a mapping table** that shows:
+## 6. Konkrete Herausforderungen
 
-* Dyns request parameters,
-* IBO required parameters,
-* Gap/translation needed
+1. **Parameter-Mismatch**
 
-so it’s even clearer for the spec where the mismatch lies?
+   * Dyns liefert umsatzId/ARN/PAN; IBO benötigt issuerId + cardReference.
+   * Es existiert aktuell keine direkte Abbildung.
+
+2. **Anreicherungsproblem**
+
+   * Um cardReference aus PAN abzuleiten, sind zusätzliche Mapping-Daten oder Services notwendig.
+   * Bisher wurde keine verlässliche Lösung dafür identifiziert.
+
+3. **Prüfungsabdeckung**
+
+   * IBO liefert nur die Information, ob eine Reklamation existiert (über Statuscodes).
+   * Cobadge-spezifische Prüfungen (Duplikat, Retry, Konsistenz, Berechtigung) müssen weiterhin lokal erfolgen.
+
+---
+
+## 7. Strategien zur Lösung des Problems
+
+Drei Ansätze sind identifiziert:
+
+1. **Dyns anpassen**
+
+   * Dyns so erweitern, dass `issuerId` und `cardReference` direkt geliefert werden.
+
+2. **Neuer IBO-Service**
+
+   * Entwicklung oder Anforderung eines IBO-API-Endpunkts, der mit Dyns-Parametern (`umsatzId`, `ARN`, `PAN`) umgehen kann und die Umwandlung intern vornimmt.
+
+3. **Anreicherung in Cobadge**
+
+   * Dyns und IBO unverändert lassen.
+   * In Cobadge eine Übersetzungs-/Anreicherungsschicht aufbauen, die:
+
+     * `PAN → cardReference` abbildet,
+     * `issuerId` ggf. aus DB ableitet,
+     * weitere Parameter normalisiert,
+   * und anschließend den IBO-Service mit den angereicherten Werten aufruft.
+
+---
+
+Soll ich dir dazu auch eine **Mapping-Tabelle Dyns-Parameter ↔ IBO-Parameter** ergänzen, sodass im Dokument auf einen Blick erkennbar ist, wo die Lücken liegen?
